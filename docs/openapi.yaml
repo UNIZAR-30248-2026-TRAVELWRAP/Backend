@@ -1,0 +1,72 @@
+openapi: 3.0.0
+info:
+  title: TravelWrap API
+  description: API REST para la gestión de viajes grupales, gastos y tareas.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api
+    description: Servidor local de desarrollo
+paths:
+  /health:
+    get:
+      summary: Comprueba el estado del servidor
+      responses:
+        '200':
+          description: Servidor operativo
+          
+  /trips:
+    post:
+      summary: Crea un nuevo viaje
+      description: Guarda un nuevo viaje en la base de datos requiriendo un título y destino.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTripRequest'
+      responses:
+        '201':
+          description: Viaje creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+        '400':
+          description: Datos de entrada inválidos o incompletos
+
+components:
+  schemas:
+    NewTripRequest:
+      type: object
+      required:
+        - title
+        - destination
+      properties:
+        title:
+          type: string
+          example: "Escapada a los Alpes"
+        destination:
+          type: string
+          example: "Chamonix, Francia"
+        startDate:
+          type: string
+          format: date
+          example: "2026-12-10"
+          
+    TripResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        title:
+          type: string
+          example: "Escapada a los Alpes"
+        destination:
+          type: string
+          example: "Chamonix, Francia"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-09-28T10:00:00Z"

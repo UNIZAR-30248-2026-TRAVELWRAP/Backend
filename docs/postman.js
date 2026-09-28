@@ -1,0 +1,1 @@
+// Se obtendrá a partir de openapi.yaml para el entorno de pruebas.
