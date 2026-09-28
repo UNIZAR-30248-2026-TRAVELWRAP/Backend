@@ -1,0 +1,32 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Repositorio para gestionar el código fuente del backend de la asignatura de Gestión de Proyecto Software de la Universidad de Zaragoza.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UNIZAR-30248-2026-TRAVELWRAP/Backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/UNIZAR-30248-2026-TRAVELWRAP/Backend/issues"
+  },
+  "homepage": "https://github.com/UNIZAR-30248-2026-TRAVELWRAP/Backend#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "redis": "^6.2.1",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
