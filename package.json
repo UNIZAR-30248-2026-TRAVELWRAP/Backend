@@ -4,7 +4,8 @@
   "description": "Repositorio para gestionar el código fuente del backend de la asignatura de Gestión de Proyecto Software de la Universidad de Zaragoza.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon src/index.js",
+    "test": "echo \"No hay tests configurados aún\""
   },
   "repository": {
     "type": "git",
