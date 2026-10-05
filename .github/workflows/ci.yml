@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Descargar el código del repositorio
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Descarga todo el historial de commits para SonarCloud
 
       - name: Configurar entorno de Node.js
         uses: actions/setup-node@v4
@@ -29,7 +31,6 @@ jobs:
       - name: Ejecutar pruebas automatizadas (si existen)
         run: npm test --if-present
 
-      # SonarQube analysis
       - name: Analizar código con SonarCloud
         uses: SonarSource/sonarcloud-github-action@master
         env:
