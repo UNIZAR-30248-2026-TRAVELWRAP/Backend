@@ -34,8 +34,213 @@ paths:
         '400':
           description: Datos de entrada inválidos o incompletos
 
+  /auth/login:
+    post:
+      tags:
+        - Autenticación
+      summary: Inicia sesión con email y contraseña
+      description: Autentica al usuario mediante Supabase Auth y devuelve el usuario, el token de acceso (JWT) y el refresh token. El token se envía en el resto de peticiones con la cabecera Authorization Bearer.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sesión iniciada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Datos de entrada inválidos (email con formato incorrecto o contraseña vacía)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El email no es válido
+        '401':
+          description: Credenciales incorrectas o email sin confirmar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                credencialesInvalidas:
+                  value:
+                    error:
+                      codigo: credenciales_invalidas
+                      mensaje: Email o contraseña incorrectos
+                emailNoConfirmado:
+                  value:
+                    error:
+                      codigo: email_no_confirmado
+                      mensaje: El email no está confirmado
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con el servicio de autenticación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Autenticación
+      summary: Renueva la sesión con el refresh token
+      description: Intercambia un refresh token válido por un nuevo token de acceso y un nuevo refresh token mediante Supabase Auth. Permite mantener la sesión iniciada al volver a abrir la aplicación.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Sesión renovada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '400':
+          description: Falta el refresh_token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El refresh_token es obligatorio
+        '401':
+          description: El refresh token ha caducado, ya se ha usado o no es válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: sesion_invalida
+                  mensaje: La sesión ha caducado o no es válida
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con el servicio de autenticación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "daniel@travelwrap.app"
+        password:
+          type: string
+          format: password
+          example: "MiContraseña123"
+
+    LoginResponse:
+      type: object
+      properties:
+        usuario:
+          $ref: '#/components/schemas/Usuario'
+        token:
+          type: string
+          description: JWT de acceso
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: Token para renovar la sesión
+          example: "v1.MRjcyF2bXh0..."
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: "v1.MRjcyF2bXh0..."
+
+    RefreshResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Nuevo JWT de acceso
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: Nuevo refresh token (el anterior deja de ser válido)
+          example: "v1.Xk29aPq7..."
+
+    Usuario:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        nombre:
+          type: string
+          nullable: true
+          example: "Daniel"
+        email:
+          type: string
+          format: email
+          example: "daniel@travelwrap.app"
+        avatar_url:
+          type: string
+          nullable: true
+          example: null
+        creado_en:
+          type: string
+          format: date-time
+          example: "2026-10-07T18:00:00Z"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            codigo:
+              type: string
+              example: credenciales_invalidas
+            mensaje:
+              type: string
+              example: Email o contraseña incorrectos
+
     NewTripRequest:
       type: object
       required:
