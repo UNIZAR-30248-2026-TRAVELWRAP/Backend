@@ -5,11 +5,30 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000/api" },
-    { "key": "email", "value": "" },
-    { "key": "password", "value": "" },
-    { "key": "token", "value": "" },
-    { "key": "refresh_token", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api"
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "refresh_token",
+      "value": ""
+    },
+    {
+      "key": "frontendUrl",
+      "value": "http://localhost:5173"
+    }
   ],
   "item": [
     {
@@ -19,7 +38,12 @@
           "name": "Login correcto",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
@@ -52,7 +76,12 @@
           "name": "Login con credenciales incorrectas",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"noexiste@travelwrap.app\",\n  \"password\": \"incorrecta123\"\n}"
@@ -78,7 +107,12 @@
           "name": "Login con email inválido",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"no-es-un-email\",\n  \"password\": \"algo\"\n}"
@@ -104,7 +138,12 @@
           "name": "Login sin contraseña",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"daniel@travelwrap.app\"\n}"
@@ -130,7 +169,12 @@
           "name": "Refresh correcto",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
@@ -160,7 +204,12 @@
           "name": "Refresh con token inválido",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh_token\": \"token-invalido\"\n}"
@@ -176,6 +225,92 @@
                   "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
                   "pm.test('Código sesion_invalida', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('sesion_invalida');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Inicio login con Google",
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/google"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 302', () => pm.response.to.have.status(302));",
+                  "const destino = pm.response.headers.get('Location') || '';",
+                  "pm.test('Redirige a la autorización de Supabase con Google y PKCE', () => {",
+                  "  pm.expect(destino).to.include('/auth/v1/authorize');",
+                  "  pm.expect(destino).to.include('provider=google');",
+                  "  pm.expect(destino).to.include('code_challenge=');",
+                  "  pm.expect(destino).to.include('code_challenge_method=s256');",
+                  "  pm.expect(decodeURIComponent(destino)).to.include('/api/auth/google/callback');",
+                  "});",
+                  "const cookies = pm.response.headers.all().filter((h) => h.key.toLowerCase() === 'set-cookie').map((h) => h.value).join(' | ');",
+                  "pm.test('Envía la cookie tw_oauth HttpOnly y SameSite=Lax', () => {",
+                  "  pm.expect(cookies).to.include('tw_oauth=');",
+                  "  pm.expect(cookies).to.include('HttpOnly');",
+                  "  pm.expect(cookies).to.include('SameSite=Lax');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Callback de Google con código inválido",
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/google/callback?code=codigo-invalido"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 302', () => pm.response.to.have.status(302));",
+                  "pm.test('Redirige a la PWA con #error=google', () => {",
+                  "  pm.expect(pm.response.headers.get('Location')).to.eql(pm.collectionVariables.get('frontendUrl') + '/auth/callback#error=google');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Callback de Google cancelado por el usuario",
+          "protocolProfileBehavior": {
+            "followRedirects": false
+          },
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/auth/google/callback?error=access_denied&error_description=The+user+denied+access"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 302', () => pm.response.to.have.status(302));",
+                  "pm.test('Redirige a la PWA con #error=google_cancelado', () => {",
+                  "  pm.expect(pm.response.headers.get('Location')).to.eql(pm.collectionVariables.get('frontendUrl') + '/auth/callback#error=google_cancelado');",
                   "});"
                 ]
               }

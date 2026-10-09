@@ -147,12 +147,102 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /auth/google:
+    get:
+      tags:
+        - Autenticación
+      summary: Inicia el login con Google (OAuth 2.0 + PKCE)
+      description: |
+        Punto de entrada del botón «Continuar con Google». La PWA navega a esta URL (no es una llamada fetch).
+        El backend genera el flujo PKCE de Supabase Auth, guarda el verificador en la cookie `tw_oauth`
+        y redirige a Supabase, que a su vez redirige a la pantalla de consentimiento de Google.
+        Cuando el usuario acepta, Supabase vuelve a `GET /auth/google/callback`.
+      security: []
+      responses:
+        '302':
+          description: |
+            Redirección. Si el flujo se ha podido iniciar, `Location` apunta a
+            `{SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=...&code_challenge=...&code_challenge_method=s256`
+            y se envía la cookie `tw_oauth`. Si no, redirige a la PWA con `#error=google`.
+          headers:
+            Location:
+              description: URL de autorización de Supabase, o `{FRONTEND_URL}/auth/callback#error=google` si falla
+              schema:
+                type: string
+                format: uri
+              example: https://gbnivsmutqlnqvcrmcvj.supabase.co/auth/v1/authorize?provider=google&redirect_to=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fgoogle%2Fcallback&code_challenge=jpsA5IMF546ZtE29jcPPiDoEWJOAtBkNUOoeGzozmAM&code_challenge_method=s256
+            Set-Cookie:
+              description: Cookie con el estado PKCE del flujo, codificado en base64url. HttpOnly, SameSite=Lax, Path=/api/auth/google, caduca en 10 minutos
+              schema:
+                type: string
+              example: tw_oauth=eyJzYi1...; Max-Age=600; Path=/api/auth/google; HttpOnly; SameSite=Lax
+
+  /auth/google/callback:
+    get:
+      tags:
+        - Autenticación
+      summary: Recibe la respuesta de Google y completa el login
+      description: |
+        URL de vuelta configurada en Supabase (Authentication → URL Configuration → Redirect URLs).
+        El backend canjea el `code` por la sesión usando el verificador PKCE de la cookie `tw_oauth`, borra la cookie
+        y, si es el primer acceso del usuario, crea su fila en `perfiles` con el nombre, el email y la foto de Google.
+        Si ya existía una cuenta con el mismo email verificado, Supabase la vincula al mismo usuario.
+
+        El resultado se entrega a la PWA redirigiendo a `{FRONTEND_URL}/auth/callback` con un fragmento (`#`),
+        que el navegador no envía a ningún servidor:
+        - Éxito: `#sesion=<base64url de un JSON con el formato de LoginResponse>`
+        - Usuario cancela en Google: `#error=google_cancelado`
+        - Cualquier otro fallo (falta la cookie o el código, código inválido o caducado): `#error=google`
+      security:
+        - oauthStateCookie: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: Código de autorización de un solo uso que envía Supabase si el usuario acepta
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Presente si el usuario cancela o Google rechaza el acceso
+          schema:
+            type: string
+            example: access_denied
+        - name: error_description
+          in: query
+          required: false
+          description: Descripción del error enviada por Supabase
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirección a la PWA con el resultado en el fragmento de la URL. Siempre borra la cookie `tw_oauth`
+          headers:
+            Location:
+              description: '`{FRONTEND_URL}/auth/callback#sesion=...`, `#error=google_cancelado` o `#error=google`'
+              schema:
+                type: string
+                format: uri
+              examples:
+                exito:
+                  value: http://localhost:5173/auth/callback#sesion=eyJ1c3VhcmlvIjp7ImlkIjoiZGY3N2Nj...
+                cancelado:
+                  value: http://localhost:5173/auth/callback#error=google_cancelado
+                error:
+                  value: http://localhost:5173/auth/callback#error=google
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    oauthStateCookie:
+      type: apiKey
+      in: cookie
+      name: tw_oauth
+      description: Estado PKCE del login con Google, creado por GET /auth/google
   schemas:
     LoginRequest:
       type: object
@@ -214,18 +304,22 @@ components:
         nombre:
           type: string
           nullable: true
+          description: perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil
           example: "Daniel"
         email:
           type: string
           format: email
+          description: perfiles.email, o el email de Supabase Auth si no hay perfil
           example: "daniel@travelwrap.app"
         avatar_url:
           type: string
           nullable: true
+          description: perfiles.avatar_url. Con Google, la foto de la cuenta
           example: null
         creado_en:
           type: string
           format: date-time
+          description: perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil
           example: "2026-10-07T18:00:00Z"
 
     Error:
