@@ -3,7 +3,6 @@ const express = require('express');
 const http = require('http'); // 1. Importar el módulo HTTP nativo
 const { Server } = require('socket.io'); // 2. Importar Server de socket.io
 const cors = require('cors');
-const tripRoutes = require('./routes/tripRoutes');
 const authRoutes = require('./routes/authRoutes');
 const invitationRoutes = require('./routes/invitationRoutes');
 const swaggerUi = require('swagger-ui-express');
