@@ -13,26 +13,6 @@ paths:
       responses:
         '200':
           description: Servidor operativo
-          
-  /trips:
-    post:
-      summary: Crea un nuevo viaje
-      description: Guarda un nuevo viaje en la base de datos requiriendo un título y destino.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewTripRequest'
-      responses:
-        '201':
-          description: Viaje creado exitosamente
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TripResponse'
-        '400':
-          description: Datos de entrada inválidos o incompletos
 
   /auth/login:
     post:
@@ -232,6 +212,140 @@ paths:
                 error:
                   value: http://localhost:5173/auth/callback#error=google
 
+  /viajes/{viajeId}/invitacion:
+    get:
+      tags:
+        - Invitaciones
+      summary: Obtiene el enlace de invitación de un viaje
+      description: |
+        Devuelve el enlace permanente para unirse al viaje (RF10). Cada viaje tiene un único token (`viajes.token_invitacion`),
+        que se genera al crear el viaje y no caduca. Puede pedirlo cualquier miembro activo del viaje.
+        El código QR se genera en el cliente a partir de `enlace`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Enlace de invitación del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnlaceInvitacion'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_invitacion
+                  mensaje: No se ha podido obtener el enlace de invitación
+
+  /invitaciones/{token}/unirse:
+    post:
+      tags:
+        - Invitaciones
+      summary: Une al usuario autenticado al viaje del enlace de invitación
+      description: |
+        Registra al usuario de la sesión como miembro del viaje al que pertenece el token (RF11). Es la llamada que hace la PWA
+        cuando el usuario abre el enlace o escanea el QR, una vez ha iniciado sesión.
+        - Si el usuario ya era miembro, no cambia nada y responde 200 con `ya_era_miembro: true`.
+        - Si había abandonado el viaje, se reactiva su pertenencia.
+        - Si el usuario aún no tenía fila en `perfiles`, se crea con los datos de su cuenta.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          description: Token de invitación del viaje (32 caracteres hexadecimales)
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{32}$'
+          example: 3f2b8c1d9e7a4f60b5d2c8a1e9f04b37
+      responses:
+        '200':
+          description: El usuario es miembro del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnirseResponse'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El token no corresponde a ningún viaje o no tiene el formato esperado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: invitacion_no_encontrada
+                  mensaje: El enlace de invitación no es válido
+        '409':
+          description: El viaje está finalizado o archivado y ya no admite nuevos miembros
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje ya no admite nuevos miembros
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_invitacion
+                  mensaje: No se ha podido completar la unión al viaje
+
 components:
   securitySchemes:
     bearerAuth:
@@ -243,6 +357,24 @@ components:
       in: cookie
       name: tw_oauth
       description: Estado PKCE del login con Google, creado por GET /auth/google
+  responses:
+    SinSesion:
+      description: Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            sinSesion:
+              value:
+                error:
+                  codigo: sin_sesion
+                  mensaje: Falta el token de acceso
+            sesionInvalida:
+              value:
+                error:
+                  codigo: sesion_invalida
+                  mensaje: La sesión ha caducado o no es válida
   schemas:
     LoginRequest:
       type: object
@@ -322,6 +454,55 @@ components:
           description: perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil
           example: "2026-10-07T18:00:00Z"
 
+    EnlaceInvitacion:
+      type: object
+      properties:
+        token:
+          type: string
+          description: viajes.token_invitacion
+          example: "3f2b8c1d9e7a4f60b5d2c8a1e9f04b37"
+        enlace:
+          type: string
+          format: uri
+          description: URL completa a compartir, `{FRONTEND_URL}/unirse/{token}`. El QR se genera en el cliente a partir de ella
+          example: "http://localhost:5173/unirse/3f2b8c1d9e7a4f60b5d2c8a1e9f04b37"
+
+    UnirseResponse:
+      type: object
+      properties:
+        viaje:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "123e4567-e89b-12d3-a456-426614174000"
+            nombre:
+              type: string
+              example: "Roma 2025"
+            destino:
+              type: string
+              example: "Roma, Italia"
+            imagen_portada_url:
+              type: string
+              nullable: true
+              example: null
+        miembro:
+          type: object
+          properties:
+            rol:
+              type: string
+              enum: [creador, miembro]
+              example: miembro
+            unido_en:
+              type: string
+              format: date-time
+              example: "2026-10-11T16:30:00Z"
+        ya_era_miembro:
+          type: boolean
+          description: true si el usuario ya pertenecía al viaje antes de esta llamada
+          example: false
+
     Error:
       type: object
       properties:
@@ -334,38 +515,3 @@ components:
             mensaje:
               type: string
               example: Email o contraseña incorrectos
-
-    NewTripRequest:
-      type: object
-      required:
-        - title
-        - destination
-      properties:
-        title:
-          type: string
-          example: "Escapada a los Alpes"
-        destination:
-          type: string
-          example: "Chamonix, Francia"
-        startDate:
-          type: string
-          format: date
-          example: "2026-12-10"
-          
-    TripResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          example: "123e4567-e89b-12d3-a456-426614174000"
-        title:
-          type: string
-          example: "Escapada a los Alpes"
-        destination:
-          type: string
-          example: "Chamonix, Francia"
-        createdAt:
-          type: string
-          format: date-time
-          example: "2026-09-28T10:00:00Z"

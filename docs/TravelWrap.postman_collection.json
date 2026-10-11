@@ -28,6 +28,14 @@
     {
       "key": "frontendUrl",
       "value": "http://localhost:5173"
+    },
+    {
+      "key": "viajeId",
+      "value": ""
+    },
+    {
+      "key": "tokenInvitacion",
+      "value": ""
     }
   ],
   "item": [
@@ -311,6 +319,226 @@
                   "pm.test('Devuelve 302', () => pm.response.to.have.status(302));",
                   "pm.test('Redirige a la PWA con #error=google_cancelado', () => {",
                   "  pm.expect(pm.response.headers.get('Location')).to.eql(pm.collectionVariables.get('frontendUrl') + '/auth/callback#error=google_cancelado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Invitaciones",
+      "description": "Requiere haber ejecutado antes «Login correcto» (rellena {{token}}) y poner en {{viajeId}} el id de un viaje del que el usuario sea miembro.",
+      "item": [
+        {
+          "name": "Obtener enlace de invitación",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeId}}/invitacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Incluye el token y el enlace construido con él', () => {",
+                  "  pm.expect(body.token).to.match(/^[0-9a-f]{32}$/);",
+                  "  pm.expect(body.enlace).to.eql(pm.collectionVariables.get('frontendUrl') + '/unirse/' + body.token);",
+                  "});",
+                  "pm.collectionVariables.set('tokenInvitacion', body.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener enlace sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeId}}/invitacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener enlace con id de viaje inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/invitacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener enlace de un viaje inexistente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/invitacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unirse al viaje con el enlace",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/invitaciones/{{tokenInvitacion}}/unirse"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Incluye el viaje, el miembro y ya_era_miembro', () => {",
+                  "  pm.expect(body.viaje.id).to.eql(pm.collectionVariables.get('viajeId'));",
+                  "  pm.expect(body.viaje).to.have.property('nombre');",
+                  "  pm.expect(body.miembro.rol).to.be.oneOf(['creador', 'miembro']);",
+                  "  pm.expect(body.miembro.unido_en).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.ya_era_miembro).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unirse con un token inexistente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/invitaciones/00000000000000000000000000000000/unirse"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código invitacion_no_encontrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('invitacion_no_encontrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unirse con un token mal formado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/invitaciones/token-invalido/unirse"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código invitacion_no_encontrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('invitacion_no_encontrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unirse sin sesión",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/invitaciones/{{tokenInvitacion}}/unirse"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
                   "});"
                 ]
               }
