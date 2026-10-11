@@ -68,6 +68,78 @@ const login = async (req, res) => {
   }
 };
 
+const LONGITUD_MINIMA_PASSWORD = 8;
+
+const registro = async (req, res) => {
+  const { nombre, email, password } = req.body ?? {};
+
+  if (typeof nombre !== 'string' || nombre.trim() === '' || nombre.trim().length > 100) {
+    return responderError(res, 400, 'datos_invalidos', 'El nombre es obligatorio y tiene un máximo de 100 caracteres');
+  }
+  if (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
+    return responderError(res, 400, 'datos_invalidos', 'El email no es válido');
+  }
+  if (typeof password !== 'string' || password.length < LONGITUD_MINIMA_PASSWORD) {
+    return responderError(
+      res,
+      400,
+      'datos_invalidos',
+      `La contraseña debe tener al menos ${LONGITUD_MINIMA_PASSWORD} caracteres`,
+    );
+  }
+
+  try {
+    const resultado = await authService.registrar(nombre.trim(), email.trim(), password);
+
+    if (resultado.error) {
+      const { code, status } = resultado.error;
+      if (code === 'user_already_exists' || code === 'email_exists') {
+        return responderError(res, 409, 'email_en_uso', 'Ya existe una cuenta con ese email');
+      }
+      if (code === 'weak_password') {
+        return responderError(res, 400, 'datos_invalidos', 'La contraseña es demasiado débil');
+      }
+      if (code === 'over_email_send_rate_limit' || status === 429) {
+        return responderError(res, 429, 'demasiados_intentos', 'Demasiados intentos, inténtalo más tarde');
+      }
+      if (status === 400 || status === 422) {
+        return responderError(res, 400, 'datos_invalidos', 'Los datos de registro no son válidos');
+      }
+      return responderError(res, 502, 'error_autenticacion', 'No se ha podido crear la cuenta');
+    }
+
+    return res.status(201).json(resultado);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+const reenviarConfirmacion = async (req, res) => {
+  const { email } = req.body ?? {};
+
+  if (typeof email !== 'string' || !EMAIL_REGEX.test(email.trim())) {
+    return responderError(res, 400, 'datos_invalidos', 'El email no es válido');
+  }
+
+  try {
+    const resultado = await authService.reenviarConfirmacion(email.trim());
+
+    if (resultado.error) {
+      const { code, status } = resultado.error;
+      if (code === 'over_email_send_rate_limit' || status === 429) {
+        return responderError(res, 429, 'demasiados_intentos', 'Espera un momento antes de volver a pedir el correo');
+      }
+      return responderError(res, 502, 'error_autenticacion', 'No se ha podido reenviar el correo');
+    }
+
+    return res.status(202).json({
+      mensaje: 'Si existe una cuenta pendiente de confirmar con ese email, recibirás un correo de confirmación',
+    });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const refresh = async (req, res) => {
   const { refresh_token: refreshToken } = req.body ?? {};
 
@@ -123,4 +195,4 @@ const googleCallback = async (req, res) => {
   }
 };
 
-module.exports = { login, refresh, googleInicio, googleCallback };
+module.exports = { login, registro, reenviarConfirmacion, refresh, googleInicio, googleCallback };

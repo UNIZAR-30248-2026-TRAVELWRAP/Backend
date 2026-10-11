@@ -66,7 +66,40 @@ const login = async (email, password) => {
   const { data, error } = await cliente.auth.signInWithPassword({ email, password });
   if (error) return { error };
 
-  return construirSesion(cliente, data.user, data.session);
+  return construirSesion(cliente, data.user, data.session, { crearPerfil: true });
+};
+
+const registrar = async (nombre, email, password) => {
+  const cliente = crearClienteAislado();
+  const { data, error } = await cliente.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: nombre } },
+  });
+  if (error) return { error };
+  if (!data.user || (data.user.identities?.length ?? 0) === 0) {
+    return { error: { code: 'user_already_exists' } };
+  }
+  if (!data.session) {
+    return {
+      usuario: {
+        id: data.user.id,
+        nombre,
+        email: data.user.email,
+        avatar_url: null,
+        creado_en: data.user.created_at,
+      },
+      confirmacion_pendiente: true,
+    };
+  }
+
+  return construirSesion(cliente, data.user, data.session, { crearPerfil: true });
+};
+
+const reenviarConfirmacion = async (email) => {
+  const cliente = crearClienteAislado();
+  const { error } = await cliente.auth.resend({ type: 'signup', email });
+  return error ? { error } : {};
 };
 
 const refrescar = async (refreshToken) => {
@@ -103,4 +136,4 @@ const completarGoogle = async (codigo, almacen, flowId) => {
   return construirSesion(cliente, data.user, data.session, { crearPerfil: true });
 };
 
-module.exports = { login, refrescar, iniciarGoogle, completarGoogle };
+module.exports = { login, registrar, reenviarConfirmacion, refrescar, iniciarGoogle, completarGoogle };
