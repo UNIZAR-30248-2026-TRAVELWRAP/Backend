@@ -680,6 +680,8 @@ components:
               example: "Roma 2025"
             destino:
               type: string
+              nullable: true
+              description: Null mientras el destino está pendiente de decidir por votación
               example: "Roma, Italia"
             imagen_portada_url:
               type: string

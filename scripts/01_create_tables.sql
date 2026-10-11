@@ -13,12 +13,15 @@ CREATE TABLE public.viajes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   creador_id uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   nombre text NOT NULL,
-  destino text NOT NULL,
+  -- Null mientras el destino está pendiente de decidir por votación
+  destino text,
   descripcion text,
   fecha_inicio date,
   fecha_fin date,
   imagen_portada_url text,
   moneda char(3) NOT NULL DEFAULT 'EUR',
+  -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
+  presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
   estado public.estado_viaje NOT NULL DEFAULT 'activo',
   finalizado_en timestamptz,
   -- Token del enlace/QR de invitación: uno por viaje, permanente
