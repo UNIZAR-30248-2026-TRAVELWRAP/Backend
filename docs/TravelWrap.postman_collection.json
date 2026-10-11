@@ -36,6 +36,18 @@
     {
       "key": "tokenInvitacion",
       "value": ""
+    },
+    {
+      "key": "nombreNuevo",
+      "value": ""
+    },
+    {
+      "key": "emailNuevo",
+      "value": ""
+    },
+    {
+      "key": "passwordNuevo",
+      "value": ""
     }
   ],
   "item": [
@@ -319,6 +331,234 @@
                   "pm.test('Devuelve 302', () => pm.response.to.have.status(302));",
                   "pm.test('Redirige a la PWA con #error=google_cancelado', () => {",
                   "  pm.expect(pm.response.headers.get('Location')).to.eql(pm.collectionVariables.get('frontendUrl') + '/auth/callback#error=google_cancelado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro correcto (crea una cuenta y envía el correo de confirmación)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{nombreNuevo}}\",\n  \"email\": \"{{emailNuevo}}\",\n  \"password\": \"{{passwordNuevo}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/registro"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Devuelve el usuario con el nombre y el email enviados', () => {",
+                  "  pm.expect(body.usuario.nombre).to.eql(pm.collectionVariables.get('nombreNuevo'));",
+                  "  pm.expect(body.usuario.email).to.eql(pm.collectionVariables.get('emailNuevo'));",
+                  "});",
+                  "pm.test('Pendiente de confirmar el email, o con sesión si el proyecto no lo exige', () => {",
+                  "  if (body.confirmacion_pendiente) {",
+                  "    pm.expect(body.confirmacion_pendiente).to.eql(true);",
+                  "    pm.expect(body).to.not.have.property('token');",
+                  "  } else {",
+                  "    pm.expect(body.token).to.be.a('string').and.not.empty;",
+                  "    pm.expect(body.refresh_token).to.be.a('string').and.not.empty;",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro con un email ya registrado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Daniel\",\n  \"email\": \"{{email}}\",\n  \"password\": \"UnaClave12345\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/registro"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código email_en_uso', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('email_en_uso');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro sin nombre",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nueva@travelwrap.app\",\n  \"password\": \"UnaClave12345\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/registro"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro con email inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Daniel\",\n  \"email\": \"no-es-un-email\",\n  \"password\": \"UnaClave12345\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/registro"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro con contraseña de menos de 8 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Daniel\",\n  \"email\": \"nueva@travelwrap.app\",\n  \"password\": \"corta\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/registro"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reenviar confirmación (cualquier email, siempre 202)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nadie.existe@travelwrap.app\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/reenviar-confirmacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 202', () => pm.response.to.have.status(202));",
+                  "pm.test('Incluye el mensaje genérico, sin revelar si la cuenta existe', () => {",
+                  "  pm.expect(pm.response.json().mensaje).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reenviar confirmación con email inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"no-es-un-email\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/reenviar-confirmacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
                   "});"
                 ]
               }

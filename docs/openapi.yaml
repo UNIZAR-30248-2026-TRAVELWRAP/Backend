@@ -14,6 +14,157 @@ paths:
         '200':
           description: Servidor operativo
 
+  /auth/registro:
+    post:
+      tags:
+        - Autenticación
+      summary: Registra un usuario con email y contraseña
+      description: |
+        Crea la cuenta en Supabase Auth guardando el nombre. El proyecto exige confirmar el email, así que lo normal es que
+        la respuesta sea `201` con `confirmacion_pendiente: true` (sin tokens): el usuario recibe un correo y, una vez confirmado,
+        inicia sesión con `POST /auth/login`, momento en el que se crea su fila en `perfiles`.
+        Si el proyecto no exigiera confirmar el email, la respuesta incluye ya la sesión (`token` y `refresh_token`) y el perfil queda creado.
+        Si el email ya tiene cuenta confirmada, responde 409. Si la cuenta existe pero no está confirmada, se reenvía el correo de confirmación.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroRequest'
+      responses:
+        '201':
+          description: Cuenta creada. Pendiente de confirmar el email, o con sesión iniciada si no se exige confirmación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistroResponse'
+              examples:
+                confirmacionPendiente:
+                  summary: Confirmación de email pendiente (caso habitual)
+                  value:
+                    usuario:
+                      id: 123e4567-e89b-12d3-a456-426614174000
+                      nombre: Daniel
+                      email: daniel@travelwrap.app
+                      avatar_url: null
+                      creado_en: '2026-10-11T18:00:00Z'
+                    confirmacion_pendiente: true
+        '400':
+          description: Datos inválidos (nombre vacío o de más de 100 caracteres, email mal formado o contraseña de menos de 8 caracteres)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                nombre:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El nombre es obligatorio y tiene un máximo de 100 caracteres
+                email:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El email no es válido
+                password:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: La contraseña debe tener al menos 8 caracteres
+        '409':
+          description: Ya existe una cuenta con ese email
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: email_en_uso
+                  mensaje: Ya existe una cuenta con ese email
+        '429':
+          description: Demasiados intentos; Supabase limita el envío de correos de confirmación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: demasiados_intentos
+                  mensaje: Demasiados intentos, inténtalo más tarde
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con el servicio de autenticación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/reenviar-confirmacion:
+    post:
+      tags:
+        - Autenticación
+      summary: Reenvía el correo de confirmación de la cuenta
+      description: |
+        Para usuarios registrados que aún no han confirmado su email (el login responde 401 `email_no_confirmado`).
+        Por seguridad responde siempre `202` con el mismo mensaje, exista o no una cuenta pendiente con ese email,
+        para no revelar qué emails están registrados.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReenvioConfirmacionRequest'
+      responses:
+        '202':
+          description: Solicitud aceptada. Si hay una cuenta pendiente de confirmar con ese email, recibirá un correo nuevo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensaje:
+                    type: string
+                    example: Si existe una cuenta pendiente de confirmar con ese email, recibirás un correo de confirmación
+        '400':
+          description: Email con formato inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El email no es válido
+        '429':
+          description: Se han pedido demasiados correos seguidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: demasiados_intentos
+                  mensaje: Espera un momento antes de volver a pedir el correo
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con el servicio de autenticación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /auth/login:
     post:
       tags:
@@ -376,6 +527,53 @@ components:
                   codigo: sesion_invalida
                   mensaje: La sesión ha caducado o no es válida
   schemas:
+    RegistroRequest:
+      type: object
+      required:
+        - nombre
+        - email
+        - password
+      properties:
+        nombre:
+          type: string
+          maxLength: 100
+          description: Nombre visible. Se guarda en perfiles.nombre
+          example: "Daniel"
+        email:
+          type: string
+          format: email
+          example: "daniel@travelwrap.app"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: "MiContraseña123"
+
+    RegistroResponse:
+      oneOf:
+        - $ref: '#/components/schemas/RegistroPendiente'
+        - $ref: '#/components/schemas/LoginResponse'
+
+    RegistroPendiente:
+      type: object
+      properties:
+        usuario:
+          $ref: '#/components/schemas/Usuario'
+        confirmacion_pendiente:
+          type: boolean
+          enum: [true]
+          description: El usuario debe confirmar su email antes de poder iniciar sesión
+
+    ReenvioConfirmacionRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "daniel@travelwrap.app"
+
     LoginRequest:
       type: object
       required:
