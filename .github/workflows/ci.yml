@@ -28,6 +28,9 @@ jobs:
       - name: Verificar sintaxis del código
         run: node --check src/index.js
 
+      - name: Comprobar que la documentación generada está al día
+        run: npm run docs:check
+
       - name: Ejecutar pruebas automatizadas (si existen)
         run: npm test --if-present
 

@@ -1,0 +1,7 @@
+# Regenera la documentación (docs/API.md y docs/BASE_DE_DATOS.md) si el commit toca sus fuentes:
+# el contrato OpenAPI o los scripts SQL. Los ficheros generados se añaden al mismo commit.
+if git diff --cached --name-only | grep -Eq '^(docs/openapi\.yaml|scripts/[0-9]+_.*\.sql)$'; then
+  echo "Regenerando la documentación..."
+  npm run docs --silent
+  git add docs/API.md docs/BASE_DE_DATOS.md
+fi

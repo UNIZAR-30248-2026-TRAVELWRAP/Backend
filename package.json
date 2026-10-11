@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "test": "echo \"No hay tests configurados aún\""
+    "test": "echo \"No hay tests configurados aún\"",
+    "docs": "node scripts/generar-docs.js",
+    "docs:check": "node scripts/generar-docs.js --check",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -30,6 +33,7 @@
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "nodemon": "^3.1.14"
   }
 }
