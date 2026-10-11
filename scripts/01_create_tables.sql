@@ -21,6 +21,8 @@ CREATE TABLE public.viajes (
   moneda char(3) NOT NULL DEFAULT 'EUR',
   estado public.estado_viaje NOT NULL DEFAULT 'activo',
   finalizado_en timestamptz,
+  -- Token del enlace/QR de invitación: uno por viaje, permanente
+  token_invitacion text NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
   creado_en timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT viajes_fechas_validas CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)
 );
