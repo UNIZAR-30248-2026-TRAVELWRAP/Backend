@@ -102,6 +102,18 @@ const reenviarConfirmacion = async (email) => {
   return error ? { error } : {};
 };
 
+const cerrarSesion = async (token) => {
+  const respuesta = await fetch(`${process.env.SUPABASE_URL}/auth/v1/logout?scope=local`, {
+    method: 'POST',
+    headers: {
+      apikey: process.env.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (respuesta.ok) return {};
+  return { error: { status: respuesta.status } };
+};
+
 const refrescar = async (refreshToken) => {
   const cliente = crearClienteAislado();
   const { data, error } = await cliente.auth.refreshSession({ refresh_token: refreshToken });
@@ -136,4 +148,4 @@ const completarGoogle = async (codigo, almacen, flowId) => {
   return construirSesion(cliente, data.user, data.session, { crearPerfil: true });
 };
 
-module.exports = { login, registrar, reenviarConfirmacion, refrescar, iniciarGoogle, completarGoogle };
+module.exports = { login, registrar, reenviarConfirmacion, cerrarSesion, refrescar, iniciarGoogle, completarGoogle };
