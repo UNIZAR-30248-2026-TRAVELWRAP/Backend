@@ -278,6 +278,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /auth/logout:
+    post:
+      tags:
+        - Autenticación
+      summary: Cierra la sesión actual
+      description: |
+        Invalida en Supabase Auth la sesión del dispositivo que hace la petición (alcance `local`): el refresh token deja de servir
+        y Supabase rechaza el token de acceso. Las sesiones abiertas en otros dispositivos no se tocan.
+        La PWA llama a este endpoint al confirmar «Cerrar sesión» y, aunque falle, borra siempre la sesión guardada en el navegador.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Sesión cerrada. Sin contenido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con el servicio de autenticación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_autenticacion
+                  mensaje: No se ha podido cerrar la sesión
+
   /auth/google:
     get:
       tags:

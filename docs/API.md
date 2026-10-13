@@ -18,6 +18,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/auth/reenviar-confirmacion`](#post-authreenviar-confirmacion) | Reenvía el correo de confirmación de la cuenta | Público |
 | POST | [`/auth/login`](#post-authlogin) | Inicia sesión con email y contraseña | Público |
 | POST | [`/auth/refresh`](#post-authrefresh) | Renueva la sesión con el refresh token | Público |
+| POST | [`/auth/logout`](#post-authlogout) | Cierra la sesión actual | Token de sesión |
 | GET | [`/auth/google`](#get-authgoogle) | Inicia el login con Google (OAuth 2.0 + PKCE) | Público |
 | GET | [`/auth/google/callback`](#get-authgooglecallback) | Recibe la respuesta de Google y completa el login | Cookie tw_oauth |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
@@ -245,6 +246,35 @@ Cuerpo (`application/json`):
 **500** — Error interno del servidor
 
 **502** — Error al comunicarse con el servicio de autenticación
+
+### POST /auth/logout
+
+**Cierra la sesión actual**
+
+Invalida en Supabase Auth la sesión del dispositivo que hace la petición (alcance `local`): el refresh token deja de servir
+y Supabase rechaza el token de acceso. Las sesiones abiertas en otros dispositivos no se tocan.
+La PWA llama a este endpoint al confirmar «Cerrar sesión» y, aunque falle, borra siempre la sesión guardada en el navegador.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Respuestas**
+
+**204** — Sesión cerrada. Sin contenido
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con el servicio de autenticación
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_autenticacion` | No se ha podido cerrar la sesión |
 
 ### GET /auth/google
 
