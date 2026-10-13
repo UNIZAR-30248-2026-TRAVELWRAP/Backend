@@ -16,6 +16,21 @@ const resolver = (documento, nodo) => {
 
 const nombreDeReferencia = (nodo) => nodo?.$ref?.split('/').pop();
 
+// Resuelve un esquema y, si es un allOf, junta las propiedades de todas sus partes
+const resolverCompleto = (documento, esquema) => {
+  const real = resolver(documento, esquema);
+  if (!real?.allOf) return real;
+  return real.allOf.map((parte) => resolverCompleto(documento, parte)).reduce(
+    (junto, parte) => ({
+      ...junto,
+      ...parte,
+      properties: { ...junto.properties, ...parte.properties },
+      required: [...(junto.required ?? []), ...(parte.required ?? [])],
+    }),
+    { type: 'object', properties: {} },
+  );
+};
+
 const ejemplo = (esquema) => {
   if (!esquema || !('example' in esquema)) return '';
   return typeof esquema.example === 'string' ? esquema.example : JSON.stringify(esquema.example);
@@ -34,7 +49,7 @@ const describirTipo = (documento, esquema) => {
 
 // Aplana un esquema de tipo objeto en filas: campo, tipo, obligatorio, descripción y ejemplo
 const aplanar = (documento, esquema, prefijo = '', profundidad = 0) => {
-  const real = resolver(documento, esquema);
+  const real = resolverCompleto(documento, esquema);
   if (!real?.properties) return [];
   const obligatorios = new Set(real.required ?? []);
   const filas = [];
@@ -66,7 +81,7 @@ const tablaDeCampos = (filas) =>
 
 // Describe un esquema: tabla de campos, o la lista de variantes si es un oneOf
 const describirEsquema = (documento, esquema) => {
-  const real = resolver(documento, esquema);
+  const real = resolverCompleto(documento, esquema);
   if (real?.oneOf) {
     const variantes = real.oneOf.map((variante) => {
       const nombre = nombreDeReferencia(variante) ?? 'Variante';

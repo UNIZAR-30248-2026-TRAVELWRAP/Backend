@@ -93,6 +93,7 @@ erDiagram
 | `es_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_creador` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `unirse_con_invitacion` | `p_token text` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Unirse a un viaje con su token de invitación. Es SECURITY DEFINER porque quien se une todavía no es miembro y las políticas no le dejan leer el viaje ni insertarse en miembros_viaje. Devuelve { estado }: sin_sesion \| no_existe \| viaje_no_activo \| ok (con viaje y miembro) |
+| `crear_viaje` | `p_nombre text, p_destino text, p_fecha_inicio date, p_fecha_fin date, p_presupuesto numeric` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación. Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea). Un viaje sin destino (destino null) queda pendiente de decidir el destino por votación. Devuelve { estado }: sin_sesion \| ok (con viaje) |
 
 ### Políticas por tabla
 

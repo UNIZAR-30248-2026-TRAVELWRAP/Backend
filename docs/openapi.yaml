@@ -363,6 +363,190 @@ paths:
                 error:
                   value: http://localhost:5173/auth/callback#error=google
 
+  /viajes:
+    get:
+      tags:
+        - Viajes
+      summary: Lista los viajes del usuario
+      description: |
+        Devuelve los viajes de los que el usuario es miembro activo, del más reciente al más antiguo, con sus miembros.
+        La PWA los reparte en «Mis viajes»: los activos con destino (tarjeta azul), los activos sin destino
+        (`pendiente_destino: true`, tarjeta verde) y, por estado, los finalizados y archivados (viajes anteriores).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          description: Devuelve solo los viajes en ese estado
+          schema:
+            type: string
+            enum: [activo, finalizado, archivado]
+      responses:
+        '200':
+          description: Viajes del usuario (lista vacía si no tiene ninguno)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaViajes'
+        '400':
+          description: El filtro `estado` no es válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El estado debe ser activo, finalizado o archivado
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se han podido obtener los viajes
+    post:
+      tags:
+        - Viajes
+      summary: Crea un viaje
+      description: |
+        Crea un viaje activo y añade al usuario como miembro con rol `creador`, en una sola operación.
+        El nombre y el presupuesto son obligatorios. Las fechas y el destino son opcionales.
+        Si no se indica destino (`null`, ausente o cadena vacía) el viaje queda **pendiente de destino**
+        (`pendiente_destino: true`): hasta que el creador fije el destino por votación, solo se podrá votar e invitar.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoViajeRequest'
+      responses:
+        '201':
+          description: Viaje creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Viaje'
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                nombre:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El nombre es obligatorio y tiene un máximo de 100 caracteres
+                presupuesto:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999
+                fechas:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: La fecha de fin no puede ser anterior a la de inicio
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido crear el viaje
+
+  /viajes/{viajeId}:
+    get:
+      tags:
+        - Viajes
+      summary: Obtiene el detalle de un viaje
+      description: |
+        Devuelve el viaje con su rol para el usuario y sus miembros activos. Solo lo pueden pedir los miembros del viaje.
+        La PWA usa `pendiente_destino` para decidir qué mostrar al entrar: la votación del destino o el panel del viaje.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Detalle del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido obtener el viaje
+
   /viajes/{viajeId}/invitacion:
     get:
       tags:
@@ -651,6 +835,131 @@ components:
           format: date-time
           description: perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil
           example: "2026-10-07T18:00:00Z"
+
+    NuevoViajeRequest:
+      type: object
+      required:
+        - nombre
+        - presupuesto
+      properties:
+        nombre:
+          type: string
+          maxLength: 100
+          example: "Verano 2027"
+        presupuesto:
+          type: number
+          minimum: 0
+          description: Presupuesto estimado del viaje en su moneda (EUR). Se puede cambiar después
+          example: 850
+        destino:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: Si es null, está ausente o es una cadena vacía, el viaje queda pendiente de decidir el destino por votación
+          example: "Roma"
+        fecha_inicio:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-07-01"
+        fecha_fin:
+          type: string
+          format: date
+          nullable: true
+          description: No puede ser anterior a fecha_inicio
+          example: "2027-07-08"
+
+    Viaje:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        nombre:
+          type: string
+          example: "Verano 2027"
+        destino:
+          type: string
+          nullable: true
+          description: Null mientras el destino está pendiente de decidir por votación
+          example: "Roma"
+        descripcion:
+          type: string
+          nullable: true
+          example: null
+        fecha_inicio:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-07-01"
+        fecha_fin:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-07-08"
+        moneda:
+          type: string
+          example: "EUR"
+        presupuesto:
+          type: number
+          example: 850
+        estado:
+          type: string
+          enum: [activo, finalizado, archivado]
+          example: activo
+        creado_en:
+          type: string
+          format: date-time
+          example: "2026-10-12T10:00:00Z"
+        pendiente_destino:
+          type: boolean
+          description: true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda
+          example: false
+
+    MiembroViaje:
+      type: object
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          example: "df77cba6-4be5-4cbc-814b-1e228dd73dcc"
+        nombre:
+          type: string
+          nullable: true
+          example: "Daniel"
+        avatar_url:
+          type: string
+          nullable: true
+          example: null
+        rol:
+          type: string
+          enum: [creador, miembro]
+          example: creador
+
+    ViajeDelUsuario:
+      allOf:
+        - $ref: '#/components/schemas/Viaje'
+        - type: object
+          properties:
+            rol:
+              type: string
+              enum: [creador, miembro]
+              description: Rol del usuario que hace la petición en este viaje
+              example: creador
+            miembros:
+              type: array
+              description: Miembros activos del viaje
+              items:
+                $ref: '#/components/schemas/MiembroViaje'
+
+    ListaViajes:
+      type: object
+      properties:
+        viajes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ViajeDelUsuario'
 
     EnlaceInvitacion:
       type: object

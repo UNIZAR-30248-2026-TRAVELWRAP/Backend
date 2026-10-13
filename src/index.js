@@ -5,6 +5,7 @@ const { Server } = require('socket.io'); // 2. Importar Server de socket.io
 const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const invitationRoutes = require('./routes/invitationRoutes');
+const viajeRoutes = require('./routes/viajeRoutes');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
@@ -65,6 +66,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // --- Registro de rutas ---
 app.use('/api/auth', authRoutes);
+app.use('/api/viajes', viajeRoutes);
 app.use('/api', invitationRoutes); // /api/viajes/:viajeId/invitacion y /api/invitaciones/:token/unirse
 
 // Endpoint básico de comprobación (Health Check)

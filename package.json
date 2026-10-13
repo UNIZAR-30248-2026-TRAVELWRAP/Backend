@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "test": "echo \"No hay tests configurados aún\"",
+    "test": "node --test",
     "docs": "node scripts/generar-docs.js",
     "docs:check": "node scripts/generar-docs.js --check",
     "prepare": "husky"

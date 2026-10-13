@@ -20,6 +20,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/auth/refresh`](#post-authrefresh) | Renueva la sesión con el refresh token | Público |
 | GET | [`/auth/google`](#get-authgoogle) | Inicia el login con Google (OAuth 2.0 + PKCE) | Público |
 | GET | [`/auth/google/callback`](#get-authgooglecallback) | Recibe la respuesta de Google y completa el login | Cookie tw_oauth |
+| GET | [`/viajes`](#get-viajes) | Lista los viajes del usuario | Token de sesión |
+| POST | [`/viajes`](#post-viajes) | Crea un viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}`](#get-viajesviajeid) | Obtiene el detalle de un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 
@@ -301,6 +304,187 @@ que el navegador no envía a ningún servidor:
 | Cabecera | Descripción | Ejemplo |
 | --- | --- | --- |
 | `Location` | `{FRONTEND_URL}/auth/callback#sesion=...`, `#error=google_cancelado` o `#error=google` |  |
+
+## Viajes
+
+### GET /viajes
+
+**Lista los viajes del usuario**
+
+Devuelve los viajes de los que el usuario es miembro activo, del más reciente al más antiguo, con sus miembros.
+La PWA los reparte en «Mis viajes»: los activos con destino (tarjeta azul), los activos sin destino
+(`pendiente_destino: true`, tarjeta verde) y, por estado, los finalizados y archivados (viajes anteriores).
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `estado` | query | No | enum (activo, finalizado, archivado) | Devuelve solo los viajes en ese estado |  |
+
+**Respuestas**
+
+**200** — Viajes del usuario (lista vacía si no tiene ninguno)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `viajes` | array<any> | No |  |  |
+
+**400** — El filtro `estado` no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El estado debe ser activo, finalizado o archivado |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se han podido obtener los viajes |
+
+### POST /viajes
+
+**Crea un viaje**
+
+Crea un viaje activo y añade al usuario como miembro con rol `creador`, en una sola operación.
+El nombre y el presupuesto son obligatorios. Las fechas y el destino son opcionales.
+Si no se indica destino (`null`, ausente o cadena vacía) el viaje queda **pendiente de destino**
+(`pendiente_destino: true`): hasta que el creador fije el destino por votación, solo se podrá votar e invitar.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `nombre` | string | Sí |  | `Verano 2027` |
+| `presupuesto` | number | Sí | Presupuesto estimado del viaje en su moneda (EUR). Se puede cambiar después | `850` |
+| `destino` | string \| null | No | Si es null, está ausente o es una cadena vacía, el viaje queda pendiente de decidir el destino por votación | `Roma` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No | No puede ser anterior a fecha_inicio | `2027-07-08` |
+
+**Respuestas**
+
+**201** — Viaje creado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+
+**400** — Datos inválidos
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El nombre es obligatorio y tiene un máximo de 100 caracteres |
+| `datos_invalidos` | El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999 |
+| `datos_invalidos` | La fecha de fin no puede ser anterior a la de inicio |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido crear el viaje |
+
+### GET /viajes/{viajeId}
+
+**Obtiene el detalle de un viaje**
+
+Devuelve el viaje con su rol para el usuario y sus miembros activos. Solo lo pueden pedir los miembros del viaje.
+La PWA usa `pendiente_destino` para decidir qué mostrar al entrar: la votación del destino o el panel del viaje.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Detalle del viaje
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido obtener el viaje |
 
 ## Invitaciones
 

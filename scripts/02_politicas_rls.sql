@@ -117,3 +117,64 @@ $$;
 
 REVOKE ALL ON FUNCTION public.unirse_con_invitacion(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.unirse_con_invitacion(text) TO authenticated;
+
+-- Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación.
+-- Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea).
+-- Un viaje sin destino (destino null) queda pendiente de decidir el destino por votación.
+-- Devuelve { estado }: sin_sesion | ok (con viaje)
+CREATE FUNCTION public.crear_viaje(
+  p_nombre text,
+  p_destino text,
+  p_fecha_inicio date,
+  p_fecha_fin date,
+  p_presupuesto numeric
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_usuario uuid := auth.uid();
+  v_viaje public.viajes;
+BEGIN
+  IF v_usuario IS NULL THEN
+    RETURN jsonb_build_object('estado', 'sin_sesion');
+  END IF;
+
+  INSERT INTO public.perfiles (id, nombre, email, avatar_url)
+  SELECT
+    u.id,
+    COALESCE(u.raw_user_meta_data ->> 'full_name', u.raw_user_meta_data ->> 'name', split_part(u.email, '@', 1)),
+    u.email,
+    COALESCE(u.raw_user_meta_data ->> 'avatar_url', u.raw_user_meta_data ->> 'picture')
+  FROM auth.users u
+  WHERE u.id = v_usuario
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.viajes (creador_id, nombre, destino, fecha_inicio, fecha_fin, presupuesto)
+  VALUES (v_usuario, p_nombre, p_destino, p_fecha_inicio, p_fecha_fin, p_presupuesto)
+  RETURNING * INTO v_viaje;
+
+  INSERT INTO public.miembros_viaje (viaje_id, usuario_id, rol)
+  VALUES (v_viaje.id, v_usuario, 'creador');
+
+  RETURN jsonb_build_object(
+    'estado', 'ok',
+    'viaje', jsonb_build_object(
+      'id', v_viaje.id,
+      'nombre', v_viaje.nombre,
+      'destino', v_viaje.destino,
+      'descripcion', v_viaje.descripcion,
+      'fecha_inicio', v_viaje.fecha_inicio,
+      'fecha_fin', v_viaje.fecha_fin,
+      'moneda', v_viaje.moneda,
+      'presupuesto', v_viaje.presupuesto,
+      'estado', v_viaje.estado,
+      'creado_en', v_viaje.creado_en
+    )
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.crear_viaje(text, text, date, date, numeric) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.crear_viaje(text, text, date, date, numeric) TO authenticated;
