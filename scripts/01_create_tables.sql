@@ -1,7 +1,22 @@
-CREATE TYPE public.estado_viaje AS ENUM ('activo', 'finalizado', 'archivado');
-CREATE TYPE public.rol_miembro AS ENUM ('creador', 'miembro');
+-- 1. TIPOS ENUM (Con comprobación de existencia)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'estado_viaje') THEN
+    CREATE TYPE public.estado_viaje AS ENUM ('activo', 'finalizado', 'archivado');
+  END IF;
+END
+$$;
 
-CREATE TABLE public.perfiles (
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'rol_miembro') THEN
+    CREATE TYPE public.rol_miembro AS ENUM ('creador', 'miembro');
+  END IF;
+END
+$$;
+
+-- 2. TABLAS
+CREATE TABLE IF NOT EXISTS public.perfiles (
   id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
   nombre text NOT NULL,
   email text,
@@ -9,7 +24,7 @@ CREATE TABLE public.perfiles (
   creado_en timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE public.viajes (
+CREATE TABLE IF NOT EXISTS public.viajes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   creador_id uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   nombre text NOT NULL,
@@ -30,7 +45,7 @@ CREATE TABLE public.viajes (
   CONSTRAINT viajes_fechas_validas CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)
 );
 
-CREATE TABLE public.miembros_viaje (
+CREATE TABLE IF NOT EXISTS public.miembros_viaje (
   viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
   usuario_id uuid NOT NULL REFERENCES public.perfiles (id) ON DELETE CASCADE,
   rol public.rol_miembro NOT NULL DEFAULT 'miembro',
@@ -39,4 +54,5 @@ CREATE TABLE public.miembros_viaje (
   PRIMARY KEY (viaje_id, usuario_id)
 );
 
-CREATE INDEX miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
+-- 3. ÍNDICES
+CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);

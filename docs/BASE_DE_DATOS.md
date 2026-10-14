@@ -8,32 +8,27 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 
 | Tabla | Columnas | RLS | Políticas |
 | --- | --- | --- | --- |
-| [perfiles](#perfiles) | 5 | Activada | 3 |
-| [viajes](#viajes) | 14 | Activada | 4 |
-| [miembros_viaje](#miembros_viaje) | 5 | Activada | 3 |
+| [IF](#if) | 5 | No activada | 0 |
+| [IF](#if) | 14 | No activada | 0 |
+| [IF](#if) | 5 | No activada | 0 |
 
 ## Relaciones
 
 ```mermaid
 erDiagram
-    auth_users ||--o{ perfiles : "id"
-    perfiles |o--o{ viajes : "creador_id"
-    viajes ||--o{ miembros_viaje : "viaje_id"
-    perfiles ||--o{ miembros_viaje : "usuario_id"
+    auth_users ||--o{ IF : "id"
+    perfiles |o--o{ IF : "creador_id"
+    viajes ||--o{ IF : "viaje_id"
+    perfiles ||--o{ IF : "usuario_id"
 ```
-
-## Tipos enumerados
-
-| Tipo | Valores |
-| --- | --- |
-| `estado_viaje` | `activo`, `finalizado`, `archivado` |
-| `rol_miembro` | `creador`, `miembro` |
 
 ## Tablas
 
-### perfiles
+### IF
 
-**Seguridad por filas (RLS):** activada, 3 políticas
+2. TABLAS
+
+**Seguridad por filas (RLS):** no activada
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -43,9 +38,9 @@ erDiagram
 | `avatar_url` | `text` | No |  |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
 
-### viajes
+### IF
 
-**Seguridad por filas (RLS):** activada, 4 políticas
+**Seguridad por filas (RLS):** no activada
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -68,9 +63,9 @@ erDiagram
 
 - `viajes_fechas_validas`: `CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)`
 
-### miembros_viaje
+### IF
 
-**Seguridad por filas (RLS):** activada, 3 políticas
+**Seguridad por filas (RLS):** no activada
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -80,44 +75,15 @@ erDiagram
 | `unido_en` | `timestamptz` | Sí |  | `now()` |  |
 | `abandonado_en` | `timestamptz` | No |  |  |  |
 
-**Índices**
-
-- `miembros_viaje_usuario_idx` sobre (usuario_id)
-
 ## Seguridad (RLS)
 
 ### Funciones
 
 | Función | Parámetros | Devuelve | Se ejecuta con permisos de | Ejecutable por | Descripción |
 | --- | --- | --- | --- | --- | --- |
-| `es_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
+| `es_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | 1. FUNCIONES AUXILIARES |
 | `es_creador` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
-| `unirse_con_invitacion` | `p_token text` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Unirse a un viaje con su token de invitación. Es SECURITY DEFINER porque quien se une todavía no es miembro y las políticas no le dejan leer el viaje ni insertarse en miembros_viaje. Devuelve { estado }: sin_sesion \| no_existe \| viaje_no_activo \| ok (con viaje y miembro) |
-| `crear_viaje` | `p_nombre text, p_destino text, p_fecha_inicio date, p_fecha_fin date, p_presupuesto numeric` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación. Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea). Un viaje sin destino (destino null) queda pendiente de decidir el destino por votación. Devuelve { estado }: sin_sesion \| ok (con viaje) |
+| `unirse_con_invitacion` | `p_token text` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | 6. FUNCIÓN UNIRSE CON INVITACIÓN |
+| `crear_viaje` | `p_nombre text, p_destino text, p_fecha_inicio date, p_fecha_fin date, p_presupuesto numeric` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | 7. FUNCIÓN CREAR VIAJE Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación. Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea). Un viaje sin destino (destino null) queda pendiente de decidir el destino por votación. Devuelve { estado }: sin_sesion \| ok (con viaje) |
 
 ### Políticas por tabla
-
-#### perfiles
-
-| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
-| --- | --- | --- | --- | --- |
-| `perfiles_select` | SELECT | authenticated | `true` |  |
-| `perfiles_insert` | INSERT | authenticated |  | `id = auth.uid()` |
-| `perfiles_update` | UPDATE | authenticated | `id = auth.uid()` | `id = auth.uid()` |
-
-#### viajes
-
-| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
-| --- | --- | --- | --- | --- |
-| `viajes_select` | SELECT | authenticated | `public.es_miembro(id) OR creador_id = auth.uid()` |  |
-| `viajes_insert` | INSERT | authenticated |  | `creador_id = auth.uid()` |
-| `viajes_update` | UPDATE | authenticated | `public.es_creador(id)` | `public.es_creador(id)` |
-| `viajes_delete` | DELETE | authenticated | `public.es_creador(id)` |  |
-
-#### miembros_viaje
-
-| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
-| --- | --- | --- | --- | --- |
-| `miembros_viaje_select` | SELECT | authenticated | `public.es_miembro(viaje_id) OR usuario_id = auth.uid()` |  |
-| `miembros_viaje_insert_creador` | INSERT | authenticated |  | `usuario_id = auth.uid() AND rol = 'creador' AND EXISTS (SELECT 1 FROM public.viajes v WHERE v.id = viaje_id AND v.creador_id = auth.uid())` |
-| `miembros_viaje_update_propio` | UPDATE | authenticated | `usuario_id = auth.uid()` | `usuario_id = auth.uid()` |
