@@ -140,6 +140,25 @@ const reenviarConfirmacion = async (req, res) => {
   }
 };
 
+const logout = async (req, res) => {
+  const token = req.headers.authorization.split(' ')[1];
+
+  try {
+    const resultado = await authService.cerrarSesion(token);
+
+    if (resultado.error) {
+      if (resultado.error.status === 401 || resultado.error.status === 403) {
+        return responderError(res, 401, 'sesion_invalida', 'La sesión ha caducado o no es válida');
+      }
+      return responderError(res, 502, 'error_autenticacion', 'No se ha podido cerrar la sesión');
+    }
+
+    return res.status(204).end();
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const refresh = async (req, res) => {
   const { refresh_token: refreshToken } = req.body ?? {};
 
@@ -195,4 +214,4 @@ const googleCallback = async (req, res) => {
   }
 };
 
-module.exports = { login, registro, reenviarConfirmacion, refresh, googleInicio, googleCallback };
+module.exports = { login, registro, reenviarConfirmacion, logout, refresh, googleInicio, googleCallback };
