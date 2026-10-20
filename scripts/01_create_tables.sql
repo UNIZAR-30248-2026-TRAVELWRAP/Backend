@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   moneda char(3) NOT NULL DEFAULT 'EUR',
   -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
   presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
+  -- activo: se puede editar. archivado: solo lectura; es el único estado desde el que se puede eliminar
   estado public.estado_viaje NOT NULL DEFAULT 'activo',
+  -- Momento en que se cerró el viaje (al finalizarlo o archivarlo)
   finalizado_en timestamptz,
   -- Token del enlace/QR de invitación: uno por viaje, permanente
   token_invitacion text NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
@@ -46,6 +48,7 @@ CREATE TABLE IF NOT EXISTS public.viajes (
 );
 
 CREATE TABLE IF NOT EXISTS public.miembros_viaje (
+  -- Al eliminar el viaje se borran sus miembros
   viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
   usuario_id uuid NOT NULL REFERENCES public.perfiles (id) ON DELETE CASCADE,
   rol public.rol_miembro NOT NULL DEFAULT 'miembro',

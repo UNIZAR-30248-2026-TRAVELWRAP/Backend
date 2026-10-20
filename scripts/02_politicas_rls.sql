@@ -21,6 +21,19 @@ AS $$
   );
 $$;
 
+-- Un viaje solo admite contenido nuevo mientras está activo: al cerrarlo o archivarlo queda de solo lectura.
+-- Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura
+CREATE OR REPLACE FUNCTION public.es_editable(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.viajes
+    WHERE id = p_viaje_id AND estado = 'activo'
+  );
+$$;
+
 -- 2. ACTIVAR RLS
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.viajes ENABLE ROW LEVEL SECURITY;
@@ -48,13 +61,16 @@ DROP POLICY IF EXISTS viajes_insert ON public.viajes;
 CREATE POLICY viajes_insert ON public.viajes FOR INSERT TO authenticated
   WITH CHECK (creador_id = auth.uid());
 
+-- Solo el creador modifica el viaje, y un viaje archivado ya no se puede modificar (solo lectura)
 DROP POLICY IF EXISTS viajes_update ON public.viajes;
 CREATE POLICY viajes_update ON public.viajes FOR UPDATE TO authenticated
-  USING (public.es_creador(id)) WITH CHECK (public.es_creador(id));
+  USING (public.es_creador(id) AND estado <> 'archivado') WITH CHECK (public.es_creador(id));
 
+-- Solo el creador elimina el viaje, y solo desde la papelera de archivados.
+-- Sus miembros (y el resto de tablas del viaje) se borran en cascada (ON DELETE CASCADE)
 DROP POLICY IF EXISTS viajes_delete ON public.viajes;
 CREATE POLICY viajes_delete ON public.viajes FOR DELETE TO authenticated
-  USING (public.es_creador(id));
+  USING (public.es_creador(id) AND estado = 'archivado');
 
 -- 5. POLÍTICAS MIEMBROS_VIAJE
 DROP POLICY IF EXISTS miembros_viaje_select ON public.miembros_viaje;
