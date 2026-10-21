@@ -52,6 +52,10 @@
     {
       "key": "viajeIdPendiente",
       "value": ""
+    },
+    {
+      "key": "viajeIdGestion",
+      "value": ""
     }
   ],
   "item": [
@@ -1317,6 +1321,478 @@
                   "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
                   "pm.test('Código sesion_invalida', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('sesion_invalida');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Gestión de viajes",
+      "description": "Editar, archivar y eliminar un viaje (PB-10, PB-12 y PB-13). Requiere haber ejecutado antes «Login correcto». Crea su propio viaje ({{viajeIdGestion}}) para no archivar el que usan las otras carpetas. Las peticiones dependen unas de otras: ejecútala completa y en orden.",
+      "item": [
+        {
+          "name": "Crear viaje para gestionar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Lisboa 2027\",\n  \"presupuesto\": 600,\n  \"destino\": \"Lisboa\",\n  \"fecha_inicio\": \"2027-09-08\",\n  \"fecha_fin\": \"2027-09-11\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('viajeIdGestion', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar nombre, fechas y presupuesto",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Lisboa y Oporto 2027\",\n  \"fecha_fin\": \"2027-09-14\",\n  \"presupuesto\": 900\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Devuelve el viaje con los cambios', () => {",
+                  "  pm.expect(body.nombre).to.eql('Lisboa y Oporto 2027');",
+                  "  pm.expect(body.fecha_fin).to.eql('2027-09-14');",
+                  "  pm.expect(Number(body.presupuesto)).to.eql(900);",
+                  "  pm.expect(body.destino).to.eql('Lisboa');",
+                  "  pm.expect(body.rol).to.eql('creador');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar sin ningún dato",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar dejando el destino vacío",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destino\": \"\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar con la fecha de fin anterior a la ya guardada",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha_fin\": \"2027-09-01\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar sin sesión",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"X\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar un viaje inexistente",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"X\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar un viaje sin archivar",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_archivado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar el viaje",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El viaje queda archivado', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar un viaje ya archivado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_archivado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar un viaje archivado (solo lectura)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"No se puede\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los viajes archivados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes?estado=archivado"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye el viaje archivado', () => {",
+                  "  const ids = pm.response.json().viajes.map((v) => v.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('viajeIdGestion'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar el viaje archivado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener el viaje eliminado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar con id inválido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
                   "});"
                 ]
               }
