@@ -1,4 +1,4 @@
-// Recibe el cliente de Supabase del usuario (req.supabase) para que se apliquen las políticas RLS
+// Recibe el cliente de supabase del usuario (req.supabase) para que se apliquen las políticas RLS
 
 const SELECCION =
   'id, nombre, destino, descripcion, fecha_inicio, fecha_fin, moneda, presupuesto, estado, creado_en, ' +
@@ -60,4 +60,63 @@ const crear = async (cliente, datos) => {
   return data.estado === 'ok' ? { estado: 'ok', viaje: conPendiente(data.viaje) } : { estado: data.estado };
 };
 
-module.exports = { listar, obtener, crear };
+// Antes de modificar un viaje se comprueba que existe y que el usuario es su creador, para poder
+// responder con el motivo exacto: las políticas RLS rechazarían el cambio sin decir por qué.
+// Devuelve { error } | { estado: no_existe | no_creador | ok (con viaje) }
+const viajeDelCreador = async (cliente, usuarioId, viajeId) => {
+  const resultado = await obtener(cliente, usuarioId, viajeId);
+  if (resultado.error) return { error: resultado.error };
+  if (!resultado.viaje) return { estado: 'no_existe' };
+  if (resultado.viaje.rol !== 'creador') return { estado: 'no_creador' };
+  return { estado: 'ok', viaje: resultado.viaje };
+};
+
+// Aplica los cambios y devuelve el viaje actualizado. Sin filas actualizadas, RLS ha rechazado el cambio
+const actualizar = async (cliente, usuarioId, viajeId, cambios) => {
+  const { data, error } = await cliente.from('viajes').update(cambios).eq('id', viajeId).select('id');
+  if (error) return { error };
+  if (!data || data.length === 0) return { error: { code: 'sin_filas' } };
+
+  const resultado = await obtener(cliente, usuarioId, viajeId);
+  if (resultado.error || !resultado.viaje) return { error: resultado.error ?? { code: 'sin_filas' } };
+  return { estado: 'ok', viaje: resultado.viaje };
+};
+
+// Devuelve { error } | { estado: no_existe | no_creador | no_activo | ok (con viaje) }
+const editar = async (cliente, usuarioId, viajeId, cambios) => {
+  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+
+  return actualizar(cliente, usuarioId, viajeId, cambios);
+};
+
+// Cierra el viaje y lo pasa al historial de solo lectura
+// Devuelve { error } | { estado: no_existe | no_creador | ya_archivado | ok (con viaje) }
+const archivar = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.estado === 'archivado') return { estado: 'ya_archivado' };
+
+  // Un viaje finalizado ya tiene su fecha de cierre: solo se guarda al cerrar uno activo
+  const cambios =
+    previo.viaje.estado === 'activo'
+      ? { estado: 'archivado', finalizado_en: new Date().toISOString() }
+      : { estado: 'archivado' };
+  return actualizar(cliente, usuarioId, viajeId, cambios);
+};
+
+// Borra el viaje para todos sus miembros. Lo demás (miembros, gastos...) se borra en cascada
+// Devuelve { error } | { estado: no_existe | no_creador | no_archivado | ok }
+const eliminar = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.estado !== 'archivado') return { estado: 'no_archivado' };
+
+  const { data, error } = await cliente.from('viajes').delete().eq('id', viajeId).select('id');
+  if (error) return { error };
+  if (!data || data.length === 0) return { error: { code: 'sin_filas' } };
+  return { estado: 'ok' };
+};
+
+module.exports = { listar, obtener, crear, editar, archivar, eliminar };
