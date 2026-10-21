@@ -579,6 +579,281 @@ paths:
                 error:
                   codigo: error_viaje
                   mensaje: No se ha podido obtener el viaje
+    patch:
+      tags:
+        - Viajes
+      summary: Edita los datos de un viaje
+      description: |
+        Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
+        Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
+        los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
+        Un viaje archivado es de solo lectura y no se puede editar.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosViajeRequest'
+      responses:
+        '200':
+          description: Viaje actualizado, con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID o los datos no son válidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                id:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El identificador del viaje no es válido
+                sinCambios:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Indica al menos un dato del viaje que cambiar
+                destino:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El destino no puede quedar vacío
+                fechas:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: La fecha de fin no puede ser anterior a la de inicio
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: El usuario es miembro del viaje pero no su creador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: no_creador
+                  mensaje: Solo el creador del viaje puede hacerlo
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está cerrado o archivado y ya no se puede modificar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está cerrado y ya no se puede modificar
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido modificar el viaje
+    delete:
+      tags:
+        - Viajes
+      summary: Elimina un viaje archivado
+      description: |
+        Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros y, en el futuro, gastos,
+        tareas, documentos...), que se elimina en cascada (PB-13). No se puede deshacer.
+        Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '204':
+          description: Viaje eliminado (sin cuerpo)
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: El usuario es miembro del viaje pero no su creador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: no_creador
+                  mensaje: Solo el creador del viaje puede hacerlo
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje no está archivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_archivado
+                  mensaje: Solo se pueden eliminar viajes archivados
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido eliminar el viaje
+
+  /viajes/{viajeId}/archivar:
+    post:
+      tags:
+        - Viajes
+      summary: Cierra y archiva un viaje
+      description: |
+        Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
+        no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
+        Si el viaje estaba activo, se guarda el momento del cierre en `finalizado_en`.
+        Solo lo puede hacer el creador del viaje. No se puede deshacer.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Viaje archivado, con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: El usuario es miembro del viaje pero no su creador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: no_creador
+                  mensaje: Solo el creador del viaje puede hacerlo
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje ya estaba archivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_archivado
+                  mensaje: El viaje ya está archivado
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido archivar el viaje
 
   /viajes/{viajeId}/invitacion:
     get:
@@ -901,6 +1176,37 @@ components:
           nullable: true
           description: No puede ser anterior a fecha_inicio
           example: "2027-07-08"
+
+    CambiosViajeRequest:
+      type: object
+      description: Campos a cambiar. Todos son opcionales, pero hay que enviar al menos uno
+      minProperties: 1
+      properties:
+        nombre:
+          type: string
+          maxLength: 100
+          example: "Roma 2027 (puente de mayo)"
+        presupuesto:
+          type: number
+          minimum: 0
+          example: 950
+        destino:
+          type: string
+          maxLength: 100
+          description: Se puede cambiar, pero no dejar vacío (no admite null ni cadena vacía)
+          example: "Roma"
+        fecha_inicio:
+          type: string
+          format: date
+          nullable: true
+          description: null para quitar la fecha
+          example: "2027-05-11"
+        fecha_fin:
+          type: string
+          format: date
+          nullable: true
+          description: null para quitar la fecha. No puede ser anterior a fecha_inicio (la enviada o la ya guardada)
+          example: "2027-05-15"
 
     Viaje:
       type: object

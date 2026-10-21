@@ -24,6 +24,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes`](#get-viajes) | Lista los viajes del usuario | Token de sesión |
 | POST | [`/viajes`](#post-viajes) | Crea un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}`](#get-viajesviajeid) | Obtiene el detalle de un viaje | Token de sesión |
+| PATCH | [`/viajes/{viajeId}`](#patch-viajesviajeid) | Edita los datos de un viaje | Token de sesión |
+| DELETE | [`/viajes/{viajeId}`](#delete-viajesviajeid) | Elimina un viaje archivado | Token de sesión |
+| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Cierra y archiva un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 
@@ -515,6 +518,242 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido obtener el viaje |
+
+### PATCH /viajes/{viajeId}
+
+**Edita los datos de un viaje**
+
+Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
+Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
+los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
+Un viaje archivado es de solo lectura y no se puede editar.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `nombre` | string | No |  | `Roma 2027 (puente de mayo)` |
+| `presupuesto` | number | No |  | `950` |
+| `destino` | string | No | Se puede cambiar, pero no dejar vacío (no admite null ni cadena vacía) | `Roma` |
+| `fecha_inicio` | string (date) \| null | No | null para quitar la fecha | `2027-05-11` |
+| `fecha_fin` | string (date) \| null | No | null para quitar la fecha. No puede ser anterior a fecha_inicio (la enviada o la ya guardada) | `2027-05-15` |
+
+**Respuestas**
+
+**200** — Viaje actualizado, con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID o los datos no son válidos
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+| `datos_invalidos` | Indica al menos un dato del viaje que cambiar |
+| `datos_invalidos` | El destino no puede quedar vacío |
+| `datos_invalidos` | La fecha de fin no puede ser anterior a la de inicio |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — El usuario es miembro del viaje pero no su creador
+
+| Código de error | Mensaje |
+| --- | --- |
+| `no_creador` | Solo el creador del viaje puede hacerlo |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está cerrado o archivado y ya no se puede modificar
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido modificar el viaje |
+
+### DELETE /viajes/{viajeId}
+
+**Elimina un viaje archivado**
+
+Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros y, en el futuro, gastos,
+tareas, documentos...), que se elimina en cascada (PB-13). No se puede deshacer.
+Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**204** — Viaje eliminado (sin cuerpo)
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — El usuario es miembro del viaje pero no su creador
+
+| Código de error | Mensaje |
+| --- | --- |
+| `no_creador` | Solo el creador del viaje puede hacerlo |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje no está archivado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_archivado` | Solo se pueden eliminar viajes archivados |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido eliminar el viaje |
+
+### POST /viajes/{viajeId}/archivar
+
+**Cierra y archiva un viaje**
+
+Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
+no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
+Si el viaje estaba activo, se guarda el momento del cierre en `finalizado_en`.
+Solo lo puede hacer el creador del viaje. No se puede deshacer.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Viaje archivado, con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — El usuario es miembro del viaje pero no su creador
+
+| Código de error | Mensaje |
+| --- | --- |
+| `no_creador` | Solo el creador del viaje puede hacerlo |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje ya estaba archivado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_archivado` | El viaje ya está archivado |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido archivar el viaje |
 
 ## Invitaciones
 
