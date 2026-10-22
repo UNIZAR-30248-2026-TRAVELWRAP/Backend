@@ -56,6 +56,26 @@
     {
       "key": "viajeIdGestion",
       "value": ""
+    },
+    {
+      "key": "viajeIdVotacion",
+      "value": ""
+    },
+    {
+      "key": "votacionIdDestino",
+      "value": ""
+    },
+    {
+      "key": "votacionIdFechas",
+      "value": ""
+    },
+    {
+      "key": "opcionIdLisboa",
+      "value": ""
+    },
+    {
+      "key": "opcionIdPraga",
+      "value": ""
     }
   ],
   "item": [
@@ -1214,6 +1234,868 @@
                   "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
                   "pm.test('Código sin_sesion', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Votaciones",
+      "item": [
+        {
+          "name": "Crear viaje pendiente para votar el destino",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Escapada de primavera\",\n  \"presupuesto\": 600,\n  \"destino\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Viaje pendiente de destino', () => pm.expect(pm.response.json().pendiente_destino).to.eql(true));",
+                  "pm.collectionVariables.set('viajeIdVotacion', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las votaciones del viaje (ya tiene la de destino)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const destino = pm.response.json().votaciones.find((v) => v.tipo === 'destino');",
+                  "pm.test('Tiene su votación de destino abierta y sin opciones', () => {",
+                  "  pm.expect(destino).to.exist;",
+                  "  pm.expect(destino.estado).to.eql('abierta');",
+                  "  pm.expect(destino.opciones).to.eql([]);",
+                  "  pm.expect(destino.mi_voto).to.eql(null);",
+                  "  pm.expect(destino.total_miembros).to.eql(1);",
+                  "});",
+                  "pm.collectionVariables.set('votacionIdDestino', destino.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cerrar la votación de destino sin votos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/cerrar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código sin_votos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_votos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Proponer un destino",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/opciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"  Lisboa \"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('La opción se guarda sin espacios y sin votos', () => pm.expect(body.opciones.find((o) => o.texto === 'Lisboa').votos).to.eql(0));",
+                  "pm.collectionVariables.set('opcionIdLisboa', body.opciones.find((o) => o.texto === 'Lisboa').id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Proponer un destino repetido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/opciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"LISBOA\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código opcion_duplicada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('opcion_duplicada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Proponer otro destino",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/opciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Praga\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Va al final de la lista', () => pm.expect(body.opciones.map((o) => o.texto)).to.eql(['Lisboa', 'Praga']));",
+                  "pm.collectionVariables.set('opcionIdPraga', body.opciones.find((o) => o.texto === 'Praga').id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Votar un destino",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcion_id\": \"{{opcionIdLisboa}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Cuenta el voto y lo marca como mío', () => {",
+                  "  pm.expect(body.mi_voto).to.eql(pm.collectionVariables.get('opcionIdLisboa'));",
+                  "  pm.expect(body.opciones.find((o) => o.texto === 'Lisboa').votos).to.eql(1);",
+                  "  pm.expect(body.total_votos).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar el voto",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcion_id\": \"{{opcionIdPraga}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Sigue habiendo un solo voto, ahora en Praga', () => {",
+                  "  pm.expect(body.opciones.find((o) => o.texto === 'Lisboa').votos).to.eql(0);",
+                  "  pm.expect(body.opciones.find((o) => o.texto === 'Praga').votos).to.eql(1);",
+                  "  pm.expect(body.total_votos).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Votar una opción que no es de la votación",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcion_id\": \"00000000-0000-4000-8000-000000000000\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código opcion_no_valida', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('opcion_no_valida');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Votar sin indicar la opción",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Retirar el voto",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Ya no hay votos', () => {",
+                  "  pm.expect(pm.response.json().mi_voto).to.eql(null);",
+                  "  pm.expect(pm.response.json().total_votos).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Volver a votar Praga",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcion_id\": \"{{opcionIdPraga}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una votación de fechas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"¿Qué día salimos?\",\n  \"tipo\": \"fecha\",\n  \"opciones\": [\n    {\n      \"texto\": \"Viernes 14\",\n      \"valor_fecha\": \"2027-05-14\"\n    },\n    {\n      \"texto\": \"Sábado 15\",\n      \"valor_fecha\": \"2027-05-15\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Se crea abierta con sus opciones en orden', () => {",
+                  "  pm.expect(body.tipo).to.eql('fecha');",
+                  "  pm.expect(body.estado).to.eql('abierta');",
+                  "  pm.expect(body.opciones.map((o) => o.texto)).to.eql(['Viernes 14', 'Sábado 15']);",
+                  "  pm.expect(body.opciones[0].valor_fecha).to.eql('2027-05-14');",
+                  "});",
+                  "pm.collectionVariables.set('votacionIdFechas', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una votación con opciones repetidas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"¿Hotel o apartamento?\",\n  \"opciones\": [\n    {\n      \"texto\": \"Hotel\"\n    },\n    {\n      \"texto\": \" hotel\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una votación con una sola opción",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"¿Hotel o apartamento?\",\n  \"opciones\": [\n    {\n      \"texto\": \"Hotel\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una votación de destino a mano",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Otro destino\",\n  \"tipo\": \"destino\",\n  \"opciones\": [\n    {\n      \"texto\": \"Roma\"\n    },\n    {\n      \"texto\": \"Berlín\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener una votación",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdFechas}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Es la de fechas', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('votacionIdFechas')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar solo las votaciones de fechas abiertas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones?estado=abierta&tipo=fecha"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo sale la de fechas', () => {",
+                  "  const votaciones = pm.response.json().votaciones;",
+                  "  pm.expect(votaciones).to.have.lengthOf(1);",
+                  "  pm.expect(votaciones[0].tipo).to.eql('fecha');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar con un estado inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones?estado=pendiente"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar votaciones sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener una votación inexistente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/00000000-0000-4000-8000-000000000000"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código votacion_no_encontrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('votacion_no_encontrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener una votación con id inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/abc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cerrar la votación de destino (fija el destino del viaje)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/cerrar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Gana Praga, sin empate', () => {",
+                  "  pm.expect(body.votacion.estado).to.eql('cerrada');",
+                  "  pm.expect(body.votacion.opcion_ganadora_id).to.eql(pm.collectionVariables.get('opcionIdPraga'));",
+                  "  pm.expect(body.hubo_empate).to.eql(false);",
+                  "  pm.expect(body.destino).to.eql('Praga');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El viaje ya tiene destino",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Destino Praga y ya no está pendiente', () => {",
+                  "  pm.expect(pm.response.json().destino).to.eql('Praga');",
+                  "  pm.expect(pm.response.json().pendiente_destino).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Votar en una votación cerrada",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcion_id\": \"{{opcionIdLisboa}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código votacion_cerrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('votacion_cerrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cerrar una votación ya cerrada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdDestino}}/cerrar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código votacion_cerrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('votacion_cerrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cerrar una votación sin votos (se cierra sin ganadora)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones/{{votacionIdFechas}}/cerrar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Cerrada sin ganadora', () => {",
+                  "  pm.expect(pm.response.json().votacion.estado).to.eql('cerrada');",
+                  "  pm.expect(pm.response.json().votacion.opcion_ganadora_id).to.eql(null);",
+                  "  pm.expect(pm.response.json().destino).to.eql(null);",
                   "});"
                 ]
               }

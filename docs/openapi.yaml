@@ -989,6 +989,443 @@ paths:
                   codigo: error_invitacion
                   mensaje: No se ha podido completar la unión al viaje
 
+  /viajes/{viajeId}/votaciones:
+    get:
+      tags:
+        - Votaciones
+      summary: Lista las votaciones de un viaje
+      description: |
+        Devuelve las votaciones del viaje, de la más reciente a la más antigua, cada una con sus opciones,
+        el recuento de votos, quién ha votado cada opción y el voto del usuario (`mi_voto`).
+        Solo lo pueden pedir los miembros del viaje. Se pueden filtrar por estado y por tipo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - name: estado
+          in: query
+          required: false
+          description: Solo las votaciones abiertas o solo las cerradas
+          schema:
+            type: string
+            enum: [abierta, cerrada]
+        - name: tipo
+          in: query
+          required: false
+          description: Solo las votaciones de este tipo
+          schema:
+            $ref: '#/components/schemas/TipoVotacion'
+      responses:
+        '200':
+          description: Votaciones del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaVotaciones'
+        '400':
+          description: El identificador no es un UUID o un filtro no es válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El estado debe ser abierta o cerrada
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se han podido obtener las votaciones
+    post:
+      tags:
+        - Votaciones
+      summary: Crea una votación
+      description: |
+        Crea una votación del viaje con sus opciones iniciales (entre 2 y 20, sin repetir), en una sola operación.
+        La puede crear cualquier miembro mientras el viaje está activo. Después, cualquier miembro puede proponer más opciones.
+        No se pueden crear votaciones de destino: la del destino se abre sola al crear un viaje sin destino.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaVotacionRequest'
+      responses:
+        '201':
+          description: Votación creada, con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Votacion'
+        '400':
+          description: Faltan datos, no son válidos o hay opciones repetidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: La votación necesita entre 2 y 20 opciones
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está cerrado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se ha podido crear la votación
+
+  /viajes/{viajeId}/votaciones/{votacionId}:
+    get:
+      tags:
+        - Votaciones
+      summary: Obtiene una votación con su recuento
+      description: |
+        Devuelve la votación con sus opciones, el recuento, quién ha votado cada opción y el voto del usuario.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/VotacionId'
+      responses:
+        '200':
+          description: Detalle de la votación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Votacion'
+        '400':
+          $ref: '#/components/responses/IdVotacionInvalido'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/VotacionNoEncontrada'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se ha podido obtener la votación
+
+  /viajes/{viajeId}/votaciones/{votacionId}/opciones:
+    post:
+      tags:
+        - Votaciones
+      summary: Propone una opción nueva
+      description: |
+        Añade una opción al final de la votación. En la de destino, cada opción es un destino propuesto.
+        Cualquier miembro puede proponerla mientras la votación está abierta y el viaje activo.
+        No se puede repetir una opción de la misma votación (sin distinguir mayúsculas ni espacios).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/VotacionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaOpcionRequest'
+      responses:
+        '201':
+          description: Votación con la opción añadida y el recuento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Votacion'
+        '400':
+          $ref: '#/components/responses/IdVotacionInvalido'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/VotacionNoEncontrada'
+        '409':
+          description: La opción ya existe, el viaje no está activo o la votación está cerrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                opcionDuplicada:
+                  value:
+                    error:
+                      codigo: opcion_duplicada
+                      mensaje: Esa opción ya está en la votación
+                votacionCerrada:
+                  value:
+                    error:
+                      codigo: votacion_cerrada
+                      mensaje: La votación ya está cerrada
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se ha podido añadir la opción
+
+  /viajes/{viajeId}/votaciones/{votacionId}/voto:
+    put:
+      tags:
+        - Votaciones
+      summary: Vota o cambia el voto
+      description: |
+        Guarda el voto del usuario en la opción indicada. Si ya había votado, lo cambia (un voto por persona).
+        Solo mientras la votación está abierta y el viaje activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/VotacionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VotoRequest'
+      responses:
+        '200':
+          description: Votación con el recuento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Votacion'
+        '400':
+          description: Identificadores mal formados, falta la opción o la opción no es de esta votación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                datosInvalidos:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Indica la opción que votas (opcion_id)
+                opcionNoValida:
+                  value:
+                    error:
+                      codigo: opcion_no_valida
+                      mensaje: La opción no es de esta votación
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/VotacionNoEncontrada'
+        '409':
+          description: El viaje no está activo o la votación ya está cerrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viajeNoActivo:
+                  value:
+                    error:
+                      codigo: viaje_no_activo
+                      mensaje: El viaje está cerrado y ya no se puede modificar
+                votacionCerrada:
+                  value:
+                    error:
+                      codigo: votacion_cerrada
+                      mensaje: La votación ya está cerrada
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se ha podido guardar el voto
+    delete:
+      tags:
+        - Votaciones
+      summary: Retira el voto
+      description: |
+        Borra el voto del usuario en la votación. Si no había votado, no cambia nada. Solo mientras la votación está abierta.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/VotacionId'
+      responses:
+        '200':
+          description: Votación con el recuento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Votacion'
+        '400':
+          $ref: '#/components/responses/IdVotacionInvalido'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/VotacionNoEncontrada'
+        '409':
+          description: El viaje no está activo o la votación ya está cerrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viajeNoActivo:
+                  value:
+                    error:
+                      codigo: viaje_no_activo
+                      mensaje: El viaje está cerrado y ya no se puede modificar
+                votacionCerrada:
+                  value:
+                    error:
+                      codigo: votacion_cerrada
+                      mensaje: La votación ya está cerrada
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se ha podido retirar el voto
+
+  /viajes/{viajeId}/votaciones/{votacionId}/cerrar:
+    post:
+      tags:
+        - Votaciones
+      summary: Cierra una votación
+      description: |
+        Cierra la votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas elegida al azar
+        (la PWA avisa del empate antes de confirmar). Ya no se puede votar ni proponer opciones.
+        En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
+        pendiente de destino. La de destino necesita al menos un voto; las demás, sin votos, se cierran sin ganadora.
+        Solo lo puede hacer el creador del viaje, con el viaje activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/VotacionId'
+      responses:
+        '200':
+          description: Votación cerrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreVotacion'
+        '400':
+          $ref: '#/components/responses/IdVotacionInvalido'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: El usuario es miembro del viaje pero no su creador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: no_creador
+                  mensaje: Solo el creador del viaje puede cerrar las votaciones
+        '404':
+          $ref: '#/components/responses/VotacionNoEncontrada'
+        '409':
+          description: La votación ya está cerrada, el viaje no está activo o la de destino no tiene votos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                votacionCerrada:
+                  value:
+                    error:
+                      codigo: votacion_cerrada
+                      mensaje: La votación ya está cerrada
+                sinVotos:
+                  value:
+                    error:
+                      codigo: sin_votos
+                      mensaje: La votación de destino necesita al menos un voto para cerrarse
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_votacion
+                  mensaje: No se ha podido cerrar la votación
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1000,6 +1437,25 @@ components:
       in: cookie
       name: tw_oauth
       description: Estado PKCE del login con Google, creado por GET /auth/google
+  parameters:
+    ViajeId:
+      name: viajeId
+      in: path
+      required: true
+      description: Identificador del viaje
+      schema:
+        type: string
+        format: uuid
+      example: 123e4567-e89b-12d3-a456-426614174000
+    VotacionId:
+      name: votacionId
+      in: path
+      required: true
+      description: Identificador de la votación
+      schema:
+        type: string
+        format: uuid
+      example: 6f1c2d3e-0000-4000-8000-000000000010
   responses:
     SinSesion:
       description: Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
@@ -1018,6 +1474,43 @@ components:
                 error:
                   codigo: sesion_invalida
                   mensaje: La sesión ha caducado o no es válida
+    IdVotacionInvalido:
+      description: El identificador del viaje o de la votación no es un UUID
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              codigo: datos_invalidos
+              mensaje: El identificador del viaje o de la votación no es válido
+    VotacionNoEncontrada:
+      description: El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            viajeNoEncontrado:
+              value:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+            votacionNoEncontrada:
+              value:
+                error:
+                  codigo: votacion_no_encontrada
+                  mensaje: La votación no existe en este viaje
+    ErrorInterno:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              codigo: error_interno
+              mensaje: Error interno del servidor
   schemas:
     RegistroRequest:
       type: object
@@ -1350,6 +1843,180 @@ components:
           type: boolean
           description: true si el usuario ya pertenecía al viaje antes de esta llamada
           example: false
+
+    TipoVotacion:
+      type: string
+      enum: [fecha, destino, presupuesto, actividad, otro]
+      example: fecha
+
+    NuevaOpcionRequest:
+      type: object
+      required:
+        - texto
+      properties:
+        texto:
+          type: string
+          maxLength: 100
+          description: Se guarda sin espacios a los lados
+          example: "Viernes 14"
+        valor_fecha:
+          type: string
+          format: date
+          nullable: true
+          description: Fecha que representa la opción, en las votaciones de fechas (opcional)
+          example: "2027-05-14"
+
+    NuevaVotacionRequest:
+      type: object
+      required:
+        - titulo
+        - opciones
+      properties:
+        titulo:
+          type: string
+          maxLength: 200
+          example: "¿Qué fin de semana salimos?"
+        descripcion:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: null
+        tipo:
+          type: string
+          enum: [fecha, presupuesto, actividad, otro]
+          default: otro
+          description: Las de destino no se crean a mano
+          example: fecha
+        opciones:
+          type: array
+          minItems: 2
+          maxItems: 20
+          description: Opciones iniciales, en el orden en que se mostrarán. No se pueden repetir
+          items:
+            $ref: '#/components/schemas/NuevaOpcionRequest'
+
+    VotoRequest:
+      type: object
+      required:
+        - opcion_id
+      properties:
+        opcion_id:
+          type: string
+          format: uuid
+          description: Opción que vota el usuario. Tiene que ser de esta votación
+          example: "6f1c2d3e-0000-4000-8000-0000000000a1"
+
+    OpcionVotacion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f1c2d3e-0000-4000-8000-0000000000a1"
+        texto:
+          type: string
+          example: "Viernes 14"
+        valor_fecha:
+          type: string
+          format: date
+          nullable: true
+          example: "2027-05-14"
+        orden:
+          type: integer
+          description: Posición en la lista; las propuestas nuevas van al final
+          example: 0
+        votos:
+          type: integer
+          example: 2
+        votantes:
+          type: array
+          description: Identificadores de los usuarios que han votado esta opción
+          items:
+            type: string
+            format: uuid
+          example: ["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]
+
+    Votacion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "6f1c2d3e-0000-4000-8000-000000000010"
+        titulo:
+          type: string
+          example: "¿Qué fin de semana salimos?"
+        descripcion:
+          type: string
+          nullable: true
+          example: null
+        tipo:
+          $ref: '#/components/schemas/TipoVotacion'
+        estado:
+          type: string
+          enum: [abierta, cerrada]
+          example: abierta
+        opcion_ganadora_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos)
+          example: null
+        creado_por:
+          type: string
+          format: uuid
+          nullable: true
+          example: "df77cba6-4be5-4cbc-814b-1e228dd73dcc"
+        creado_en:
+          type: string
+          format: date-time
+          example: "2026-10-20T10:00:00Z"
+        cerrada_en:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        opciones:
+          type: array
+          description: Opciones en su orden, con el recuento
+          items:
+            $ref: '#/components/schemas/OpcionVotacion'
+        total_votos:
+          type: integer
+          example: 3
+        total_miembros:
+          type: integer
+          description: Miembros activos del viaje, es decir, cuántos pueden votar
+          example: 4
+        mi_voto:
+          type: string
+          format: uuid
+          nullable: true
+          description: Opción que ha votado el usuario que hace la petición, o null si no ha votado
+          example: "6f1c2d3e-0000-4000-8000-0000000000a1"
+
+    ListaVotaciones:
+      type: object
+      properties:
+        votaciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Votacion'
+
+    CierreVotacion:
+      type: object
+      properties:
+        votacion:
+          $ref: '#/components/schemas/Votacion'
+        hubo_empate:
+          type: boolean
+          description: true si varias opciones empataron con más votos y la ganadora se eligió al azar
+          example: false
+        destino:
+          type: string
+          nullable: true
+          description: Destino guardado en el viaje (solo al cerrar la votación de destino)
+          example: null
 
     Error:
       type: object

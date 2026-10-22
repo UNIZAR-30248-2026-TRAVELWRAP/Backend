@@ -29,6 +29,13 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Cierra y archiva un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
+| GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/votaciones`](#post-viajesviajeidvotaciones) | Crea una votación | Token de sesión |
+| GET | [`/viajes/{viajeId}/votaciones/{votacionId}`](#get-viajesviajeidvotacionesvotacionid) | Obtiene una votación con su recuento | Token de sesión |
+| POST | [`/viajes/{viajeId}/votaciones/{votacionId}/opciones`](#post-viajesviajeidvotacionesvotacionidopciones) | Propone una opción nueva | Token de sesión |
+| PUT | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#put-viajesviajeidvotacionesvotacionidvoto) | Vota o cambia el voto | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#delete-viajesviajeidvotacionesvotacionidvoto) | Retira el voto | Token de sesión |
+| POST | [`/viajes/{viajeId}/votaciones/{votacionId}/cerrar`](#post-viajesviajeidvotacionesvotacionidcerrar) | Cierra una votación | Token de sesión |
 
 ## General
 
@@ -873,3 +880,608 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_invitacion` | No se ha podido completar la unión al viaje |
+
+## Votaciones
+
+### GET /viajes/{viajeId}/votaciones
+
+**Lista las votaciones de un viaje**
+
+Devuelve las votaciones del viaje, de la más reciente a la más antigua, cada una con sus opciones,
+el recuento de votos, quién ha votado cada opción y el voto del usuario (`mi_voto`).
+Solo lo pueden pedir los miembros del viaje. Se pueden filtrar por estado y por tipo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `estado` | query | No | enum (abierta, cerrada) | Solo las votaciones abiertas o solo las cerradas |  |
+| `tipo` | query | No | enum (fecha, destino, presupuesto, actividad, otro) | Solo las votaciones de este tipo | `fecha` |
+
+**Respuestas**
+
+**200** — Votaciones del viaje
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `votaciones` | array<Votacion> | No |  |  |
+| `votaciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `votaciones[].titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `votaciones[].descripcion` | string \| null | No |  | `null` |
+| `votaciones[].tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `votaciones[].estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `votaciones[].opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `votaciones[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `votaciones[].creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `votaciones[].cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `votaciones[].opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `votaciones[].opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `votaciones[].opciones[].texto` | string | No |  | `Viernes 14` |
+| `votaciones[].opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `votaciones[].opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `votaciones[].opciones[].votos` | integer | No |  | `2` |
+| `votaciones[].opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `votaciones[].total_votos` | integer | No |  | `3` |
+| `votaciones[].total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `votaciones[].mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**400** — El identificador no es un UUID o un filtro no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El estado debe ser abierta o cerrada |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se han podido obtener las votaciones |
+
+### POST /viajes/{viajeId}/votaciones
+
+**Crea una votación**
+
+Crea una votación del viaje con sus opciones iniciales (entre 2 y 20, sin repetir), en una sola operación.
+La puede crear cualquier miembro mientras el viaje está activo. Después, cualquier miembro puede proponer más opciones.
+No se pueden crear votaciones de destino: la del destino se abre sola al crear un viaje sin destino.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `titulo` | string | Sí |  | `¿Qué fin de semana salimos?` |
+| `descripcion` | string \| null | No |  | `null` |
+| `tipo` | enum (fecha, presupuesto, actividad, otro) | No | Las de destino no se crean a mano | `fecha` |
+| `opciones` | array<NuevaOpcionRequest> | Sí | Opciones iniciales, en el orden en que se mostrarán. No se pueden repetir |  |
+| `opciones[].texto` | string | Sí | Se guarda sin espacios a los lados | `Viernes 14` |
+| `opciones[].valor_fecha` | string (date) \| null | No | Fecha que representa la opción, en las votaciones de fechas (opcional) | `2027-05-14` |
+
+**Respuestas**
+
+**201** — Votación creada, con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `descripcion` | string \| null | No |  | `null` |
+| `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `opciones[].texto` | string | No |  | `Viernes 14` |
+| `opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `opciones[].votos` | integer | No |  | `2` |
+| `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `total_votos` | integer | No |  | `3` |
+| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**400** — Faltan datos, no son válidos o hay opciones repetidas
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La votación necesita entre 2 y 20 opciones |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se ha podido crear la votación |
+
+### GET /viajes/{viajeId}/votaciones/{votacionId}
+
+**Obtiene una votación con su recuento**
+
+Devuelve la votación con sus opciones, el recuento, quién ha votado cada opción y el voto del usuario.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `votacionId` | path | Sí | string (uuid) | Identificador de la votación | `6f1c2d3e-0000-4000-8000-000000000010` |
+
+**Respuestas**
+
+**200** — Detalle de la votación
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `descripcion` | string \| null | No |  | `null` |
+| `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `opciones[].texto` | string | No |  | `Viernes 14` |
+| `opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `opciones[].votos` | integer | No |  | `2` |
+| `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `total_votos` | integer | No |  | `3` |
+| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**400** — El identificador del viaje o de la votación no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje o de la votación no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `votacion_no_encontrada` | La votación no existe en este viaje |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se ha podido obtener la votación |
+
+### POST /viajes/{viajeId}/votaciones/{votacionId}/opciones
+
+**Propone una opción nueva**
+
+Añade una opción al final de la votación. En la de destino, cada opción es un destino propuesto.
+Cualquier miembro puede proponerla mientras la votación está abierta y el viaje activo.
+No se puede repetir una opción de la misma votación (sin distinguir mayúsculas ni espacios).
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `votacionId` | path | Sí | string (uuid) | Identificador de la votación | `6f1c2d3e-0000-4000-8000-000000000010` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `texto` | string | Sí | Se guarda sin espacios a los lados | `Viernes 14` |
+| `valor_fecha` | string (date) \| null | No | Fecha que representa la opción, en las votaciones de fechas (opcional) | `2027-05-14` |
+
+**Respuestas**
+
+**201** — Votación con la opción añadida y el recuento actualizado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `descripcion` | string \| null | No |  | `null` |
+| `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `opciones[].texto` | string | No |  | `Viernes 14` |
+| `opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `opciones[].votos` | integer | No |  | `2` |
+| `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `total_votos` | integer | No |  | `3` |
+| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**400** — El identificador del viaje o de la votación no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje o de la votación no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `votacion_no_encontrada` | La votación no existe en este viaje |
+
+**409** — La opción ya existe, el viaje no está activo o la votación está cerrada
+
+| Código de error | Mensaje |
+| --- | --- |
+| `opcion_duplicada` | Esa opción ya está en la votación |
+| `votacion_cerrada` | La votación ya está cerrada |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se ha podido añadir la opción |
+
+### PUT /viajes/{viajeId}/votaciones/{votacionId}/voto
+
+**Vota o cambia el voto**
+
+Guarda el voto del usuario en la opción indicada. Si ya había votado, lo cambia (un voto por persona).
+Solo mientras la votación está abierta y el viaje activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `votacionId` | path | Sí | string (uuid) | Identificador de la votación | `6f1c2d3e-0000-4000-8000-000000000010` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `opcion_id` | string (uuid) | Sí | Opción que vota el usuario. Tiene que ser de esta votación | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**Respuestas**
+
+**200** — Votación con el recuento actualizado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `descripcion` | string \| null | No |  | `null` |
+| `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `opciones[].texto` | string | No |  | `Viernes 14` |
+| `opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `opciones[].votos` | integer | No |  | `2` |
+| `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `total_votos` | integer | No |  | `3` |
+| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**400** — Identificadores mal formados, falta la opción o la opción no es de esta votación
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Indica la opción que votas (opcion_id) |
+| `opcion_no_valida` | La opción no es de esta votación |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `votacion_no_encontrada` | La votación no existe en este viaje |
+
+**409** — El viaje no está activo o la votación ya está cerrada
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `votacion_cerrada` | La votación ya está cerrada |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se ha podido guardar el voto |
+
+### DELETE /viajes/{viajeId}/votaciones/{votacionId}/voto
+
+**Retira el voto**
+
+Borra el voto del usuario en la votación. Si no había votado, no cambia nada. Solo mientras la votación está abierta.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `votacionId` | path | Sí | string (uuid) | Identificador de la votación | `6f1c2d3e-0000-4000-8000-000000000010` |
+
+**Respuestas**
+
+**200** — Votación con el recuento actualizado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `descripcion` | string \| null | No |  | `null` |
+| `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `opciones[].texto` | string | No |  | `Viernes 14` |
+| `opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `opciones[].votos` | integer | No |  | `2` |
+| `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `total_votos` | integer | No |  | `3` |
+| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+
+**400** — El identificador del viaje o de la votación no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje o de la votación no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `votacion_no_encontrada` | La votación no existe en este viaje |
+
+**409** — El viaje no está activo o la votación ya está cerrada
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `votacion_cerrada` | La votación ya está cerrada |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se ha podido retirar el voto |
+
+### POST /viajes/{viajeId}/votaciones/{votacionId}/cerrar
+
+**Cierra una votación**
+
+Cierra la votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas elegida al azar
+(la PWA avisa del empate antes de confirmar). Ya no se puede votar ni proponer opciones.
+En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
+pendiente de destino. La de destino necesita al menos un voto; las demás, sin votos, se cierran sin ganadora.
+Solo lo puede hacer el creador del viaje, con el viaje activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `votacionId` | path | Sí | string (uuid) | Identificador de la votación | `6f1c2d3e-0000-4000-8000-000000000010` |
+
+**Respuestas**
+
+**200** — Votación cerrada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `votacion` | Votacion | No |  |  |
+| `votacion.id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-000000000010` |
+| `votacion.titulo` | string | No |  | `¿Qué fin de semana salimos?` |
+| `votacion.descripcion` | string \| null | No |  | `null` |
+| `votacion.tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
+| `votacion.estado` | enum (abierta, cerrada) | No |  | `abierta` |
+| `votacion.opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `votacion.creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `votacion.creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
+| `votacion.cerrada_en` | string (date-time) \| null | No |  | `null` |
+| `votacion.opciones` | array<OpcionVotacion> | No | Opciones en su orden, con el recuento |  |
+| `votacion.opciones[].id` | string (uuid) | No |  | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `votacion.opciones[].texto` | string | No |  | `Viernes 14` |
+| `votacion.opciones[].valor_fecha` | string (date) \| null | No |  | `2027-05-14` |
+| `votacion.opciones[].orden` | integer | No | Posición en la lista; las propuestas nuevas van al final | `0` |
+| `votacion.opciones[].votos` | integer | No |  | `2` |
+| `votacion.opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
+| `votacion.total_votos` | integer | No |  | `3` |
+| `votacion.total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `votacion.mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
+| `hubo_empate` | boolean | No | true si varias opciones empataron con más votos y la ganadora se eligió al azar | `false` |
+| `destino` | string \| null | No | Destino guardado en el viaje (solo al cerrar la votación de destino) | `null` |
+
+**400** — El identificador del viaje o de la votación no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje o de la votación no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — El usuario es miembro del viaje pero no su creador
+
+| Código de error | Mensaje |
+| --- | --- |
+| `no_creador` | Solo el creador del viaje puede cerrar las votaciones |
+
+**404** — El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `votacion_no_encontrada` | La votación no existe en este viaje |
+
+**409** — La votación ya está cerrada, el viaje no está activo o la de destino no tiene votos
+
+| Código de error | Mensaje |
+| --- | --- |
+| `votacion_cerrada` | La votación ya está cerrada |
+| `sin_votos` | La votación de destino necesita al menos un voto para cerrarse |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_votacion` | No se ha podido cerrar la votación |

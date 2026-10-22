@@ -297,7 +297,120 @@ $$;
 REVOKE ALL ON FUNCTION public.crear_viaje(text, text, date, date, numeric) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.crear_viaje(text, text, date, date, numeric) TO authenticated;
 
--- 11. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
+-- 11. FUNCIÓN CREAR VOTACIÓN
+-- Crea una votación con sus opciones iniciales en una sola operación: si falla una opción, no se crea nada.
+-- Es SECURITY INVOKER: se aplican las mismas políticas RLS que a un insert directo en las tablas.
+-- p_opciones es una lista JSON de { texto, valor_fecha }; el orden de la lista es el de las opciones.
+-- Devuelve { estado }: no_existe | no_activo | ok (con votacion_id)
+CREATE OR REPLACE FUNCTION public.crear_votacion(
+  p_viaje_id uuid,
+  p_titulo text,
+  p_descripcion text,
+  p_tipo public.tipo_votacion,
+  p_opciones jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_votacion_id uuid;
+BEGIN
+  IF NOT public.es_miembro(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_existe');
+  END IF;
+  IF NOT public.es_editable(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
+  END IF;
+
+  INSERT INTO public.votaciones (viaje_id, titulo, descripcion, tipo, creado_por)
+  VALUES (p_viaje_id, p_titulo, p_descripcion, p_tipo, auth.uid())
+  RETURNING id INTO v_votacion_id;
+
+  INSERT INTO public.opciones_votacion (votacion_id, texto, valor_fecha, orden)
+  SELECT v_votacion_id, o.opcion ->> 'texto', (o.opcion ->> 'valor_fecha')::date, o.posicion - 1
+  FROM jsonb_array_elements(COALESCE(p_opciones, '[]'::jsonb)) WITH ORDINALITY AS o (opcion, posicion);
+
+  RETURN jsonb_build_object('estado', 'ok', 'votacion_id', v_votacion_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.crear_votacion(uuid, text, text, public.tipo_votacion, jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.crear_votacion(uuid, text, text, public.tipo_votacion, jsonb) TO authenticated;
+
+-- 12. FUNCIÓN CERRAR VOTACIÓN
+-- Cierra una votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas al azar.
+-- En la votación de destino fija además el destino del viaje, todo en una sola operación.
+-- Solo la cierra el creador del viaje, con el viaje activo. Es SECURITY INVOKER (se aplican las políticas RLS).
+-- Una votación sin votos se cierra sin ganadora, salvo la de destino, que necesita al menos un voto.
+-- Devuelve { estado }: no_existe | no_creador | no_activo | ya_cerrada | sin_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
+CREATE OR REPLACE FUNCTION public.cerrar_votacion(p_viaje_id uuid, p_votacion_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_votacion public.votaciones;
+  v_ganadora_id uuid;
+  v_empatadas int;
+  v_destino text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.votaciones WHERE id = p_votacion_id AND viaje_id = p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_existe');
+  END IF;
+  IF NOT public.es_creador(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_creador');
+  END IF;
+  IF NOT public.es_editable(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
+  END IF;
+
+  -- Bloquea la votación para que no se cierre dos veces a la vez
+  SELECT * INTO v_votacion FROM public.votaciones WHERE id = p_votacion_id FOR UPDATE;
+  IF v_votacion.estado = 'cerrada' THEN
+    RETURN jsonb_build_object('estado', 'ya_cerrada');
+  END IF;
+
+  -- Opciones con más votos (al menos uno) y, entre ellas, una al azar
+  WITH recuento AS (
+    SELECT o.id, count(v.id) AS votos
+    FROM public.opciones_votacion o
+    LEFT JOIN public.votos v ON v.opcion_id = o.id
+    WHERE o.votacion_id = p_votacion_id
+    GROUP BY o.id
+  ),
+  empatadas AS (
+    SELECT id FROM recuento WHERE votos > 0 AND votos = (SELECT max(votos) FROM recuento)
+  )
+  SELECT (SELECT count(*) FROM empatadas), (SELECT id FROM empatadas ORDER BY random() LIMIT 1)
+  INTO v_empatadas, v_ganadora_id;
+
+  IF v_ganadora_id IS NULL AND v_votacion.tipo = 'destino' THEN
+    RETURN jsonb_build_object('estado', 'sin_votos');
+  END IF;
+
+  UPDATE public.votaciones
+  SET estado = 'cerrada', cerrada_en = now(), opcion_ganadora_id = v_ganadora_id
+  WHERE id = p_votacion_id;
+
+  IF v_votacion.tipo = 'destino' THEN
+    SELECT btrim(texto) INTO v_destino FROM public.opciones_votacion WHERE id = v_ganadora_id;
+    UPDATE public.viajes SET destino = v_destino WHERE id = p_viaje_id;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'estado', 'ok',
+    'opcion_ganadora_id', v_ganadora_id,
+    'hubo_empate', v_empatadas > 1,
+    'destino', v_destino
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cerrar_votacion(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cerrar_votacion(uuid, uuid) TO authenticated;
+
+-- 13. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
 -- Abre la votación de destino de los viajes activos sin destino que todavía no la tienen.
 -- Se puede ejecutar varias veces: solo crea las que faltan
 INSERT INTO public.votaciones (viaje_id, titulo, tipo, creado_por)
