@@ -24,7 +24,8 @@ const dividirSentencias = (script) => {
         continue;
       }
       if (recortada.startsWith('--')) {
-        comentarios.push(recortada.slice(2).trim());
+        const comentario = recortada.slice(2).trim();
+        if (!/^\d+\.\s/.test(comentario)) comentarios.push(comentario);
         continue;
       }
     }
@@ -135,7 +136,7 @@ const analizarColumna = ({ texto, comentarios }) => {
 };
 
 const analizarTabla = ({ texto, comentarios }) => {
-  const nombre = sinEsquema(texto.match(/^CREATE\s+TABLE\s+([\w.]+)/i)[1]);
+  const nombre = sinEsquema(texto.match(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w.]+)/i)[1]);
   const cuerpo = texto.slice(texto.indexOf('(') + 1, texto.lastIndexOf(')'));
   const columnas = [];
   const restricciones = [];
@@ -157,6 +158,7 @@ const analizarTabla = ({ texto, comentarios }) => {
       continue;
     }
     const nombrada = elemento.texto.match(/^CONSTRAINT\s+(\w+)\s+(.*)$/is);
+    anotarClaveForanea(columnas, nombrada ? nombrada[2] : elemento.texto);
     restricciones.push({
       nombre: nombrada ? nombrada[1] : null,
       definicion: colapsar(nombrada ? nombrada[2] : elemento.texto),
@@ -166,19 +168,44 @@ const analizarTabla = ({ texto, comentarios }) => {
   return { nombre, descripcion: comentarios, columnas, restricciones, indices: [], rls: false, politicas: [] };
 };
 
-const analizarEnum = ({ texto }) => {
-  const coincidencia = texto.match(/^CREATE\s+TYPE\s+([\w.]+)\s+AS\s+ENUM\s*\((.*)\)$/is);
-  if (!coincidencia) return null;
+// Tipos enumerados de una sentencia CREATE TYPE o de un bloque DO que los crea si no existen
+const analizarEnums = ({ texto }) =>
+  [...texto.matchAll(/CREATE\s+TYPE\s+([\w.]+)\s+AS\s+ENUM\s*\(([^)]*)\)/gi)].map((m) => ({
+    nombre: sinEsquema(m[1]),
+    valores: [...m[2].matchAll(/'([^']*)'/g)].map((v) => v[1]),
+  }));
+
+// Admite IF NOT EXISTS, expresiones (p. ej. lower(texto)) e índices parciales con WHERE
+const analizarIndice = ({ texto, comentarios }) => {
+  const c = texto.match(/^CREATE\s+(UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON\s+([\w.]+)/i);
+  if (!c) return null;
   return {
-    nombre: sinEsquema(coincidencia[1]),
-    valores: [...coincidencia[2].matchAll(/'([^']*)'/g)].map((m) => m[1]),
+    unico: Boolean(c[1]),
+    nombre: c[2],
+    tabla: sinEsquema(c[3]),
+    columnas: expresionEntreParentesis(texto, /\bON\s+[\w.]+\s*(?:USING\s+\w+\s*)?\(/i) ?? '',
+    condicion: texto.match(/\)\s*WHERE\s+(.*)$/is)?.[1]?.trim() ?? null,
+    comentarios,
   };
 };
 
-const analizarIndice = ({ texto }) => {
-  const c = texto.match(/^CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+([\w.]+)\s*\((.*)\)$/is);
-  if (!c) return null;
-  return { unico: Boolean(c[1]), nombre: c[2], tabla: sinEsquema(c[3]), columnas: colapsar(c[4]) };
+// «FOREIGN KEY (a, b) REFERENCES t (x, y) ON DELETE ...»: marca como clave foránea las columnas que aún no lo son
+const anotarClaveForanea = (columnas, definicion) => {
+  const fk = definicion.match(
+    /FOREIGN\s+KEY\s*\(([^)]+)\)\s*REFERENCES\s+([\w.]+)\s*\(([^)]+)\)(?:\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION))?/i,
+  );
+  if (!fk) return;
+  const origen = fk[1].split(',').map((n) => n.trim());
+  const destino = fk[3].split(',').map((n) => n.trim());
+  origen.forEach((nombre, i) => {
+    const columna = columnas.find((c) => c.nombre === nombre);
+    if (!columna || columna.referencia) return;
+    columna.referencia = {
+      tabla: sinEsquema(fk[2]),
+      columna: destino[i] ?? destino[0],
+      alBorrar: fk[4] ? colapsar(fk[4]).toUpperCase() : null,
+    };
+  });
 };
 
 // ── Políticas y funciones (02) ────────────────────────────────────────────────
@@ -237,12 +264,16 @@ const analizar = (scriptEsquema, scriptPoliticas) => {
   for (const sentencia of [...dividirSentencias(scriptEsquema), ...dividirSentencias(scriptPoliticas)]) {
     const { texto } = sentencia;
     if (/^CREATE\s+TABLE\b/i.test(texto)) tablas.push(analizarTabla(sentencia));
-    else if (/^CREATE\s+TYPE\b/i.test(texto)) enums.push(analizarEnum(sentencia));
+    else if (/^(CREATE\s+TYPE|DO)\b/i.test(texto)) enums.push(...analizarEnums(sentencia));
     else if (/^CREATE\s+POLICY\b/i.test(texto)) politicas.push(analizarPolitica(sentencia));
     else if (/^CREATE\s+(OR\s+REPLACE\s+)?FUNCTION\b/i.test(texto)) funciones.push(analizarFuncion(sentencia));
     else if (/^CREATE\s+(UNIQUE\s+)?INDEX\b/i.test(texto)) {
       const indice = analizarIndice(sentencia);
       tablas.find((t) => t.nombre === indice?.tabla)?.indices.push(indice);
+    } else if (/^ALTER\s+TABLE\b.*\bADD\s+CONSTRAINT\b.*\bFOREIGN\s+KEY\b/is.test(texto)) {
+      const nombreTabla = sinEsquema(texto.match(/^ALTER\s+TABLE\s+(?:ONLY\s+)?([\w.]+)/i)[1]);
+      const tabla = tablas.find((t) => t.nombre === nombreTabla);
+      if (tabla) anotarClaveForanea(tabla.columnas, texto);
     } else if (/^ALTER\s+TABLE\b.*\bENABLE\s+ROW\s+LEVEL\s+SECURITY\b/is.test(texto)) {
       tablasConRls.add(sinEsquema(texto.match(/^ALTER\s+TABLE\s+([\w.]+)/i)[1]));
     } else if (/^GRANT\s+EXECUTE\s+ON\s+FUNCTION\b/i.test(texto)) {
@@ -296,7 +327,10 @@ const bloqueTabla = (t) => {
     partes.push(`**Restricciones**\n\n${t.restricciones.map((r) => `- ${r.nombre ? `${codigo(r.nombre)}: ` : ''}${codigo(r.definicion)}${r.comentarios.length ? ` — ${r.comentarios.join(' ')}` : ''}`).join('\n')}`);
   }
   if (t.indices.length) {
-    partes.push(`**Índices**\n\n${t.indices.map((i) => `- ${codigo(i.nombre)}${i.unico ? ' (único)' : ''} sobre (${i.columnas})`).join('\n')}`);
+    const lineaIndice = (i) =>
+      `- ${codigo(i.nombre)}${i.unico ? ' (único)' : ''} sobre (${i.columnas})` +
+      `${i.condicion ? `, solo donde ${codigo(i.condicion)}` : ''}${i.comentarios?.length ? ` — ${i.comentarios.join(' ')}` : ''}`;
+    partes.push(`**Índices**\n\n${t.indices.map(lineaIndice).join('\n')}`);
   }
   return unirBloques(partes).trimEnd();
 };

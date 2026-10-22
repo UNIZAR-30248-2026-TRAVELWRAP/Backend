@@ -34,10 +34,37 @@ AS $$
   );
 $$;
 
+-- Viaje al que pertenece una votación (lo usan las políticas de opciones y votos)
+CREATE OR REPLACE FUNCTION public.viaje_de_votacion(p_votacion_id uuid)
+RETURNS uuid
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT viaje_id FROM public.votaciones WHERE id = p_votacion_id;
+$$;
+
+-- Se pueden proponer opciones y votar si eres miembro del viaje, el viaje está activo y la votación sigue abierta
+CREATE OR REPLACE FUNCTION public.puede_votar(p_votacion_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.votaciones v
+    WHERE v.id = p_votacion_id
+      AND v.estado = 'abierta'
+      AND public.es_miembro(v.viaje_id)
+      AND public.es_editable(v.viaje_id)
+  );
+$$;
+
 -- 2. ACTIVAR RLS
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.viajes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.miembros_viaje ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.votaciones ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.opciones_votacion ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.votos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -89,7 +116,58 @@ DROP POLICY IF EXISTS miembros_viaje_update_propio ON public.miembros_viaje;
 CREATE POLICY miembros_viaje_update_propio ON public.miembros_viaje FOR UPDATE TO authenticated
   USING (usuario_id = auth.uid()) WITH CHECK (usuario_id = auth.uid());
 
--- 6. FUNCIÓN UNIRSE CON INVITACIÓN
+-- 6. POLÍTICAS VOTACIONES
+DROP POLICY IF EXISTS votaciones_select ON public.votaciones;
+CREATE POLICY votaciones_select ON public.votaciones FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro crea votaciones mientras el viaje está activo. La de destino solo la abre crear_viaje
+DROP POLICY IF EXISTS votaciones_insert ON public.votaciones;
+CREATE POLICY votaciones_insert ON public.votaciones FOR INSERT TO authenticated
+  WITH CHECK (
+    creado_por = auth.uid()
+    AND tipo <> 'destino'
+    AND estado = 'abierta'
+    AND public.es_miembro(viaje_id)
+    AND public.es_editable(viaje_id)
+  );
+
+-- Solo el creador del viaje cierra las votaciones, y solo con el viaje activo
+DROP POLICY IF EXISTS votaciones_update ON public.votaciones;
+CREATE POLICY votaciones_update ON public.votaciones FOR UPDATE TO authenticated
+  USING (public.es_creador(viaje_id) AND public.es_editable(viaje_id)) WITH CHECK (public.es_creador(viaje_id));
+
+-- 7. POLÍTICAS OPCIONES_VOTACION
+DROP POLICY IF EXISTS opciones_votacion_select ON public.opciones_votacion;
+CREATE POLICY opciones_votacion_select ON public.opciones_votacion FOR SELECT TO authenticated
+  USING (public.es_miembro(public.viaje_de_votacion(votacion_id)));
+
+-- Cualquier miembro propone opciones mientras la votación está abierta
+DROP POLICY IF EXISTS opciones_votacion_insert ON public.opciones_votacion;
+CREATE POLICY opciones_votacion_insert ON public.opciones_votacion FOR INSERT TO authenticated
+  WITH CHECK (public.puede_votar(votacion_id));
+
+-- 8. POLÍTICAS VOTOS
+-- Los miembros ven los votos de su viaje (para el recuento y quién ha votado)
+DROP POLICY IF EXISTS votos_select ON public.votos;
+CREATE POLICY votos_select ON public.votos FOR SELECT TO authenticated
+  USING (public.es_miembro(public.viaje_de_votacion(votacion_id)));
+
+-- Cada miembro emite, cambia o retira solo su propio voto, y solo mientras la votación está abierta
+DROP POLICY IF EXISTS votos_insert ON public.votos;
+CREATE POLICY votos_insert ON public.votos FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid() AND public.puede_votar(votacion_id));
+
+DROP POLICY IF EXISTS votos_update ON public.votos;
+CREATE POLICY votos_update ON public.votos FOR UPDATE TO authenticated
+  USING (usuario_id = auth.uid() AND public.puede_votar(votacion_id))
+  WITH CHECK (usuario_id = auth.uid() AND public.puede_votar(votacion_id));
+
+DROP POLICY IF EXISTS votos_delete ON public.votos;
+CREATE POLICY votos_delete ON public.votos FOR DELETE TO authenticated
+  USING (usuario_id = auth.uid() AND public.puede_votar(votacion_id));
+
+-- 9. FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
@@ -152,10 +230,10 @@ $$;
 REVOKE ALL ON FUNCTION public.unirse_con_invitacion(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.unirse_con_invitacion(text) TO authenticated;
 
--- 7. FUNCIÓN CREAR VIAJE
+-- 10. FUNCIÓN CREAR VIAJE
 -- Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación.
 -- Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea).
--- Un viaje sin destino (destino null) queda pendiente de decidir el destino por votación.
+-- Un viaje sin destino (destino null) queda pendiente y se abre su votación de destino.
 -- Devuelve { estado }: sin_sesion | ok (con viaje)
 CREATE OR REPLACE FUNCTION public.crear_viaje(
   p_nombre text,
@@ -193,6 +271,11 @@ BEGIN
   INSERT INTO public.miembros_viaje (viaje_id, usuario_id, rol)
   VALUES (v_viaje.id, v_usuario, 'creador');
 
+  IF v_viaje.destino IS NULL THEN
+    INSERT INTO public.votaciones (viaje_id, titulo, tipo, creado_por)
+    VALUES (v_viaje.id, '¿A dónde queremos ir?', 'destino', v_usuario);
+  END IF;
+
   RETURN jsonb_build_object(
     'estado', 'ok',
     'viaje', jsonb_build_object(
@@ -213,3 +296,13 @@ $$;
 
 REVOKE ALL ON FUNCTION public.crear_viaje(text, text, date, date, numeric) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.crear_viaje(text, text, date, date, numeric) TO authenticated;
+
+-- 11. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
+-- Abre la votación de destino de los viajes activos sin destino que todavía no la tienen.
+-- Se puede ejecutar varias veces: solo crea las que faltan
+INSERT INTO public.votaciones (viaje_id, titulo, tipo, creado_por)
+SELECT v.id, '¿A dónde queremos ir?', 'destino', v.creador_id
+FROM public.viajes v
+WHERE v.destino IS NULL
+  AND v.estado = 'activo'
+  AND NOT EXISTS (SELECT 1 FROM public.votaciones vo WHERE vo.viaje_id = v.id AND vo.tipo = 'destino');
