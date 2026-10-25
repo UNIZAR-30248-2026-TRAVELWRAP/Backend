@@ -117,3 +117,82 @@ describe('actividadService.crear', () => {
     assert.deepEqual(await actividadService.crear(enInsercion, USUARIO, VIAJE_ID, DATOS), { error });
   });
 });
+
+describe('actividadService.listar', () => {
+  it('devuelve las actividades del viaje ordenadas por día, hora (las sin hora al final) y orden', async () => {
+    const filas = [{ id: 'a1' }, { id: 'a2' }];
+    const cliente = clienteFalso([
+      { data: viaje(), error: null },
+      { data: filas, error: null },
+    ]);
+
+    const resultado = await actividadService.listar(cliente, USUARIO, VIAJE_ID);
+
+    assert.deepEqual(resultado, { estado: 'ok', actividades: filas });
+    const consulta = cliente.consultas[1];
+    assert.equal(consulta.tabla, 'actividades');
+    assert.deepEqual(operacion(consulta, 'eq'), ['eq', 'viaje_id', VIAJE_ID]);
+    assert.deepEqual(
+      consulta.operaciones.filter(([m]) => m === 'order'),
+      [
+        ['order', 'fecha', { ascending: true }],
+        ['order', 'hora_inicio', { ascending: true, nullsFirst: false }],
+        ['order', 'orden', { ascending: true }],
+        ['order', 'creado_en', { ascending: true }],
+      ],
+    );
+  });
+
+  it('filtra por la fecha cuando se pide un solo día', async () => {
+    const cliente = clienteFalso([
+      { data: viaje(), error: null },
+      { data: [], error: null },
+    ]);
+
+    await actividadService.listar(cliente, USUARIO, VIAJE_ID, '2027-05-12');
+
+    const filtros = cliente.consultas[1].operaciones.filter(([m]) => m === 'eq');
+    assert.deepEqual(filtros, [
+      ['eq', 'viaje_id', VIAJE_ID],
+      ['eq', 'fecha', '2027-05-12'],
+    ]);
+  });
+
+  it('devuelve una lista vacía si el viaje no tiene actividades', async () => {
+    const cliente = clienteFalso([
+      { data: viaje(), error: null },
+      { data: null, error: null },
+    ]);
+
+    assert.deepEqual(await actividadService.listar(cliente, USUARIO, VIAJE_ID), { estado: 'ok', actividades: [] });
+  });
+
+  it('también lista las de un viaje archivado (solo lectura)', async () => {
+    const cliente = clienteFalso([
+      { data: viaje('archivado'), error: null },
+      { data: [{ id: 'a1' }], error: null },
+    ]);
+
+    const resultado = await actividadService.listar(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.actividades.length, 1);
+  });
+
+  it('devuelve no_existe si el viaje no existe o el usuario no es miembro', async () => {
+    const sinViaje = clienteFalso([{ data: null, error: null }]);
+    const ajeno = clienteFalso([{ data: viaje('activo', false), error: null }]);
+
+    assert.deepEqual(await actividadService.listar(sinViaje, USUARIO, VIAJE_ID), { estado: 'no_existe' });
+    assert.deepEqual(await actividadService.listar(ajeno, USUARIO, VIAJE_ID), { estado: 'no_existe' });
+  });
+
+  it('devuelve el error si falla la consulta del viaje o la de las actividades', async () => {
+    const error = { code: 'XX000' };
+    const enViaje = clienteFalso([{ data: null, error }]);
+    const enActividades = clienteFalso([{ data: viaje(), error: null }, { data: null, error }]);
+
+    assert.deepEqual(await actividadService.listar(enViaje, USUARIO, VIAJE_ID), { error });
+    assert.deepEqual(await actividadService.listar(enActividades, USUARIO, VIAJE_ID), { error });
+  });
+});

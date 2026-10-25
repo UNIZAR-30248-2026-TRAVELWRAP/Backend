@@ -148,3 +148,92 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
     assert.equal(res.cuerpo.error.codigo, 'error_interno');
   });
 });
+
+const llamarListar = async ({ viajeId = VIAJE_ID, query = {} } = {}) => {
+  const req = { params: { viajeId }, query, usuario: USUARIO, supabase: {} };
+  const res = crearRes();
+  await actividadController.listar(req, res);
+  return res;
+};
+
+const simularListar = (implementacion) => mock.method(actividadService, 'listar', implementacion);
+
+describe('GET /viajes/:viajeId/actividades (listar)', () => {
+  it('devuelve las actividades del viaje con 200', async () => {
+    const listar = simularListar(async () => ({ estado: 'ok', actividades: [{ id: 'a1' }, { id: 'a2' }] }));
+
+    const res = await llamarListar();
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { actividades: [{ id: 'a1' }, { id: 'a2' }] });
+    const [, usuarioId, viajeId, fecha] = listar.mock.calls[0].arguments;
+    assert.equal(usuarioId, USUARIO.id);
+    assert.equal(viajeId, VIAJE_ID);
+    assert.equal(fecha, undefined);
+  });
+
+  it('pasa al servicio la fecha pedida para listar un solo día', async () => {
+    const listar = simularListar(async () => ({ estado: 'ok', actividades: [] }));
+
+    const res = await llamarListar({ query: { fecha: '2027-05-12' } });
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { actividades: [] });
+    assert.equal(listar.mock.calls[0].arguments[3], '2027-05-12');
+  });
+
+  const invalidos = [
+    ['fecha mal formada', { fecha: '12/05/2027' }],
+    ['fecha inexistente', { fecha: '2027-02-30' }],
+    ['fecha repetida', { fecha: ['2027-05-12', '2027-05-13'] }],
+  ];
+  for (const [caso, query] of invalidos) {
+    it(`rechaza con 400 ${caso} sin llamar al servicio`, async () => {
+      const listar = simularListar(async () => ({ estado: 'ok', actividades: [] }));
+
+      const res = await llamarListar({ query });
+
+      assert.equal(res.codigo, 400);
+      assert.deepEqual(res.cuerpo, {
+        error: { codigo: 'datos_invalidos', mensaje: 'La fecha debe tener el formato AAAA-MM-DD' },
+      });
+      assert.equal(listar.mock.callCount(), 0);
+    });
+  }
+
+  it('rechaza un identificador de viaje que no es un UUID', async () => {
+    const res = await llamarListar({ viajeId: 'roma-2027' });
+
+    assert.equal(res.codigo, 400);
+    assert.equal(res.cuerpo.error.mensaje, 'El identificador del viaje no es válido');
+  });
+
+  it('responde 404 viaje_no_encontrado si el viaje no existe o no es miembro', async () => {
+    simularListar(async () => ({ estado: 'no_existe' }));
+
+    const res = await llamarListar();
+
+    assert.equal(res.codigo, 404);
+    assert.equal(res.cuerpo.error.codigo, 'viaje_no_encontrado');
+  });
+
+  it('responde 502 si falla la base de datos', async () => {
+    simularListar(async () => ({ error: { code: 'XX000' } }));
+
+    const res = await llamarListar();
+
+    assert.equal(res.codigo, 502);
+    assert.equal(res.cuerpo.error.codigo, 'error_actividad');
+  });
+
+  it('responde 500 si el servicio lanza una excepción', async () => {
+    simularListar(async () => {
+      throw new Error('caída');
+    });
+
+    const res = await llamarListar();
+
+    assert.equal(res.codigo, 500);
+    assert.equal(res.cuerpo.error.codigo, 'error_interno');
+  });
+});

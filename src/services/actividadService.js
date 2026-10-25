@@ -4,6 +4,24 @@ const CAMPOS_ACTIVIDAD =
   'id, viaje_id, titulo, descripcion, fecha, hora_inicio, hora_fin, orden, ubicacion_nombre, latitud, longitud, ' +
   'lugar_externo_id, categoria, creado_por, creado_en, actualizado_en';
 
+const listar = async (cliente, usuarioId, viajeId, fecha) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  let consulta = cliente.from('actividades').select(CAMPOS_ACTIVIDAD).eq('viaje_id', viajeId);
+  if (fecha) consulta = consulta.eq('fecha', fecha);
+
+  const { data, error } = await consulta
+    .order('fecha', { ascending: true })
+    .order('hora_inicio', { ascending: true, nullsFirst: false })
+    .order('orden', { ascending: true })
+    .order('creado_en', { ascending: true });
+  if (error) return { error };
+
+  return { estado: 'ok', actividades: data ?? [] };
+};
+
 const crear = async (cliente, usuarioId, viajeId, datos) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
   if (previo.error) return { error: previo.error };
@@ -38,4 +56,4 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
   return { estado: 'ok', actividad: data };
 };
 
-module.exports = { crear };
+module.exports = { listar, crear };

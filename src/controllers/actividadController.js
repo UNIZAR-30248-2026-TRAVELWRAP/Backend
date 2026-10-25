@@ -59,11 +59,32 @@ const responderMotivo = (res, estado, mensajeFallo) => {
   return responderError(res, codigoHttp, codigo, mensaje);
 };
 
+const idViajeInvalido = (res) =>
+  responderError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
+
+const listar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  const { fecha } = req.query;
+  if (fecha !== undefined && (typeof fecha !== 'string' || !fechaValida(fecha))) {
+    return responderError(res, 400, 'datos_invalidos', 'La fecha debe tener el formato AAAA-MM-DD');
+  }
+
+  try {
+    const resultado = await actividadService.listar(req.supabase, req.usuario.id, viajeId, fecha);
+
+    if (resultado.error) return responderError(res, 502, 'error_actividad', 'No se han podido obtener las actividades');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se han podido obtener las actividades');
+    return res.status(200).json({ actividades: resultado.actividades });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const crear = async (req, res) => {
   const { viajeId } = req.params;
-  if (!UUID_REGEX.test(viajeId)) {
-    return responderError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
-  }
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
 
   const validacion = validarNuevaActividad(req.body);
   if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
@@ -84,4 +105,4 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { crear };
+module.exports = { listar, crear };
