@@ -1557,6 +1557,153 @@ paths:
                   codigo: error_actividad
                   mensaje: No se ha podido crear la actividad
 
+  /viajes/{viajeId}/actividades/{actividadId}:
+    patch:
+      tags:
+        - Actividades
+      summary: Modifica una actividad del itinerario
+      description: |
+        Cambia solo los campos que se envían (al menos uno). Con `null` se vacían la hora de inicio, la hora de fin,
+        la ubicación y la categoría; el título y la fecha no se pueden vaciar.
+        La hora de fin necesita una hora de inicio y no puede ser anterior a ella (se comprueba también con las horas
+        que la actividad ya tiene guardadas). Si se cambia la fecha, la actividad pasa al final de ese día.
+        La puede modificar cualquier miembro mientras el viaje está activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/ActividadId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosActividadRequest'
+      responses:
+        '200':
+          description: Actividad modificada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Actividad'
+        '400':
+          description: No se envía ningún campo, un dato no es válido o los identificadores no son UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: La hora de fin necesita una hora de inicio
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o la actividad no es de ese viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viajeNoEncontrado:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                actividadNoEncontrada:
+                  value:
+                    error:
+                      codigo: actividad_no_encontrada
+                      mensaje: La actividad no existe en este viaje
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está cerrado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_actividad
+                  mensaje: No se ha podido modificar la actividad
+    delete:
+      tags:
+        - Actividades
+      summary: Elimina una actividad del itinerario
+      description: |
+        Borra la actividad para todos los miembros del viaje. La puede borrar cualquier miembro mientras el viaje
+        está activo. Responde 204 sin cuerpo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/ActividadId'
+      responses:
+        '204':
+          description: Actividad eliminada
+        '400':
+          description: Los identificadores no son UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje o de la actividad no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o la actividad no es de ese viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viajeNoEncontrado:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                actividadNoEncontrada:
+                  value:
+                    error:
+                      codigo: actividad_no_encontrada
+                      mensaje: La actividad no existe en este viaje
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está cerrado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_actividad
+                  mensaje: No se ha podido eliminar la actividad
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1578,6 +1725,15 @@ components:
         type: string
         format: uuid
       example: 123e4567-e89b-12d3-a456-426614174000
+    ActividadId:
+      name: actividadId
+      in: path
+      required: true
+      description: Identificador de la actividad
+      schema:
+        type: string
+        format: uuid
+      example: 8a1b2c3d-0000-4000-8000-000000000020
     VotacionId:
       name: votacionId
       in: path
@@ -2188,6 +2344,42 @@ components:
           nullable: true
           enum: [comida, cultura, transporte, alojamiento, otro]
           description: Tipo de actividad, para mostrar su icono. Opcional
+          example: cultura
+
+    CambiosActividadRequest:
+      type: object
+      minProperties: 1
+      description: Solo se envían los campos que cambian
+      properties:
+        titulo:
+          type: string
+          maxLength: 200
+          example: Coliseo y Foro
+        fecha:
+          type: string
+          format: date
+          example: '2027-05-13'
+        hora_inicio:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Hora de inicio (HH:MM). Con null se quita (y entonces la hora de fin también debe quitarse)
+          example: '10:00'
+        hora_fin:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Hora de fin (HH:MM). Con null se quita
+          example: '12:00'
+        ubicacion_nombre:
+          type: string
+          nullable: true
+          maxLength: 200
+          example: Piazza del Colosseo
+        categoria:
+          type: string
+          nullable: true
+          enum: [comida, cultura, transporte, alojamiento, otro]
           example: cultura
 
     Actividad:

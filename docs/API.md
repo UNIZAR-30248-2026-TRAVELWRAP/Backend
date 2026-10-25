@@ -38,6 +38,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/votaciones/{votacionId}/cerrar`](#post-viajesviajeidvotacionesvotacionidcerrar) | Cierra una votación | Token de sesión |
 | GET | [`/viajes/{viajeId}/actividades`](#get-viajesviajeidactividades) | Lista las actividades del itinerario de un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
+| PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
 
 ## General
 
@@ -1651,3 +1653,154 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_actividad` | No se ha podido crear la actividad |
+
+### PATCH /viajes/{viajeId}/actividades/{actividadId}
+
+**Modifica una actividad del itinerario**
+
+Cambia solo los campos que se envían (al menos uno). Con `null` se vacían la hora de inicio, la hora de fin,
+la ubicación y la categoría; el título y la fecha no se pueden vaciar.
+La hora de fin necesita una hora de inicio y no puede ser anterior a ella (se comprueba también con las horas
+que la actividad ya tiene guardadas). Si se cambia la fecha, la actividad pasa al final de ese día.
+La puede modificar cualquier miembro mientras el viaje está activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `actividadId` | path | Sí | string (uuid) | Identificador de la actividad | `8a1b2c3d-0000-4000-8000-000000000020` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `titulo` | string | No |  | `Coliseo y Foro` |
+| `fecha` | string (date) | No |  | `2027-05-13` |
+| `hora_inicio` | string \| null | No | Hora de inicio (HH:MM). Con null se quita (y entonces la hora de fin también debe quitarse) | `10:00` |
+| `hora_fin` | string \| null | No | Hora de fin (HH:MM). Con null se quita | `12:00` |
+| `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+
+**Respuestas**
+
+**200** — Actividad modificada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `titulo` | string | No |  | `Visita al Coliseo` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha` | string (date) | No |  | `2027-05-12` |
+| `hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
+| `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
+| `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `latitud` | number \| null | No |  | `null` |
+| `longitud` | number \| null | No |  | `null` |
+| `lugar_externo_id` | string \| null | No |  | `null` |
+| `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+| `actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+
+**400** — No se envía ningún campo, un dato no es válido o los identificadores no son UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La hora de fin necesita una hora de inicio |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o la actividad no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `actividad_no_encontrada` | La actividad no existe en este viaje |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_actividad` | No se ha podido modificar la actividad |
+
+### DELETE /viajes/{viajeId}/actividades/{actividadId}
+
+**Elimina una actividad del itinerario**
+
+Borra la actividad para todos los miembros del viaje. La puede borrar cualquier miembro mientras el viaje
+está activo. Responde 204 sin cuerpo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `actividadId` | path | Sí | string (uuid) | Identificador de la actividad | `8a1b2c3d-0000-4000-8000-000000000020` |
+
+**Respuestas**
+
+**204** — Actividad eliminada
+
+**400** — Los identificadores no son UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje o de la actividad no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o la actividad no es de ese viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `actividad_no_encontrada` | La actividad no existe en este viaje |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_actividad` | No se ha podido eliminar la actividad |
