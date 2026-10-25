@@ -1528,7 +1528,7 @@ Cuerpo (`application/json`):
 | `actividades[].latitud` | number \| null | No |  | `null` |
 | `actividades[].longitud` | number \| null | No |  | `null` |
 | `actividades[].lugar_externo_id` | string \| null | No |  | `null` |
-| `actividades[].categoria` | string \| null | No |  | `null` |
+| `actividades[].categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
 | `actividades[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `actividades[].creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
 | `actividades[].actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
@@ -1586,7 +1586,9 @@ La puede crear cualquier miembro mientras el viaje está activo. La ubicación e
 | `titulo` | string | Sí | Nombre de la actividad | `Visita al Coliseo` |
 | `fecha` | string (date) | Sí | Día de la actividad (AAAA-MM-DD) | `2027-05-12` |
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM). Opcional | `10:00` |
+| `hora_fin` | string \| null | No | Hora de fin (HH:MM). Opcional; necesita hora de inicio y no puede ser anterior a ella | `12:00` |
 | `ubicacion_nombre` | string \| null | No | Lugar o dirección, como texto libre. Opcional | `Piazza del Colosseo` |
+| `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No | Tipo de actividad, para mostrar su icono. Opcional | `cultura` |
 
 **Respuestas**
 
@@ -1608,7 +1610,7 @@ Cuerpo (`application/json`):
 | `latitud` | number \| null | No |  | `null` |
 | `longitud` | number \| null | No |  | `null` |
 | `lugar_externo_id` | string \| null | No |  | `null` |
-| `categoria` | string \| null | No |  | `null` |
+| `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
 | `actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |

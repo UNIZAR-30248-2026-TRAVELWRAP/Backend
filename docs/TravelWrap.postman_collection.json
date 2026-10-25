@@ -3157,6 +3157,149 @@
           ]
         },
         {
+          "name": "Crear una actividad con hora de fin y categoría",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Comida en Trastevere\",\n  \"fecha\": \"2027-05-14\",\n  \"hora_inicio\": \"13:00\",\n  \"hora_fin\": \"14:30\",\n  \"categoria\": \"comida\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Guarda la hora de fin y la categoría', () => {",
+                  "  pm.expect(body.hora_inicio).to.eql('13:00:00');",
+                  "  pm.expect(body.hora_fin).to.eql('14:30:00');",
+                  "  pm.expect(body.categoria).to.eql('comida');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad con hora de fin sin hora de inicio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Cena\",\n  \"fecha\": \"2027-05-12\",\n  \"hora_fin\": \"22:00\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad con hora de fin anterior a la de inicio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Cena\",\n  \"fecha\": \"2027-05-12\",\n  \"hora_inicio\": \"22:00\",\n  \"hora_fin\": \"21:00\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad con categoría que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Cena\",\n  \"fecha\": \"2027-05-12\",\n  \"categoria\": \"playa\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Crear una actividad con identificador de viaje no válido",
           "request": {
             "method": "POST",
@@ -3335,7 +3478,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Sigue mostrando las actividades', () => pm.expect(pm.response.json().actividades.length).to.eql(4));"
+                  "pm.test('Sigue mostrando las actividades', () => pm.expect(pm.response.json().actividades.length).to.eql(5));"
                 ]
               }
             }
