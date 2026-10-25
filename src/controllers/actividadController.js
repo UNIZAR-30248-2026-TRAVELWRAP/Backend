@@ -5,6 +5,7 @@ const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_TITULO = 200;
 const MAX_UBICACION = 200;
+const CATEGORIAS = ['comida', 'cultura', 'transporte', 'alojamiento', 'otro'];
 
 const CHECK_VIOLATION = '23514';
 
@@ -41,12 +42,37 @@ const validarNuevaActividad = (cuerpo) => {
     return { error: 'La hora debe tener el formato HH:MM' };
   }
 
+  const horaFin = textoOpcional(datos.hora_fin);
+  if (horaFin === undefined || (horaFin !== null && !HORA_REGEX.test(horaFin))) {
+    return { error: 'La hora de fin debe tener el formato HH:MM' };
+  }
+  if (horaFin !== null && horaInicio === null) {
+    return { error: 'La hora de fin necesita una hora de inicio' };
+  }
+  if (horaFin !== null && horaFin < horaInicio) {
+    return { error: 'La hora de fin no puede ser anterior a la de inicio' };
+  }
+
+  const categoria = textoOpcional(datos.categoria);
+  if (categoria === undefined || (categoria !== null && !CATEGORIAS.includes(categoria))) {
+    return { error: 'La categoría debe ser comida, cultura, transporte, alojamiento u otro' };
+  }
+
   const ubicacion = textoOpcional(datos.ubicacion_nombre);
   if (ubicacion === undefined || (ubicacion !== null && ubicacion.length > MAX_UBICACION)) {
     return { error: `La ubicación debe ser un texto de ${MAX_UBICACION} caracteres como máximo` };
   }
 
-  return { datos: { titulo, fecha: datos.fecha, hora_inicio: horaInicio, ubicacion_nombre: ubicacion } };
+  return {
+    datos: {
+      titulo,
+      fecha: datos.fecha,
+      hora_inicio: horaInicio,
+      hora_fin: horaFin,
+      ubicacion_nombre: ubicacion,
+      categoria,
+    },
+  };
 };
 
 const ERRORES = {

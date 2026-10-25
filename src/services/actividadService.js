@@ -45,7 +45,9 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
       titulo: datos.titulo,
       fecha: datos.fecha,
       hora_inicio: datos.hora_inicio,
+      hora_fin: datos.hora_fin,
       ubicacion_nombre: datos.ubicacion_nombre,
+      categoria: datos.categoria,
       orden: ultima.data ? ultima.data.orden + 1 : 0,
       creado_por: usuarioId,
     })

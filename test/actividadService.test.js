@@ -46,7 +46,14 @@ const viaje = (estado = 'activo', miembro = true) => ({
     : [],
 });
 
-const DATOS = { titulo: 'Coliseo', fecha: '2027-05-12', hora_inicio: '10:00', ubicacion_nombre: 'Piazza del Colosseo' };
+const DATOS = {
+  titulo: 'Coliseo',
+  fecha: '2027-05-12',
+  hora_inicio: '10:00',
+  hora_fin: '12:00',
+  ubicacion_nombre: 'Piazza del Colosseo',
+  categoria: 'cultura',
+};
 const operacion = (consulta, metodo) => consulta.operaciones.find(([m]) => m === metodo);
 
 describe('actividadService.crear', () => {
@@ -67,7 +74,9 @@ describe('actividadService.crear', () => {
       titulo: 'Coliseo',
       fecha: '2027-05-12',
       hora_inicio: '10:00',
+      hora_fin: '12:00',
       ubicacion_nombre: 'Piazza del Colosseo',
+      categoria: 'cultura',
       orden: 3,
       creado_por: USUARIO,
     });

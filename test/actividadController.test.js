@@ -8,6 +8,8 @@ const USUARIO = { id: 'df77cba6-4be5-4cbc-814b-1e228dd73dcc' };
 const MENSAJE_TITULO = 'El título es obligatorio y tiene un máximo de 200 caracteres';
 const MENSAJE_FECHA = 'La fecha es obligatoria y debe tener el formato AAAA-MM-DD';
 const MENSAJE_HORA = 'La hora debe tener el formato HH:MM';
+const MENSAJE_HORA_FIN = 'La hora de fin debe tener el formato HH:MM';
+const MENSAJE_CATEGORIA = 'La categoría debe ser comida, cultura, transporte, alojamiento u otro';
 const MENSAJE_UBICACION = 'La ubicación debe ser un texto de 200 caracteres como máximo';
 
 const crearRes = () => ({
@@ -39,7 +41,15 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
     const crear = simular(async () => ({ estado: 'ok', actividad: { id: 'a1', titulo: 'Coliseo' } }));
 
     const res = await llamar({
-      body: { titulo: '  Coliseo ', fecha: '2027-05-12', hora_inicio: '10:00', ubicacion_nombre: ' Piazza ', orden: 9 },
+      body: {
+        titulo: '  Coliseo ',
+        fecha: '2027-05-12',
+        hora_inicio: '10:00',
+        hora_fin: '12:30',
+        ubicacion_nombre: ' Piazza ',
+        categoria: 'cultura',
+        orden: 9,
+      },
     });
 
     assert.equal(res.codigo, 201);
@@ -51,11 +61,13 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
       titulo: 'Coliseo',
       fecha: '2027-05-12',
       hora_inicio: '10:00',
+      hora_fin: '12:30',
       ubicacion_nombre: 'Piazza',
+      categoria: 'cultura',
     });
   });
 
-  it('acepta solo título y fecha y deja la hora y la ubicación en null', async () => {
+  it('acepta solo título y fecha y deja lo demás en null', async () => {
     const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
 
     const res = await llamar({ body: { titulo: 'Paseo', fecha: '2027-05-12', hora_inicio: '', ubicacion_nombre: null } });
@@ -65,7 +77,9 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
       titulo: 'Paseo',
       fecha: '2027-05-12',
       hora_inicio: null,
+      hora_fin: null,
       ubicacion_nombre: null,
+      categoria: null,
     });
   });
 
@@ -79,6 +93,20 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
     ['hora mal formada', { titulo: 'Paseo', fecha: '2027-05-12', hora_inicio: '25:00' }, MENSAJE_HORA],
     ['hora como número', { titulo: 'Paseo', fecha: '2027-05-12', hora_inicio: 10 }, MENSAJE_HORA],
     ['ubicación como número', { titulo: 'Paseo', fecha: '2027-05-12', ubicacion_nombre: 5 }, MENSAJE_UBICACION],
+    ['hora de fin mal formada', { titulo: 'Paseo', fecha: '2027-05-12', hora_inicio: '10:00', hora_fin: '9:5' }, MENSAJE_HORA_FIN],
+    ['hora de fin como número', { titulo: 'Paseo', fecha: '2027-05-12', hora_inicio: '10:00', hora_fin: 12 }, MENSAJE_HORA_FIN],
+    [
+      'hora de fin sin hora de inicio',
+      { titulo: 'Paseo', fecha: '2027-05-12', hora_fin: '12:00' },
+      'La hora de fin necesita una hora de inicio',
+    ],
+    [
+      'hora de fin anterior a la de inicio',
+      { titulo: 'Paseo', fecha: '2027-05-12', hora_inicio: '12:00', hora_fin: '11:59' },
+      'La hora de fin no puede ser anterior a la de inicio',
+    ],
+    ['categoría desconocida', { titulo: 'Paseo', fecha: '2027-05-12', categoria: 'playa' }, MENSAJE_CATEGORIA],
+    ['categoría como número', { titulo: 'Paseo', fecha: '2027-05-12', categoria: 3 }, MENSAJE_CATEGORIA],
     [
       'ubicación demasiado larga',
       { titulo: 'Paseo', fecha: '2027-05-12', ubicacion_nombre: 'a'.repeat(201) },
@@ -235,5 +263,35 @@ describe('GET /viajes/:viajeId/actividades (listar)', () => {
 
     assert.equal(res.codigo, 500);
     assert.equal(res.cuerpo.error.codigo, 'error_interno');
+  });
+});
+
+describe('POST /viajes/:viajeId/actividades · hora de fin y categoría', () => {
+  it('acepta una hora de fin igual a la de inicio', async () => {
+    const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
+
+    const res = await llamar({ body: { titulo: 'Foto', fecha: '2027-05-12', hora_inicio: '10:00', hora_fin: '10:00' } });
+
+    assert.equal(res.codigo, 201);
+    assert.equal(crear.mock.calls[0].arguments[3].hora_fin, '10:00');
+  });
+
+  for (const categoria of ['comida', 'cultura', 'transporte', 'alojamiento', 'otro']) {
+    it(`acepta la categoría ${categoria}`, async () => {
+      const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
+
+      const res = await llamar({ body: { titulo: 'Paseo', fecha: '2027-05-12', categoria } });
+
+      assert.equal(res.codigo, 201);
+      assert.equal(crear.mock.calls[0].arguments[3].categoria, categoria);
+    });
+  }
+
+  it('trata una categoría vacía como sin categoría', async () => {
+    const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
+
+    await llamar({ body: { titulo: 'Paseo', fecha: '2027-05-12', categoria: '  ' } });
+
+    assert.equal(crear.mock.calls[0].arguments[3].categoria, null);
   });
 });
