@@ -5,5 +5,7 @@ const { requiereSesion } = require('../middleware/authMiddleware');
 
 router.get('/', requiereSesion, actividadController.listar);
 router.post('/', requiereSesion, actividadController.crear);
+router.patch('/:actividadId', requiereSesion, actividadController.editar);
+router.delete('/:actividadId', requiereSesion, actividadController.eliminar);
 
 module.exports = router;
