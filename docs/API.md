@@ -36,6 +36,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | PUT | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#put-viajesviajeidvotacionesvotacionidvoto) | Vota o cambia el voto | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#delete-viajesviajeidvotacionesvotacionidvoto) | Retira el voto | Token de sesión |
 | POST | [`/viajes/{viajeId}/votaciones/{votacionId}/cerrar`](#post-viajesviajeidvotacionesvotacionidcerrar) | Cierra una votación | Token de sesión |
+| GET | [`/viajes/{viajeId}/actividades`](#get-viajesviajeidactividades) | Lista las actividades del itinerario de un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 
 ## General
@@ -1488,6 +1489,80 @@ Cuerpo (`application/json`):
 | `error_votacion` | No se ha podido cerrar la votación |
 
 ## Actividades
+
+### GET /viajes/{viajeId}/actividades
+
+**Lista las actividades del itinerario de un viaje**
+
+Devuelve las actividades del viaje ordenadas por día, después por hora de inicio (las que no tienen hora van al
+final de su día) y por último por su posición dentro del día (`orden`). Con `fecha` solo devuelve las de ese día.
+Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `fecha` | query | No | string (date) | Solo las actividades de este día (AAAA-MM-DD) | `2027-05-12` |
+
+**Respuestas**
+
+**200** — Actividades del viaje (lista vacía si no tiene ninguna)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `actividades` | array<Actividad> | No |  |  |
+| `actividades[].id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
+| `actividades[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `actividades[].titulo` | string | No |  | `Visita al Coliseo` |
+| `actividades[].descripcion` | string \| null | No |  | `null` |
+| `actividades[].fecha` | string (date) | No |  | `2027-05-12` |
+| `actividades[].hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
+| `actividades[].hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
+| `actividades[].orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `actividades[].ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `actividades[].latitud` | number \| null | No |  | `null` |
+| `actividades[].longitud` | number \| null | No |  | `null` |
+| `actividades[].lugar_externo_id` | string \| null | No |  | `null` |
+| `actividades[].categoria` | string \| null | No |  | `null` |
+| `actividades[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `actividades[].creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+| `actividades[].actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID o la fecha no es válida
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha debe tener el formato AAAA-MM-DD |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_actividad` | No se han podido obtener las actividades |
 
 ### POST /viajes/{viajeId}/actividades
 

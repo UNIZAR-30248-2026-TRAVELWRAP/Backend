@@ -1427,6 +1427,67 @@ paths:
                   mensaje: No se ha podido cerrar la votación
 
   /viajes/{viajeId}/actividades:
+    get:
+      tags:
+        - Actividades
+      summary: Lista las actividades del itinerario de un viaje
+      description: |
+        Devuelve las actividades del viaje ordenadas por día, después por hora de inicio (las que no tienen hora van al
+        final de su día) y por último por su posición dentro del día (`orden`). Con `fecha` solo devuelve las de ese día.
+        Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - name: fecha
+          in: query
+          required: false
+          description: Solo las actividades de este día (AAAA-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: '2027-05-12'
+      responses:
+        '200':
+          description: Actividades del viaje (lista vacía si no tiene ninguna)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaActividades'
+        '400':
+          description: El identificador del viaje no es un UUID o la fecha no es válida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: La fecha debe tener el formato AAAA-MM-DD
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_actividad
+                  mensaje: No se han podido obtener las actividades
     post:
       tags:
         - Actividades
@@ -2186,6 +2247,14 @@ components:
           type: string
           format: date-time
           example: '2026-10-24T10:00:00Z'
+
+    ListaActividades:
+      type: object
+      properties:
+        actividades:
+          type: array
+          items:
+            $ref: '#/components/schemas/Actividad'
 
     Error:
       type: object
