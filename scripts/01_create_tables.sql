@@ -122,6 +122,41 @@ ALTER TABLE public.votaciones DROP CONSTRAINT IF EXISTS votaciones_opcion_ganado
 ALTER TABLE public.votaciones ADD CONSTRAINT votaciones_opcion_ganadora_fk
   FOREIGN KEY (opcion_ganadora_id) REFERENCES public.opciones_votacion (id) ON DELETE SET NULL;
 
+CREATE TABLE IF NOT EXISTS public.actividades (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  titulo text NOT NULL CHECK (char_length(btrim(titulo)) BETWEEN 1 AND 200),
+  descripcion text,
+  fecha date NOT NULL,
+  hora_inicio time,
+  hora_fin time,
+  orden int NOT NULL DEFAULT 0,
+  ubicacion_nombre text,
+  latitud numeric(9,6) CHECK (latitud BETWEEN -90 AND 90),
+  longitud numeric(9,6) CHECK (longitud BETWEEN -180 AND 180),
+  lugar_externo_id text,
+  categoria text,
+  creado_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  actualizado_en timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT actividades_horas_validas CHECK (hora_fin IS NULL OR hora_inicio IS NULL OR hora_fin >= hora_inicio)
+);
+
+CREATE OR REPLACE FUNCTION public.marcar_actualizado_en()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.actualizado_en := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS actividades_actualizado_en ON public.actividades;
+CREATE TRIGGER actividades_actualizado_en
+  BEFORE UPDATE ON public.actividades
+  FOR EACH ROW EXECUTE FUNCTION public.marcar_actualizado_en();
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -130,3 +165,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS votaciones_destino_unica_idx ON public.votacio
 -- No se repite una opción dentro de la misma votación (sin distinguir mayúsculas ni espacios)
 CREATE UNIQUE INDEX IF NOT EXISTS opciones_votacion_texto_unico_idx ON public.opciones_votacion (votacion_id, lower(btrim(texto)));
 CREATE INDEX IF NOT EXISTS votos_opcion_idx ON public.votos (opcion_id);
+CREATE INDEX IF NOT EXISTS actividades_viaje_fecha_idx ON public.actividades (viaje_id, fecha);

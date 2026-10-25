@@ -65,6 +65,7 @@ ALTER TABLE public.miembros_viaje ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.votaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.opciones_votacion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.votos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -166,6 +167,23 @@ CREATE POLICY votos_update ON public.votos FOR UPDATE TO authenticated
 DROP POLICY IF EXISTS votos_delete ON public.votos;
 CREATE POLICY votos_delete ON public.votos FOR DELETE TO authenticated
   USING (usuario_id = auth.uid() AND public.puede_votar(votacion_id));
+
+DROP POLICY IF EXISTS actividades_select ON public.actividades;
+CREATE POLICY actividades_select ON public.actividades FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+DROP POLICY IF EXISTS actividades_insert ON public.actividades;
+CREATE POLICY actividades_insert ON public.actividades FOR INSERT TO authenticated
+  WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS actividades_update ON public.actividades;
+CREATE POLICY actividades_update ON public.actividades FOR UPDATE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS actividades_delete ON public.actividades;
+CREATE POLICY actividades_delete ON public.actividades FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)

@@ -14,6 +14,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [votaciones](#votaciones) | 10 | Activada | 3 |
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
 | [votos](#votos) | 5 | Activada | 4 |
+| [actividades](#actividades) | 16 | Activada | 4 |
 
 ## Relaciones
 
@@ -30,6 +31,8 @@ erDiagram
     votaciones ||--o{ votos : "votacion_id"
     opciones_votacion ||--o{ votos : "opcion_id"
     perfiles ||--o{ votos : "usuario_id"
+    viajes ||--o{ actividades : "viaje_id"
+    perfiles |o--o{ actividades : "creado_por"
 ```
 
 ## Tipos enumerados
@@ -169,12 +172,44 @@ Voto de un usuario en una votación. Cambiar el voto actualiza la fila; retirarl
 
 - `votos_opcion_idx` sobre (opcion_id)
 
+### actividades
+
+**Seguridad por filas (RLS):** activada, 4 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  |  |
+| `titulo` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(titulo)) BETWEEN 1 AND 200` |
+| `descripcion` | `text` | No |  |  |  |
+| `fecha` | `date` | Sí |  |  |  |
+| `hora_inicio` | `time` | No |  |  |  |
+| `hora_fin` | `time` | No |  |  |  |
+| `orden` | `int` | Sí |  | `0` |  |
+| `ubicacion_nombre` | `text` | No |  |  |  |
+| `latitud` | `numeric(9,6)` | No |  |  | Debe cumplir: `latitud BETWEEN -90 AND 90` |
+| `longitud` | `numeric(9,6)` | No |  |  | Debe cumplir: `longitud BETWEEN -180 AND 180` |
+| `lugar_externo_id` | `text` | No |  |  |  |
+| `categoria` | `text` | No |  |  |  |
+| `creado_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+| `actualizado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Restricciones**
+
+- `actividades_horas_validas`: `CHECK (hora_fin IS NULL OR hora_inicio IS NULL OR hora_fin >= hora_inicio)`
+
+**Índices**
+
+- `actividades_viaje_fecha_idx` sobre (viaje_id, fecha)
+
 ## Seguridad (RLS)
 
 ### Funciones
 
 | Función | Parámetros | Devuelve | Se ejecuta con permisos de | Ejecutable por | Descripción |
 | --- | --- | --- | --- | --- | --- |
+| `marcar_actualizado_en` |  | `trigger` | quien la llama |  |  |
 | `es_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_creador` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_editable` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje solo admite contenido nuevo mientras está activo: al cerrarlo o archivarlo queda de solo lectura. Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura |
@@ -235,3 +270,12 @@ Voto de un usuario en una votación. Cambiar el voto actualiza la fila; retirarl
 | `votos_insert` | INSERT | authenticated |  | `usuario_id = auth.uid() AND public.puede_votar(votacion_id)` |
 | `votos_update` | UPDATE | authenticated | `usuario_id = auth.uid() AND public.puede_votar(votacion_id)` | `usuario_id = auth.uid() AND public.puede_votar(votacion_id)` |
 | `votos_delete` | DELETE | authenticated | `usuario_id = auth.uid() AND public.puede_votar(votacion_id)` |  |
+
+#### actividades
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `actividades_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `actividades_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `actividades_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `actividades_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
