@@ -36,6 +36,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | PUT | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#put-viajesviajeidvotacionesvotacionidvoto) | Vota o cambia el voto | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#delete-viajesviajeidvotacionesvotacionidvoto) | Retira el voto | Token de sesión |
 | POST | [`/viajes/{viajeId}/votaciones/{votacionId}/cerrar`](#post-viajesviajeidvotacionesvotacionidcerrar) | Cierra una votación | Token de sesión |
+| POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 
 ## General
 
@@ -1485,3 +1486,91 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_votacion` | No se ha podido cerrar la votación |
+
+## Actividades
+
+### POST /viajes/{viajeId}/actividades
+
+**Crea una actividad del itinerario**
+
+Añade una actividad al itinerario del viaje, en el día indicado y al final de las que ya tenga ese día.
+La puede crear cualquier miembro mientras el viaje está activo. La ubicación es un texto libre.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `titulo` | string | Sí | Nombre de la actividad | `Visita al Coliseo` |
+| `fecha` | string (date) | Sí | Día de la actividad (AAAA-MM-DD) | `2027-05-12` |
+| `hora_inicio` | string \| null | No | Hora de inicio (HH:MM). Opcional | `10:00` |
+| `ubicacion_nombre` | string \| null | No | Lugar o dirección, como texto libre. Opcional | `Piazza del Colosseo` |
+
+**Respuestas**
+
+**201** — Actividad creada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `titulo` | string | No |  | `Visita al Coliseo` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha` | string (date) | No |  | `2027-05-12` |
+| `hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
+| `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
+| `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `latitud` | number \| null | No |  | `null` |
+| `longitud` | number \| null | No |  | `null` |
+| `lugar_externo_id` | string \| null | No |  | `null` |
+| `categoria` | string \| null | No |  | `null` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+| `actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+
+**400** — Faltan datos, no son válidos o el identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha es obligatoria y debe tener el formato AAAA-MM-DD |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_actividad` | No se ha podido crear la actividad |

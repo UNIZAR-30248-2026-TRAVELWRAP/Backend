@@ -1426,6 +1426,76 @@ paths:
                   codigo: error_votacion
                   mensaje: No se ha podido cerrar la votación
 
+  /viajes/{viajeId}/actividades:
+    post:
+      tags:
+        - Actividades
+      summary: Crea una actividad del itinerario
+      description: |
+        Añade una actividad al itinerario del viaje, en el día indicado y al final de las que ya tenga ese día.
+        La puede crear cualquier miembro mientras el viaje está activo. La ubicación es un texto libre.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaActividadRequest'
+      responses:
+        '201':
+          description: Actividad creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Actividad'
+        '400':
+          description: Faltan datos, no son válidos o el identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: La fecha es obligatoria y debe tener el formato AAAA-MM-DD
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está cerrado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_actividad
+                  mensaje: No se ha podido crear la actividad
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2017,6 +2087,105 @@ components:
           nullable: true
           description: Destino guardado en el viaje (solo al cerrar la votación de destino)
           example: null
+
+    NuevaActividadRequest:
+      type: object
+      required:
+        - titulo
+        - fecha
+      properties:
+        titulo:
+          type: string
+          maxLength: 200
+          description: Nombre de la actividad
+          example: Visita al Coliseo
+        fecha:
+          type: string
+          format: date
+          description: Día de la actividad (AAAA-MM-DD)
+          example: '2027-05-12'
+        hora_inicio:
+          type: string
+          nullable: true
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: Hora de inicio (HH:MM). Opcional
+          example: '10:00'
+        ubicacion_nombre:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: Lugar o dirección, como texto libre. Opcional
+          example: Piazza del Colosseo
+
+    Actividad:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 8a1b2c3d-0000-4000-8000-000000000020
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        titulo:
+          type: string
+          example: Visita al Coliseo
+        descripcion:
+          type: string
+          nullable: true
+          example: null
+        fecha:
+          type: string
+          format: date
+          example: '2027-05-12'
+        hora_inicio:
+          type: string
+          nullable: true
+          description: Hora de inicio (HH:MM:SS)
+          example: '10:00:00'
+        hora_fin:
+          type: string
+          nullable: true
+          description: Hora de fin (HH:MM:SS)
+          example: null
+        orden:
+          type: integer
+          description: Posición dentro del día; la nueva actividad va al final
+          example: 0
+        ubicacion_nombre:
+          type: string
+          nullable: true
+          example: Piazza del Colosseo
+        latitud:
+          type: number
+          nullable: true
+          example: null
+        longitud:
+          type: number
+          nullable: true
+          example: null
+        lugar_externo_id:
+          type: string
+          nullable: true
+          example: null
+        categoria:
+          type: string
+          nullable: true
+          example: null
+        creado_por:
+          type: string
+          format: uuid
+          nullable: true
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-10-24T10:00:00Z'
+        actualizado_en:
+          type: string
+          format: date-time
+          example: '2026-10-24T10:00:00Z'
 
     Error:
       type: object
