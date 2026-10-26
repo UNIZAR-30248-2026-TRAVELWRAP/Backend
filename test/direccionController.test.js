@@ -31,7 +31,7 @@ afterEach(() => mock.restoreAll());
 
 describe('GET /direcciones (buscar)', () => {
   it('devuelve las direcciones encontradas y busca con el texto limpio y el usuario', async () => {
-    const direcciones = [{ nombre: 'Colosseo, Roma', latitud: 41.89, longitud: 12.49, lugar_externo_id: 'way/1' }];
+    const direcciones = [{ nombre: 'Colosseo, Roma', titulo: 'Colosseo', detalle: 'Roma, Italia', latitud: 41.89, longitud: 12.49, lugar_externo_id: 'way/1' }];
     const buscar = simular(async () => ({ estado: 'ok', direcciones }));
 
     const res = await llamar({ q: '  Colosseo  ' });

@@ -16,16 +16,48 @@ const acortar = (texto) => (texto.length > MAX_NOMBRE ? `${texto.slice(0, MAX_NO
 
 const redondear = (numero) => Math.round(numero * 1e6) / 1e6;
 
+const limpiar = (valor) => (typeof valor === 'string' ? valor.trim() : '');
+
+const LOCALIDADES = ['city', 'town', 'village', 'municipality', 'hamlet', 'county'];
+
+const describir = (lugar, completo) => {
+  const direccion = lugar.address && typeof lugar.address === 'object' ? lugar.address : null;
+  const partes = completo.split(',').map((parte) => parte.trim()).filter(Boolean);
+
+  if (!direccion) {
+    return {
+      titulo: partes[0] ?? completo,
+      detalle: partes.slice(1).slice(-2).join(', ') || null,
+      nombre: completo,
+    };
+  }
+
+  const calle = [limpiar(direccion.road), limpiar(direccion.house_number)].filter(Boolean).join(' ');
+  const titulo = limpiar(lugar.name) || calle || partes[0] || completo;
+  const localidad = LOCALIDADES.map((clave) => limpiar(direccion[clave])).find(Boolean) ?? '';
+  const otraLocalidad = localidad && localidad !== titulo ? localidad : '';
+  const zona = otraLocalidad || limpiar(direccion.state);
+
+  return {
+    titulo,
+    detalle: [zona, limpiar(direccion.country)].filter((parte) => parte && parte !== titulo).join(', ') || null,
+    nombre: [titulo, otraLocalidad].filter(Boolean).join(', '),
+  };
+};
+
 const aDireccion = (lugar) => {
   const latitud = Number(lugar?.lat);
   const longitud = Number(lugar?.lon);
-  const nombre = typeof lugar?.display_name === 'string' ? lugar.display_name.trim() : '';
+  const completo = typeof lugar?.display_name === 'string' ? lugar.display_name.trim() : '';
   const coordenadasValidas =
     Number.isFinite(latitud) && Number.isFinite(longitud) && Math.abs(latitud) <= 90 && Math.abs(longitud) <= 180;
-  if (nombre === '' || !coordenadasValidas) return null;
+  if (completo === '' || !coordenadasValidas) return null;
 
+  const { titulo, detalle, nombre } = describir(lugar, completo);
   return {
     nombre: acortar(nombre),
+    titulo: acortar(titulo),
+    detalle: detalle === null ? null : acortar(detalle),
     latitud: redondear(latitud),
     longitud: redondear(longitud),
     lugar_externo_id: lugar.osm_type && lugar.osm_id ? `${lugar.osm_type}/${lugar.osm_id}` : null,
@@ -79,7 +111,7 @@ const crearGeocodificador = ({
       q: consulta,
       format: 'jsonv2',
       limit: String(MAX_RESULTADOS),
-      addressdetails: '0',
+      addressdetails: '1',
     });
     const controlador = new AbortController();
     const temporizador = setTimeout(() => controlador.abort(), tiempoMaximoMs);

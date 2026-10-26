@@ -1497,7 +1497,7 @@ Cuerpo (`application/json`):
 
 **Busca una dirección y devuelve sus coordenadas**
 
-Busca el texto en OpenStreetMap (Nominatim) y devuelve hasta 5 lugares con su nombre, coordenadas e identificador,
+Busca el texto en OpenStreetMap (Nominatim) y devuelve hasta 5 lugares con su nombre (corto, título y detalle), coordenadas e identificador,
 para que el usuario elija uno al añadir o editar una actividad. Hace falta sesión.
 La búsqueda solo se lanza cuando el usuario la pide (no al teclear). Para respetar la política de uso de
 OpenStreetMap las llamadas salen de una en una, a razón de una por segundo; un mismo usuario no puede lanzar
@@ -1520,7 +1520,9 @@ Cuerpo (`application/json`):
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `direcciones` | array<Direccion> | No |  |  |
-| `direcciones[].nombre` | string | No | Nombre completo del lugar (se acorta con … si pasa de 200 caracteres) | `Colosseo, Piazza del Colosseo, Rione X Campitelli, Roma, Lazio, 00184, Italia` |
+| `direcciones[].nombre` | string | No | Nombre corto para guardar como ubicación de la actividad (lugar y localidad). Se acorta con … si pasa de 200 caracteres | `Colosseo, Roma` |
+| `direcciones[].titulo` | string | No | Nombre del lugar, o calle y número si no tiene nombre propio. Es la línea principal de cada resultado | `Colosseo` |
+| `direcciones[].detalle` | string \| null | No | Localidad (o región) y país, para distinguir resultados parecidos. Es la línea secundaria de cada resultado | `Roma, Italia` |
 | `direcciones[].latitud` | number | No | Latitud con 6 decimales | `41.890214` |
 | `direcciones[].longitud` | number | No | Longitud con 6 decimales | `12.492231` |
 | `direcciones[].lugar_externo_id` | string \| null | No | Identificador en OpenStreetMap (tipo/número); null si no lo trae | `way/24146600` |

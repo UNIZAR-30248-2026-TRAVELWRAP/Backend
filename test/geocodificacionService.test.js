@@ -10,7 +10,17 @@ const COLISEO = {
   osm_id: 24146600,
   lat: '41.8902142',
   lon: '12.4922309',
+  name: 'Colosseo',
   display_name: 'Colosseo, Piazza del Colosseo, Municipio I, Roma, Lazio, 00184, Italia',
+  address: {
+    tourism: 'Colosseo',
+    road: 'Piazza del Colosseo',
+    suburb: 'Municipio I',
+    city: 'Roma',
+    state: 'Lazio',
+    postcode: '00184',
+    country: 'Italia',
+  },
 };
 
 const respuestaDe = (cuerpo, estado = 200) => ({
@@ -54,6 +64,7 @@ describe('geocodificacionService · petición a Nominatim', () => {
     assert.equal(url.searchParams.get('q'), 'colosseo');
     assert.equal(url.searchParams.get('format'), 'jsonv2');
     assert.equal(url.searchParams.get('limit'), '5');
+    assert.equal(url.searchParams.get('addressdetails'), '1');
     assert.equal(cabeceras['User-Agent'], 'TravelWrap/pruebas (equipo@travelwrap.app)');
     assert.equal(cabeceras['Accept-Language'], 'es');
   });
@@ -76,7 +87,7 @@ describe('geocodificacionService · petición a Nominatim', () => {
 });
 
 describe('geocodificacionService · resultados', () => {
-  it('devuelve nombre, coordenadas con seis decimales e identificador del lugar', async () => {
+  it('devuelve nombre corto, título, detalle, coordenadas con seis decimales e identificador del lugar', async () => {
     const { geocodificador } = montar();
 
     const resultado = await geocodificador.buscar('Colosseo', 'u1');
@@ -85,7 +96,9 @@ describe('geocodificacionService · resultados', () => {
       estado: 'ok',
       direcciones: [
         {
-          nombre: COLISEO.display_name,
+          nombre: 'Colosseo, Roma',
+          titulo: 'Colosseo',
+          detalle: 'Roma, Italia',
           latitud: 41.890214,
           longitud: 12.492231,
           lugar_externo_id: 'way/24146600',
@@ -100,6 +113,71 @@ describe('geocodificacionService · resultados', () => {
     const resultado = await geocodificador.buscar('Sitio', 'u1');
 
     assert.equal(resultado.direcciones[0].lugar_externo_id, null);
+  });
+
+  it('si el lugar no tiene nombre propio usa la calle y el número como título', async () => {
+    const casa = {
+      ...COLISEO,
+      name: '',
+      display_name: '10, Via del Corso, Municipio I, Roma, Lazio, 00186, Italia',
+      address: { house_number: '10', road: 'Via del Corso', city: 'Roma', state: 'Lazio', country: 'Italia' },
+    };
+    const { geocodificador } = montar([respuestaDe([casa])]);
+
+    const { direcciones } = await geocodificador.buscar('via del corso 10', 'u1');
+
+    assert.equal(direcciones[0].titulo, 'Via del Corso 10');
+    assert.equal(direcciones[0].nombre, 'Via del Corso 10, Roma');
+    assert.equal(direcciones[0].detalle, 'Roma, Italia');
+  });
+
+  it('usa el pueblo o el municipio si no hay ciudad', async () => {
+    const pueblo = { ...COLISEO, address: { ...COLISEO.address, city: undefined, village: 'Albarracín' } };
+    const { geocodificador } = montar([respuestaDe([pueblo])]);
+
+    const { direcciones } = await geocodificador.buscar('albarracin', 'u1');
+
+    assert.equal(direcciones[0].nombre, 'Colosseo, Albarracín');
+    assert.equal(direcciones[0].detalle, 'Albarracín, Italia');
+  });
+
+  it('si el lugar es la propia ciudad no la repite y el detalle muestra la región y el país', async () => {
+    const roma = {
+      ...COLISEO,
+      name: 'Roma',
+      display_name: 'Roma, Lazio, Italia',
+      address: { city: 'Roma', state: 'Lazio', country: 'Italia' },
+    };
+    const { geocodificador } = montar([respuestaDe([roma])]);
+
+    const { direcciones } = await geocodificador.buscar('roma', 'u1');
+
+    assert.equal(direcciones[0].nombre, 'Roma');
+    assert.equal(direcciones[0].titulo, 'Roma');
+    assert.equal(direcciones[0].detalle, 'Lazio, Italia');
+  });
+
+  it('sin datos de dirección parte el nombre completo en título y detalle', async () => {
+    const { geocodificador } = montar([
+      respuestaDe([{ ...COLISEO, name: undefined, address: undefined }]),
+    ]);
+
+    const { direcciones } = await geocodificador.buscar('colosseo', 'u1');
+
+    assert.equal(direcciones[0].titulo, 'Colosseo');
+    assert.equal(direcciones[0].detalle, '00184, Italia');
+    assert.equal(direcciones[0].nombre, COLISEO.display_name);
+  });
+
+  it('el detalle es null si no hay nada más que decir', async () => {
+    const { geocodificador } = montar([respuestaDe([{ lat: '1', lon: '2', display_name: 'Sitio' }])]);
+
+    const { direcciones } = await geocodificador.buscar('sitio', 'u1');
+
+    assert.deepEqual(
+      [direcciones[0].titulo, direcciones[0].detalle, direcciones[0].nombre],
+      ['Sitio', null, 'Sitio'],
+    );
   });
 
   it('descarta los lugares sin nombre o con coordenadas que no son válidas', async () => {
@@ -121,12 +199,13 @@ describe('geocodificacionService · resultados', () => {
 
   it('acorta los nombres de más de 200 caracteres para que quepan al guardarlos', async () => {
     const largo = `${'a'.repeat(250)}`;
-    const { geocodificador } = montar([respuestaDe([{ ...COLISEO, display_name: largo }])]);
+    const { geocodificador } = montar([respuestaDe([{ ...COLISEO, name: largo, display_name: largo }])]);
 
     const resultado = await geocodificador.buscar('aaa', 'u1');
 
     assert.equal(resultado.direcciones[0].nombre.length, 200);
     assert.ok(resultado.direcciones[0].nombre.endsWith('…'));
+    assert.equal(resultado.direcciones[0].titulo.length, 200);
   });
 
   it('devuelve una lista vacía si no hay coincidencias', async () => {
