@@ -88,6 +88,14 @@
     {
       "key": "actividadIdConservada",
       "value": ""
+    },
+    {
+      "key": "actividadIdCoordenadas",
+      "value": ""
+    },
+    {
+      "key": "actividadIdSinCoordenadas",
+      "value": ""
     }
   ],
   "item": [
@@ -3993,6 +4001,469 @@
           ]
         },
         {
+          "name": "Crear una actividad con las coordenadas del lugar elegido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Cena en el Trastevere\",\n  \"fecha\": \"2027-05-13\",\n  \"ubicacion_nombre\": \"Colosseo, Roma\",\n  \"latitud\": 41.8902142,\n  \"longitud\": 12.4922309,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Guarda las coordenadas redondeadas a seis decimales y el identificador del lugar', () => {",
+                  "  pm.expect(body.latitud).to.eql(41.890214);",
+                  "  pm.expect(body.longitud).to.eql(12.492231);",
+                  "  pm.expect(body.lugar_externo_id).to.eql('way/24146600');",
+                  "});",
+                  "pm.collectionVariables.set('actividadIdCoordenadas', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad sin coordenadas las deja en null",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Sin coordenadas\",\n  \"fecha\": \"2027-05-13\",\n  \"latitud\": null,\n  \"longitud\": null,\n  \"lugar_externo_id\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Latitud, longitud e identificador son null', () => {",
+                  "  pm.expect(body.latitud).to.eql(null);",
+                  "  pm.expect(body.longitud).to.eql(null);",
+                  "  pm.expect(body.lugar_externo_id).to.eql(null);",
+                  "});",
+                  "pm.collectionVariables.set('actividadIdSinCoordenadas', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad solo con la latitud",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Solo latitud\",\n  \"fecha\": \"2027-05-13\",\n  \"latitud\": 41.89\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La latitud y la longitud se envían juntas o ninguna\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad con la latitud fuera de rango",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Latitud imposible\",\n  \"fecha\": \"2027-05-13\",\n  \"latitud\": 95,\n  \"longitud\": 12\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La latitud debe ser un número entre -90 y 90\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad con la longitud como texto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Longitud en texto\",\n  \"fecha\": \"2027-05-13\",\n  \"latitud\": 41,\n  \"longitud\": \"12.49\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La longitud debe ser un número entre -180 y 180\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una actividad con un identificador de lugar demasiado largo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Identificador largo\",\n  \"fecha\": \"2027-05-13\",\n  \"lugar_externo_id\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"El identificador del lugar debe ser un texto de 100 caracteres como máximo\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modificar el lugar de una actividad con sus coordenadas",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdCoordenadas}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ubicacion_nombre\": \"Via del Corso, Roma\",\n  \"latitud\": 41.9,\n  \"longitud\": 12.48,\n  \"lugar_externo_id\": \"node/5\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Cambia el lugar y sus coordenadas', () => {",
+                  "  pm.expect(body.ubicacion_nombre).to.eql('Via del Corso, Roma');",
+                  "  pm.expect(body.latitud).to.eql(41.9);",
+                  "  pm.expect(body.longitud).to.eql(12.48);",
+                  "  pm.expect(body.lugar_externo_id).to.eql('node/5');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modificar una actividad enviando solo la longitud",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdCoordenadas}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"longitud\": 12.5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La latitud y la longitud se envían juntas o ninguna\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modificar una actividad con una coordenada null y la otra con valor",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdCoordenadas}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitud\": null,\n  \"longitud\": 12.49\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La latitud y la longitud se envían juntas o ninguna\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Modificar una actividad con la longitud fuera de rango",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdCoordenadas}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitud\": 41,\n  \"longitud\": -181\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La longitud debe ser un número entre -180 y 180\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar las coordenadas de una actividad",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdCoordenadas}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitud\": null,\n  \"longitud\": null,\n  \"lugar_externo_id\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Quita las coordenadas y conserva el nombre del lugar', () => {",
+                  "  pm.expect(body.latitud).to.eql(null);",
+                  "  pm.expect(body.longitud).to.eql(null);",
+                  "  pm.expect(body.lugar_externo_id).to.eql(null);",
+                  "  pm.expect(body.ubicacion_nombre).to.eql('Via del Corso, Roma');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar la actividad de las pruebas de coordenadas",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdCoordenadas}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar la actividad sin coordenadas de las pruebas",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{actividadIdSinCoordenadas}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Archivar el viaje",
           "request": {
             "method": "POST",
@@ -4133,6 +4604,118 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Sigue mostrando las actividades', () => pm.expect(pm.response.json().actividades.length).to.eql(6));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Direcciones",
+      "item": [
+        {
+          "name": "Buscar una dirección sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/direcciones?q=Colosseo"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar una dirección sin texto",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/direcciones"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La búsqueda debe tener entre 3 y 200 caracteres\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar una dirección con menos de tres caracteres",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/direcciones?q=ab"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La búsqueda debe tener entre 3 y 200 caracteres\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar una dirección con más de doscientos caracteres",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/direcciones?q=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos y mensaje claro', () => {",
+                  "  const error = pm.response.json().error;",
+                  "  pm.expect(error.codigo).to.eql('datos_invalidos');",
+                  "  pm.expect(error.mensaje).to.eql(\"La búsqueda debe tener entre 3 y 200 caracteres\");",
+                  "});"
                 ]
               }
             }

@@ -36,6 +36,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | PUT | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#put-viajesviajeidvotacionesvotacionidvoto) | Vota o cambia el voto | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/votaciones/{votacionId}/voto`](#delete-viajesviajeidvotacionesvotacionidvoto) | Retira el voto | Token de sesión |
 | POST | [`/viajes/{viajeId}/votaciones/{votacionId}/cerrar`](#post-viajesviajeidvotacionesvotacionidcerrar) | Cierra una votación | Token de sesión |
+| GET | [`/direcciones`](#get-direcciones) | Busca una dirección y devuelve sus coordenadas | Token de sesión |
 | GET | [`/viajes/{viajeId}/actividades`](#get-viajesviajeidactividades) | Lista las actividades del itinerario de un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
@@ -1490,6 +1491,72 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `error_votacion` | No se ha podido cerrar la votación |
 
+## Direcciones
+
+### GET /direcciones
+
+**Busca una dirección y devuelve sus coordenadas**
+
+Busca el texto en OpenStreetMap (Nominatim) y devuelve hasta 5 lugares con su nombre, coordenadas e identificador,
+para que el usuario elija uno al añadir o editar una actividad. Hace falta sesión.
+La búsqueda solo se lanza cuando el usuario la pide (no al teclear). Para respetar la política de uso de
+OpenStreetMap las llamadas salen de una en una, a razón de una por segundo; un mismo usuario no puede lanzar
+dos búsquedas en menos de un segundo y las búsquedas repetidas se sirven de una caché de 10 minutos.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `q` | query | Sí | string | Texto a buscar, de 3 a 200 caracteres | `Colosseo, Roma` |
+
+**Respuestas**
+
+**200** — Lugares encontrados (lista vacía si no hay resultados)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `direcciones` | array<Direccion> | No |  |  |
+| `direcciones[].nombre` | string | No | Nombre completo del lugar (se acorta con … si pasa de 200 caracteres) | `Colosseo, Piazza del Colosseo, Rione X Campitelli, Roma, Lazio, 00184, Italia` |
+| `direcciones[].latitud` | number | No | Latitud con 6 decimales | `41.890214` |
+| `direcciones[].longitud` | number | No | Longitud con 6 decimales | `12.492231` |
+| `direcciones[].lugar_externo_id` | string \| null | No | Identificador en OpenStreetMap (tipo/número); null si no lo trae | `way/24146600` |
+
+**400** — Falta el texto de búsqueda o no tiene entre 3 y 200 caracteres
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La búsqueda debe tener entre 3 y 200 caracteres |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**429** — El usuario busca demasiado rápido o hay demasiadas búsquedas en cola
+
+| Código de error | Mensaje |
+| --- | --- |
+| `demasiadas_busquedas` | Espera un segundo entre una búsqueda y otra |
+| `servicio_ocupado` | Hay muchas búsquedas en este momento. Inténtalo de nuevo en unos segundos |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — OpenStreetMap no responde, tarda demasiado o devuelve un error
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_geocodificacion` | No se ha podido buscar la dirección |
+
 ## Actividades
 
 ### GET /viajes/{viajeId}/actividades
@@ -1527,9 +1594,9 @@ Cuerpo (`application/json`):
 | `actividades[].hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
 | `actividades[].orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
 | `actividades[].ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
-| `actividades[].latitud` | number \| null | No |  | `null` |
-| `actividades[].longitud` | number \| null | No |  | `null` |
-| `actividades[].lugar_externo_id` | string \| null | No |  | `null` |
+| `actividades[].latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
+| `actividades[].longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
+| `actividades[].lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap | `way/24146600` |
 | `actividades[].categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
 | `actividades[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `actividades[].creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
@@ -1571,7 +1638,9 @@ Cuerpo (`application/json`):
 **Crea una actividad del itinerario**
 
 Añade una actividad al itinerario del viaje, en el día indicado y al final de las que ya tenga ese día.
-La puede crear cualquier miembro mientras el viaje está activo. La ubicación es un texto libre.
+La puede crear cualquier miembro mientras el viaje está activo. La ubicación es un texto libre; si se eligió
+una dirección con GET /direcciones se envían también sus coordenadas (`latitud` y `longitud`, juntas o ninguna)
+y su `lugar_externo_id`.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -1590,6 +1659,9 @@ La puede crear cualquier miembro mientras el viaje está activo. La ubicación e
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM). Opcional | `10:00` |
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM). Opcional; necesita hora de inicio y no puede ser anterior a ella | `12:00` |
 | `ubicacion_nombre` | string \| null | No | Lugar o dirección, como texto libre. Opcional | `Piazza del Colosseo` |
+| `latitud` | number \| null | No | Latitud del lugar elegido en el buscador. Se envía junto con la longitud o ninguna de las dos. Se guarda con 6 decimales | `41.890214` |
+| `longitud` | number \| null | No | Longitud del lugar elegido en el buscador. Se envía junto con la latitud o ninguna de las dos. Se guarda con 6 decimales | `12.492231` |
+| `lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap (tipo/número), el que devuelve GET /direcciones. Opcional | `way/24146600` |
 | `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No | Tipo de actividad, para mostrar su icono. Opcional | `cultura` |
 
 **Respuestas**
@@ -1609,9 +1681,9 @@ Cuerpo (`application/json`):
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
 | `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
-| `latitud` | number \| null | No |  | `null` |
-| `longitud` | number \| null | No |  | `null` |
-| `lugar_externo_id` | string \| null | No |  | `null` |
+| `latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
+| `longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
+| `lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap | `way/24146600` |
 | `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
@@ -1659,7 +1731,8 @@ Cuerpo (`application/json`):
 **Modifica una actividad del itinerario**
 
 Cambia solo los campos que se envían (al menos uno). Con `null` se vacían la hora de inicio, la hora de fin,
-la ubicación y la categoría; el título y la fecha no se pueden vaciar.
+la ubicación, las coordenadas (`latitud` y `longitud` se envían siempre juntas), el identificador del lugar y
+la categoría; el título y la fecha no se pueden vaciar.
 La hora de fin necesita una hora de inicio y no puede ser anterior a ella (se comprueba también con las horas
 que la actividad ya tiene guardadas). Si se cambia la fecha, la actividad pasa al final de ese día.
 La puede modificar cualquier miembro mientras el viaje está activo.
@@ -1682,6 +1755,9 @@ La puede modificar cualquier miembro mientras el viaje está activo.
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM). Con null se quita (y entonces la hora de fin también debe quitarse) | `10:00` |
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM). Con null se quita | `12:00` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `latitud` | number \| null | No | Latitud del lugar elegido en el buscador. Se envía junto con la longitud. Con null (también en la longitud) se quitan las coordenadas | `41.890214` |
+| `longitud` | number \| null | No | Longitud del lugar elegido en el buscador. Se envía junto con la latitud. Con null (también en la latitud) se quitan las coordenadas | `12.492231` |
+| `lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap (tipo/número), el que devuelve GET /direcciones. Opcional | `way/24146600` |
 | `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
 
 **Respuestas**
@@ -1701,9 +1777,9 @@ Cuerpo (`application/json`):
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
 | `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
-| `latitud` | number \| null | No |  | `null` |
-| `longitud` | number \| null | No |  | `null` |
-| `lugar_externo_id` | string \| null | No |  | `null` |
+| `latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
+| `longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
+| `lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap | `way/24146600` |
 | `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |

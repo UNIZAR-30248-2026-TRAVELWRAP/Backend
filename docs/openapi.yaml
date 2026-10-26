@@ -1426,6 +1426,78 @@ paths:
                   codigo: error_votacion
                   mensaje: No se ha podido cerrar la votación
 
+  /direcciones:
+    get:
+      tags:
+        - Direcciones
+      summary: Busca una dirección y devuelve sus coordenadas
+      description: |
+        Busca el texto en OpenStreetMap (Nominatim) y devuelve hasta 5 lugares con su nombre, coordenadas e identificador,
+        para que el usuario elija uno al añadir o editar una actividad. Hace falta sesión.
+        La búsqueda solo se lanza cuando el usuario la pide (no al teclear). Para respetar la política de uso de
+        OpenStreetMap las llamadas salen de una en una, a razón de una por segundo; un mismo usuario no puede lanzar
+        dos búsquedas en menos de un segundo y las búsquedas repetidas se sirven de una caché de 10 minutos.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Texto a buscar, de 3 a 200 caracteres
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 200
+            example: Colosseo, Roma
+      responses:
+        '200':
+          description: Lugares encontrados (lista vacía si no hay resultados)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaDirecciones'
+        '400':
+          description: Falta el texto de búsqueda o no tiene entre 3 y 200 caracteres
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: La búsqueda debe tener entre 3 y 200 caracteres
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '429':
+          description: El usuario busca demasiado rápido o hay demasiadas búsquedas en cola
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                demasiadoRapido:
+                  value:
+                    error:
+                      codigo: demasiadas_busquedas
+                      mensaje: Espera un segundo entre una búsqueda y otra
+                servicioOcupado:
+                  value:
+                    error:
+                      codigo: servicio_ocupado
+                      mensaje: Hay muchas búsquedas en este momento. Inténtalo de nuevo en unos segundos
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: OpenStreetMap no responde, tarda demasiado o devuelve un error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_geocodificacion
+                  mensaje: No se ha podido buscar la dirección
+
   /viajes/{viajeId}/actividades:
     get:
       tags:
@@ -1494,7 +1566,9 @@ paths:
       summary: Crea una actividad del itinerario
       description: |
         Añade una actividad al itinerario del viaje, en el día indicado y al final de las que ya tenga ese día.
-        La puede crear cualquier miembro mientras el viaje está activo. La ubicación es un texto libre.
+        La puede crear cualquier miembro mientras el viaje está activo. La ubicación es un texto libre; si se eligió
+        una dirección con GET /direcciones se envían también sus coordenadas (`latitud` y `longitud`, juntas o ninguna)
+        y su `lugar_externo_id`.
       security:
         - bearerAuth: []
       parameters:
@@ -1564,7 +1638,8 @@ paths:
       summary: Modifica una actividad del itinerario
       description: |
         Cambia solo los campos que se envían (al menos uno). Con `null` se vacían la hora de inicio, la hora de fin,
-        la ubicación y la categoría; el título y la fecha no se pueden vaciar.
+        la ubicación, las coordenadas (`latitud` y `longitud` se envían siempre juntas), el identificador del lugar y
+        la categoría; el título y la fecha no se pueden vaciar.
         La hora de fin necesita una hora de inicio y no puede ser anterior a ella (se comprueba también con las horas
         que la actividad ya tiene guardadas). Si se cambia la fecha, la actividad pasa al final de ese día.
         La puede modificar cualquier miembro mientras el viaje está activo.
@@ -2339,6 +2414,26 @@ components:
           maxLength: 200
           description: Lugar o dirección, como texto libre. Opcional
           example: Piazza del Colosseo
+        latitud:
+          type: number
+          nullable: true
+          minimum: -90
+          maximum: 90
+          description: Latitud del lugar elegido en el buscador. Se envía junto con la longitud o ninguna de las dos. Se guarda con 6 decimales
+          example: 41.890214
+        longitud:
+          type: number
+          nullable: true
+          minimum: -180
+          maximum: 180
+          description: Longitud del lugar elegido en el buscador. Se envía junto con la latitud o ninguna de las dos. Se guarda con 6 decimales
+          example: 12.492231
+        lugar_externo_id:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: Identificador del lugar en OpenStreetMap (tipo/número), el que devuelve GET /direcciones. Opcional
+          example: way/24146600
         categoria:
           type: string
           nullable: true
@@ -2376,6 +2471,26 @@ components:
           nullable: true
           maxLength: 200
           example: Piazza del Colosseo
+        latitud:
+          type: number
+          nullable: true
+          minimum: -90
+          maximum: 90
+          description: Latitud del lugar elegido en el buscador. Se envía junto con la longitud. Con null (también en la longitud) se quitan las coordenadas
+          example: 41.890214
+        longitud:
+          type: number
+          nullable: true
+          minimum: -180
+          maximum: 180
+          description: Longitud del lugar elegido en el buscador. Se envía junto con la latitud. Con null (también en la latitud) se quitan las coordenadas
+          example: 12.492231
+        lugar_externo_id:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: Identificador del lugar en OpenStreetMap (tipo/número), el que devuelve GET /direcciones. Opcional
+          example: way/24146600
         categoria:
           type: string
           nullable: true
@@ -2425,15 +2540,18 @@ components:
         latitud:
           type: number
           nullable: true
-          example: null
+          description: Latitud del lugar (null si no se eligió una dirección del buscador)
+          example: 41.890214
         longitud:
           type: number
           nullable: true
-          example: null
+          description: Longitud del lugar (null si no se eligió una dirección del buscador)
+          example: 12.492231
         lugar_externo_id:
           type: string
           nullable: true
-          example: null
+          description: Identificador del lugar en OpenStreetMap
+          example: way/24146600
         categoria:
           type: string
           nullable: true
@@ -2452,6 +2570,37 @@ components:
           type: string
           format: date-time
           example: '2026-10-24T10:00:00Z'
+
+    Direccion:
+      type: object
+      properties:
+        nombre:
+          type: string
+          maxLength: 200
+          description: Nombre completo del lugar (se acorta con … si pasa de 200 caracteres)
+          example: Colosseo, Piazza del Colosseo, Rione X Campitelli, Roma, Lazio, 00184, Italia
+        latitud:
+          type: number
+          description: Latitud con 6 decimales
+          example: 41.890214
+        longitud:
+          type: number
+          description: Longitud con 6 decimales
+          example: 12.492231
+        lugar_externo_id:
+          type: string
+          nullable: true
+          description: Identificador en OpenStreetMap (tipo/número); null si no lo trae
+          example: way/24146600
+
+    ListaDirecciones:
+      type: object
+      properties:
+        direcciones:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/Direccion'
 
     ListaActividades:
       type: object
