@@ -64,6 +64,9 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
       hora_fin: '12:30',
       ubicacion_nombre: 'Piazza',
       categoria: 'cultura',
+      latitud: null,
+      longitud: null,
+      lugar_externo_id: null,
     });
   });
 
@@ -80,6 +83,9 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
       hora_fin: null,
       ubicacion_nombre: null,
       categoria: null,
+      latitud: null,
+      longitud: null,
+      lugar_externo_id: null,
     });
   });
 

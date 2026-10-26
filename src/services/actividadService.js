@@ -48,6 +48,9 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
       hora_fin: datos.hora_fin,
       ubicacion_nombre: datos.ubicacion_nombre,
       categoria: datos.categoria,
+      latitud: datos.latitud,
+      longitud: datos.longitud,
+      lugar_externo_id: datos.lugar_externo_id,
       orden: ultima.data ? ultima.data.orden + 1 : 0,
       creado_por: usuarioId,
     })

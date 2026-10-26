@@ -53,6 +53,9 @@ const DATOS = {
   hora_fin: '12:00',
   ubicacion_nombre: 'Piazza del Colosseo',
   categoria: 'cultura',
+  latitud: 41.8902,
+  longitud: 12.4922,
+  lugar_externo_id: 'way/1',
 };
 const operacion = (consulta, metodo) => consulta.operaciones.find(([m]) => m === metodo);
 
@@ -77,6 +80,9 @@ describe('actividadService.crear', () => {
       hora_fin: '12:00',
       ubicacion_nombre: 'Piazza del Colosseo',
       categoria: 'cultura',
+      latitud: 41.8902,
+      longitud: 12.4922,
+      lugar_externo_id: 'way/1',
       orden: 3,
       creado_por: USUARIO,
     });

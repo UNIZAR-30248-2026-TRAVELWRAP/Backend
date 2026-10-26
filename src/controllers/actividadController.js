@@ -5,6 +5,7 @@ const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_TITULO = 200;
 const MAX_UBICACION = 200;
+const MAX_LUGAR_EXTERNO = 100;
 const CATEGORIAS = ['comida', 'cultura', 'transporte', 'alojamiento', 'otro'];
 
 const CHECK_VIOLATION = '23514';
@@ -72,6 +73,28 @@ const validarUbicacion = (valor) => {
   return { valor: ubicacion };
 };
 
+const validarCoordenada = (valor, limite, nombre) => {
+  if (valor === undefined || valor === null) return { valor: null };
+  if (typeof valor !== 'number' || !Number.isFinite(valor) || Math.abs(valor) > limite) {
+    return { error: `La ${nombre} debe ser un número entre -${limite} y ${limite}` };
+  }
+  return { valor: Math.round(valor * 1e6) / 1e6 };
+};
+
+const validarLatitud = (valor) => validarCoordenada(valor, 90, 'latitud');
+
+const validarLongitud = (valor) => validarCoordenada(valor, 180, 'longitud');
+
+const validarLugarExterno = (valor) => {
+  const lugar = textoOpcional(valor);
+  if (lugar === undefined || (lugar !== null && lugar.length > MAX_LUGAR_EXTERNO)) {
+    return { error: `El identificador del lugar debe ser un texto de ${MAX_LUGAR_EXTERNO} caracteres como máximo` };
+  }
+  return { valor: lugar };
+};
+
+const MENSAJE_COORDENADAS_JUNTAS = 'La latitud y la longitud se envían juntas o ninguna';
+
 const validarNuevaActividad = (cuerpo) => {
   const datos = cuerpo !== null && typeof cuerpo === 'object' ? cuerpo : {};
 
@@ -96,6 +119,14 @@ const validarNuevaActividad = (cuerpo) => {
   const ubicacion = validarUbicacion(datos.ubicacion_nombre);
   if (ubicacion.error) return ubicacion;
 
+  const latitud = validarLatitud(datos.latitud);
+  if (latitud.error) return latitud;
+  const longitud = validarLongitud(datos.longitud);
+  if (longitud.error) return longitud;
+  if ((latitud.valor === null) !== (longitud.valor === null)) return { error: MENSAJE_COORDENADAS_JUNTAS };
+  const lugarExterno = validarLugarExterno(datos.lugar_externo_id);
+  if (lugarExterno.error) return lugarExterno;
+
   return {
     datos: {
       titulo: titulo.valor,
@@ -104,6 +135,9 @@ const validarNuevaActividad = (cuerpo) => {
       hora_fin: horaFin.valor,
       ubicacion_nombre: ubicacion.valor,
       categoria: categoria.valor,
+      latitud: latitud.valor,
+      longitud: longitud.valor,
+      lugar_externo_id: lugarExterno.valor,
     },
   };
 };
@@ -115,6 +149,9 @@ const CAMPOS_EDITABLES = {
   hora_fin: validarHoraFin,
   ubicacion_nombre: validarUbicacion,
   categoria: validarCategoria,
+  latitud: validarLatitud,
+  longitud: validarLongitud,
+  lugar_externo_id: validarLugarExterno,
 };
 
 const validarCambiosActividad = (cuerpo) => {
@@ -131,6 +168,11 @@ const validarCambiosActividad = (cuerpo) => {
   if (Object.keys(cambios).length === 0) {
     return { error: 'Indica al menos un dato de la actividad que cambiar' };
   }
+  const traeLatitud = 'latitud' in cambios;
+  const traeLongitud = 'longitud' in cambios;
+  const coordenadasIncompletas =
+    traeLatitud !== traeLongitud || (traeLatitud && (cambios.latitud === null) !== (cambios.longitud === null));
+  if (coordenadasIncompletas) return { error: MENSAJE_COORDENADAS_JUNTAS };
   return { cambios };
 };
 
