@@ -180,6 +180,19 @@ describe('geocodificacionService · resultados', () => {
     );
   });
 
+  it('quita los resultados que se verían iguales y se guardarían con el mismo nombre', async () => {
+    const otro = { ...COLISEO, osm_type: 'node', osm_id: 99, lat: '41.8903', lon: '12.4923' };
+    const foro = { ...COLISEO, osm_id: 5, name: 'Foro Romano', address: { ...COLISEO.address, tourism: undefined } };
+    const { geocodificador } = montar([respuestaDe([COLISEO, otro, foro, otro])]);
+
+    const { direcciones } = await geocodificador.buscar('colosseo', 'u1');
+
+    assert.deepEqual(
+      direcciones.map((d) => [d.titulo, d.lugar_externo_id]),
+      [['Colosseo', 'way/24146600'], ['Foro Romano', 'way/5']],
+    );
+  });
+
   it('descarta los lugares sin nombre o con coordenadas que no son válidas', async () => {
     const lugares = [
       COLISEO,

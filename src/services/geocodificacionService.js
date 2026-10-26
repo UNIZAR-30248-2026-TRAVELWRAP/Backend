@@ -64,6 +64,16 @@ const aDireccion = (lugar) => {
   };
 };
 
+const sinRepetidas = (direcciones) => {
+  const vistas = new Set();
+  return direcciones.filter((direccion) => {
+    const clave = `${direccion.nombre}|${direccion.detalle}`.toLowerCase();
+    if (vistas.has(clave)) return false;
+    vistas.add(clave);
+    return true;
+  });
+};
+
 const crearGeocodificador = ({
   peticion = (...argumentos) => fetch(...argumentos),
   ahora = () => Date.now(),
@@ -126,7 +136,7 @@ const crearGeocodificador = ({
 
       const lugares = await respuesta.json();
       if (!Array.isArray(lugares)) return { error: { code: 'respuesta_no_valida' } };
-      return { estado: 'ok', direcciones: lugares.map(aDireccion).filter(Boolean) };
+      return { estado: 'ok', direcciones: sinRepetidas(lugares.map(aDireccion).filter(Boolean)) };
     } catch (error) {
       return { error: { code: error?.name === 'AbortError' ? 'tiempo_agotado' : 'sin_conexion' } };
     } finally {
