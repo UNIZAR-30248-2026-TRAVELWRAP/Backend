@@ -10,6 +10,23 @@ const crearClienteDeUsuario = (token) =>
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 
+// Comprueba el token de acceso con Supabase. La usan la API REST y los WebSockets.
+// Devuelve { usuario, cliente } o { error: [estado HTTP, código, mensaje] }
+const comprobarToken = async (token) => {
+  if (!token) return { error: [401, 'sin_sesion', 'Falta el token de acceso'] };
+
+  const cliente = crearClienteDeUsuario(token);
+  const { data, error } = await cliente.auth.getUser(token);
+
+  if (error || !data?.user) {
+    if (error && (!error.status || error.status >= 500)) {
+      return { error: [502, 'error_autenticacion', 'No se ha podido comprobar la sesión'] };
+    }
+    return { error: [401, 'sesion_invalida', 'La sesión ha caducado o no es válida'] };
+  }
+  return { usuario: data.user, cliente };
+};
+
 const requiereSesion = async (req, res, next) => {
   const [esquema, token] = (req.headers.authorization ?? '').split(' ');
 
@@ -18,22 +35,15 @@ const requiereSesion = async (req, res, next) => {
   }
 
   try {
-    const cliente = crearClienteDeUsuario(token);
-    const { data, error } = await cliente.auth.getUser(token);
+    const resultado = await comprobarToken(token);
+    if (resultado.error) return responderError(res, ...resultado.error);
 
-    if (error || !data?.user) {
-      if (error && (!error.status || error.status >= 500)) {
-        return responderError(res, 502, 'error_autenticacion', 'No se ha podido comprobar la sesión');
-      }
-      return responderError(res, 401, 'sesion_invalida', 'La sesión ha caducado o no es válida');
-    }
-
-    req.usuario = data.user;
-    req.supabase = cliente;
+    req.usuario = resultado.usuario;
+    req.supabase = resultado.cliente;
     return next();
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
   }
 };
 
-module.exports = { requiereSesion };
+module.exports = { requiereSesion, comprobarToken };

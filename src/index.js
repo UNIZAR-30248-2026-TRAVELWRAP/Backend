@@ -9,6 +9,9 @@ const viajeRoutes = require('./routes/viajeRoutes');
 const votacionRoutes = require('./routes/votacionRoutes');
 const actividadRoutes = require('./routes/actividadRoutes');
 const direccionRoutes = require('./routes/direccionRoutes');
+const votacionesSocket = require('./sockets/votacionesSocket');
+const { comprobarToken } = require('./middleware/authMiddleware');
+const viajeService = require('./services/viajeService');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
@@ -42,13 +45,14 @@ chatNamespace.on('connection', (socket) => {
   });
 });
 
-// Lógica básica para las votaciones
-votacionesNamespace.on('connection', (socket) => {
-  console.log(`Usuario conectado al namespace /votaciones [ID: ${socket.id}]`);
-  
-  socket.on('disconnect', () => {
-    console.log(`Usuario desconectado de /votaciones [ID: ${socket.id}]`);
-  });
+// Votaciones en tiempo real: avisa a los miembros de un viaje cuando cambia una de sus votaciones
+votacionesSocket.configurar(votacionesNamespace, {
+  comprobarToken,
+  esMiembro: async (cliente, usuarioId, viajeId) => {
+    const { viaje, error } = await viajeService.obtener(cliente, usuarioId, viajeId);
+    if (error) throw new Error('No se ha podido comprobar el viaje');
+    return Boolean(viaje);
+  },
 });
 
 // Lógica básica para las notificaciones

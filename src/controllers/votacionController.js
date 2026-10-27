@@ -1,4 +1,5 @@
 const votacionService = require('../services/votacionService');
+const votacionesSocket = require('../sockets/votacionesSocket');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -115,12 +116,14 @@ const idsValidos = (req, res) => {
   return true;
 };
 
-// Ejecuta la acción del servicio y responde con la votación (o con el motivo por el que no se ha podido)
-const ejecutar = async (res, accion, codigoOk, mensajeFallo) => {
+// Ejecuta la acción del servicio y responde con la votación (o con el motivo por el que no se ha podido).
+// Si la acción cambia la votación (motivo), avisa en tiempo real a los miembros del viaje
+const ejecutar = async (res, accion, codigoOk, mensajeFallo, aviso) => {
   try {
     const resultado = await accion();
     if (resultado.error) return responderFallo(res, resultado.error, mensajeFallo);
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, mensajeFallo);
+    if (aviso) votacionesSocket.avisarCambio(aviso.viajeId, { votacion_id: resultado.votacion.id, motivo: aviso.motivo });
     return res.status(codigoOk).json(resultado.votacion);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
@@ -168,6 +171,7 @@ const crear = async (req, res) => {
     () => votacionService.crear(req.supabase, req.usuario.id, req.params.viajeId, validacion.datos),
     201,
     'No se ha podido crear la votación',
+    { viajeId: req.params.viajeId, motivo: 'creada' },
   );
 };
 
@@ -182,6 +186,7 @@ const anadirOpcion = async (req, res) => {
     () => votacionService.anadirOpcion(req.supabase, req.usuario.id, viajeId, votacionId, validacion.valor),
     201,
     'No se ha podido añadir la opción',
+    { viajeId, motivo: 'opcion' },
   );
 };
 
@@ -198,6 +203,7 @@ const votar = async (req, res) => {
     () => votacionService.votar(req.supabase, req.usuario.id, viajeId, votacionId, opcionId),
     200,
     'No se ha podido guardar el voto',
+    { viajeId, motivo: 'voto' },
   );
 };
 
@@ -209,6 +215,7 @@ const retirarVoto = async (req, res) => {
     () => votacionService.retirarVoto(req.supabase, req.usuario.id, viajeId, votacionId),
     200,
     'No se ha podido retirar el voto',
+    { viajeId, motivo: 'voto' },
   );
 };
 
@@ -221,6 +228,7 @@ const cerrar = async (req, res) => {
     if (resultado.error) return responderError(res, 502, 'error_votacion', 'No se ha podido cerrar la votación');
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido cerrar la votación');
     const { votacion, hubo_empate, destino } = resultado;
+    votacionesSocket.avisarCambio(viajeId, { votacion_id: votacion.id, motivo: 'cerrada', destino });
     return res.status(200).json({ votacion, hubo_empate, destino });
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
