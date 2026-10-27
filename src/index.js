@@ -62,7 +62,13 @@ notificacionesNamespace.on('connection', (socket) => {
 });
 
 // --- Middlewares globales ---
-app.use(cors()); // Permite peticiones desde el frontend a la API REST
+// Solo el frontend puede llamar a la API REST. CORS_ORIGINS admite varios orígenes separados por comas;
+// sin definir, se aceptan los del frontend en local (vite dev y vite preview)
+const origenesPermitidos = (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:4173')
+  .split(',')
+  .map((origen) => origen.trim())
+  .filter(Boolean);
+app.use(cors({ origin: origenesPermitidos }));
 app.use(express.json()); // Permite leer req.body en formato JSON
 
 // Accesible la documentación de la API desde http://localhost:3000/api-docs

@@ -1,29 +1,10 @@
 const gastoService = require('../services/gastoService');
+const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_CONCEPTO = 100;
 // numeric(12,2): diez cifras enteras y dos decimales
 const MAX_IMPORTE = 9999999999.99;
-const CATEGORIAS = ['comida', 'transporte', 'entradas', 'alojamiento', 'ocio', 'otros'];
-
-const CHECK_VIOLATION = '23514';
-
-const responderError = (res, estado, codigo, mensaje) =>
-  res.status(estado).json({ error: { codigo, mensaje } });
-
-const fechaValida = (texto) => {
-  if (!FECHA_REGEX.test(texto)) return false;
-  const fecha = new Date(`${texto}T00:00:00Z`);
-  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().startsWith(texto);
-};
-
-const textoOpcional = (valor) => {
-  if (valor === undefined || valor === null) return null;
-  if (typeof valor !== 'string') return undefined;
-  const texto = valor.trim();
-  return texto === '' ? null : texto;
-};
+const CATEGORIAS = new Set(['comida', 'transporte', 'entradas', 'alojamiento', 'ocio', 'otros']);
 
 const validarConcepto = (valor) => {
   const concepto = typeof valor === 'string' ? valor.trim() : '';
@@ -34,7 +15,7 @@ const validarConcepto = (valor) => {
 };
 
 const validarImporte = (valor) => {
-  const centimos = typeof valor === 'number' ? valor * 100 : NaN;
+  const centimos = typeof valor === 'number' ? valor * 100 : Number.NaN;
   const dosDecimales = Number.isFinite(centimos) && Math.abs(centimos - Math.round(centimos)) < 1e-6;
   if (!dosDecimales || valor <= 0 || valor > MAX_IMPORTE) {
     return { error: 'El importe debe ser un número mayor que 0 con dos decimales como máximo' };
@@ -44,7 +25,7 @@ const validarImporte = (valor) => {
 
 const validarCategoria = (valor) => {
   const categoria = textoOpcional(valor);
-  if (categoria === undefined || (categoria !== null && !CATEGORIAS.includes(categoria))) {
+  if (categoria === undefined || (categoria !== null && !CATEGORIAS.has(categoria))) {
     return { error: 'La categoría debe ser comida, transporte, entradas, alojamiento, ocio u otros' };
   }
   return { valor: categoria };

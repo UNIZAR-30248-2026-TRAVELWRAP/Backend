@@ -1,30 +1,9 @@
 const viajeService = require('../services/viajeService');
+const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ESTADOS = ['activo', 'finalizado', 'archivado'];
 const MAX_TEXTO = 100;
 const MAX_PRESUPUESTO = 1e10; // numeric(12,2): 10 dígitos enteros
-
-// Código de PostgreSQL cuando se incumple un check (p. ej. fecha_fin < fecha_inicio o presupuesto < 0)
-const CHECK_VIOLATION = '23514';
-
-const responderError = (res, estado, codigo, mensaje) =>
-  res.status(estado).json({ error: { codigo, mensaje } });
-
-const fechaValida = (texto) => {
-  if (!FECHA_REGEX.test(texto)) return false;
-  const fecha = new Date(`${texto}T00:00:00Z`);
-  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().startsWith(texto);
-};
-
-// Texto opcional: null, ausente o vacío (null). Devuelve undefined si no es un texto válido
-const textoOpcional = (valor) => {
-  if (valor === undefined || valor === null) return null;
-  if (typeof valor !== 'string') return undefined;
-  const texto = valor.trim();
-  return texto === '' ? null : texto;
-};
 
 const FECHAS_INVERTIDAS = 'La fecha de fin no puede ser anterior a la de inicio';
 

@@ -1,30 +1,11 @@
 const actividadService = require('../services/actividadService');
+const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_TITULO = 200;
 const MAX_UBICACION = 200;
 const MAX_LUGAR_EXTERNO = 100;
 const CATEGORIAS = ['comida', 'cultura', 'transporte', 'alojamiento', 'otro'];
-
-const CHECK_VIOLATION = '23514';
-
-const responderError = (res, estado, codigo, mensaje) =>
-  res.status(estado).json({ error: { codigo, mensaje } });
-
-const fechaValida = (texto) => {
-  if (!FECHA_REGEX.test(texto)) return false;
-  const fecha = new Date(`${texto}T00:00:00Z`);
-  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().startsWith(texto);
-};
-
-const textoOpcional = (valor) => {
-  if (valor === undefined || valor === null) return null;
-  if (typeof valor !== 'string') return undefined;
-  const texto = valor.trim();
-  return texto === '' ? null : texto;
-};
 
 const validarTitulo = (valor) => {
   const titulo = typeof valor === 'string' ? valor.trim() : '';

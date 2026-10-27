@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "test": "node --test",
+    "test:coverage": "node -e \"require('fs').mkdirSync('coverage', { recursive: true })\" && node --test --experimental-test-coverage --test-coverage-include=src/** --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info",
     "docs": "node scripts/generar-docs.js",
     "docs:check": "node scripts/generar-docs.js --check",
     "prepare": "husky"
