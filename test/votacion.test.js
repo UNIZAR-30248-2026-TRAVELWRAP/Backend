@@ -4,6 +4,7 @@ const { afterEach, describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const votacionService = require('../src/services/votacionService');
 const votacionController = require('../src/controllers/votacionController');
+const votacionesSocket = require('../src/sockets/votacionesSocket');
 
 const USUARIO = 'df77cba6-4be5-4cbc-814b-1e228dd73dcc';
 const OTRO = 'a1b2c3d4-0000-4000-8000-000000000001';
@@ -374,5 +375,45 @@ describe('POST /viajes/:viajeId/votaciones/:votacionId/cerrar', () => {
     simular('cerrar', async () => ({ estado: 'no_creador' }));
     const res = await llamar('cerrar');
     assert.equal(res.codigo, 403);
+  });
+});
+
+describe('avisos en tiempo real', () => {
+  const avisos = () => mock.method(votacionesSocket, 'avisarCambio', () => {});
+
+  for (const [accion, motivo, body] of [
+    ['crear', 'creada', { titulo: '¿Qué día?', opciones: [{ texto: 'Viernes' }, { texto: 'Sábado' }] }],
+    ['anadirOpcion', 'opcion', { texto: 'Lisboa' }],
+    ['votar', 'voto', { opcion_id: LISBOA }],
+    ['retirarVoto', 'voto', undefined],
+  ]) {
+    it(`${accion} avisa a los miembros del viaje con el motivo «${motivo}»`, async () => {
+      simular(accion, async () => ({ estado: 'ok', votacion: { id: VOTACION_ID } }));
+      const avisar = avisos();
+
+      await llamar(accion, { body });
+
+      assert.deepEqual(avisar.mock.calls[0].arguments, [VIAJE_ID, { votacion_id: VOTACION_ID, motivo }]);
+    });
+  }
+
+  it('cerrar avisa con el destino fijado', async () => {
+    simular('cerrar', async () => ({ estado: 'ok', votacion: { id: VOTACION_ID }, hubo_empate: false, destino: 'Praga' }));
+    const avisar = avisos();
+
+    await llamar('cerrar');
+
+    assert.deepEqual(avisar.mock.calls[0].arguments, [VIAJE_ID, { votacion_id: VOTACION_ID, motivo: 'cerrada', destino: 'Praga' }]);
+  });
+
+  it('si la acción falla no se avisa', async () => {
+    simular('votar', async () => ({ estado: 'votacion_cerrada' }));
+    simular('cerrar', async () => ({ estado: 'faltan_votos' }));
+    const avisar = avisos();
+
+    await llamar('votar', { body: { opcion_id: LISBOA } });
+    await llamar('cerrar');
+
+    assert.equal(avisar.mock.callCount(), 0);
   });
 });
