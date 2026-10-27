@@ -359,9 +359,9 @@ GRANT EXECUTE ON FUNCTION public.crear_votacion(uuid, text, text, public.tipo_vo
 -- 12. FUNCIÓN CERRAR VOTACIÓN
 -- Cierra una votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas al azar.
 -- En la votación de destino fija además el destino del viaje, todo en una sola operación.
--- Solo la cierra el creador del viaje, con el viaje activo. Es SECURITY INVOKER (se aplican las políticas RLS).
--- Una votación sin votos se cierra sin ganadora, salvo la de destino, que necesita al menos un voto.
--- Devuelve { estado }: no_existe | no_creador | no_activo | ya_cerrada | sin_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
+-- Solo la cierra el creador del viaje, con el viaje activo y cuando han votado todos sus miembros (RF9).
+-- Es SECURITY INVOKER (se aplican las políticas RLS).
+-- Devuelve { estado }: no_existe | no_creador | no_activo | ya_cerrada | faltan_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
 CREATE OR REPLACE FUNCTION public.cerrar_votacion(p_viaje_id uuid, p_votacion_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
@@ -389,6 +389,16 @@ BEGIN
     RETURN jsonb_build_object('estado', 'ya_cerrada');
   END IF;
 
+  -- RF9: solo se cierra cuando han votado todos los miembros activos del viaje
+  IF EXISTS (
+    SELECT 1 FROM public.miembros_viaje m
+    WHERE m.viaje_id = p_viaje_id
+      AND m.abandonado_en IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.votos v WHERE v.votacion_id = p_votacion_id AND v.usuario_id = m.usuario_id)
+  ) THEN
+    RETURN jsonb_build_object('estado', 'faltan_votos');
+  END IF;
+
   -- Opciones con más votos (al menos uno) y, entre ellas, una al azar
   WITH recuento AS (
     SELECT o.id, count(v.id) AS votos
@@ -402,10 +412,6 @@ BEGIN
   )
   SELECT (SELECT count(*) FROM empatadas), (SELECT id FROM empatadas ORDER BY random() LIMIT 1)
   INTO v_empatadas, v_ganadora_id;
-
-  IF v_ganadora_id IS NULL AND v_votacion.tipo = 'destino' THEN
-    RETURN jsonb_build_object('estado', 'sin_votos');
-  END IF;
 
   UPDATE public.votaciones
   SET estado = 'cerrada', cerrada_en = now(), opcion_ganadora_id = v_ganadora_id

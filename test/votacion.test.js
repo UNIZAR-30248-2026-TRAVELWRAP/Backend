@@ -107,9 +107,20 @@ describe('votacionService.listar', () => {
     assert.deepEqual(v.opciones[1].votantes, [USUARIO, OTRO]);
     assert.equal(v.total_votos, 2);
     assert.equal(v.total_miembros, 2);
+    assert.equal(v.todos_han_votado, true);
     assert.equal(v.mi_voto, PRAGA);
     assert.deepEqual(operacion(cliente.consultas[1], 'eq').slice(1), ['viaje_id', VIAJE_ID]);
     assert.ok(cliente.consultas[1].operaciones.some(([m, c, val]) => m === 'eq' && c === 'estado' && val === 'abierta'));
+  });
+
+  it('todos_han_votado es false mientras falte algún miembro por votar', async () => {
+    const soloOtro = ok([{ votacion_id: VOTACION_ID, opcion_id: PRAGA, usuario_id: OTRO }]);
+    const cliente = clienteFalso([viaje(), ok([votacion()]), opciones, soloOtro]);
+
+    const [v] = (await votacionService.listar(cliente, USUARIO, VIAJE_ID)).votaciones;
+
+    assert.equal(v.todos_han_votado, false);
+    assert.equal(v.mi_voto, null);
   });
 
   it('sin votaciones no consulta opciones ni votos', async () => {
@@ -233,9 +244,9 @@ describe('votacionService.cerrar', () => {
     assert.equal(cliente.llamadasRpc.length, 0);
   });
 
-  it('pasa los motivos de la función: sin votos o cerrada justo antes por otro', async () => {
-    const sinVotos = clienteFalso([viaje(), ok(votacion())], [ok({ estado: 'sin_votos' })]);
-    assert.deepEqual(await votacionService.cerrar(sinVotos, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'sin_votos' });
+  it('pasa los motivos de la función: faltan votos o cerrada justo antes por otro', async () => {
+    const faltan = clienteFalso([viaje(), ok(votacion())], [ok({ estado: 'faltan_votos' })]);
+    assert.deepEqual(await votacionService.cerrar(faltan, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'faltan_votos' });
 
     const yaCerrada = clienteFalso([viaje(), ok(votacion())], [ok({ estado: 'ya_cerrada' })]);
     assert.deepEqual(await votacionService.cerrar(yaCerrada, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'votacion_cerrada' });
@@ -352,11 +363,11 @@ describe('POST /viajes/:viajeId/votaciones/:votacionId/cerrar', () => {
     assert.deepEqual(res.cuerpo, { votacion: { id: VOTACION_ID, estado: 'cerrada' }, hubo_empate: false, destino: 'Praga' });
   });
 
-  it('sin votos en la de destino responde 409 sin_votos', async () => {
-    simular('cerrar', async () => ({ estado: 'sin_votos' }));
+  it('si no han votado todos los miembros responde 409 faltan_votos (RF9)', async () => {
+    simular('cerrar', async () => ({ estado: 'faltan_votos' }));
     const res = await llamar('cerrar');
     assert.equal(res.codigo, 409);
-    assert.equal(res.cuerpo.error.codigo, 'sin_votos');
+    assert.equal(res.cuerpo.error.codigo, 'faltan_votos');
   });
 
   it('quien no es el creador recibe 403', async () => {

@@ -85,7 +85,7 @@ const ERRORES = {
   no_creador: [403, 'no_creador', 'Solo el creador del viaje puede cerrar las votaciones'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está cerrado y ya no se puede modificar'],
   votacion_cerrada: [409, 'votacion_cerrada', 'La votación ya está cerrada'],
-  sin_votos: [409, 'sin_votos', 'La votación de destino necesita al menos un voto para cerrarse'],
+  faltan_votos: [409, 'faltan_votos', 'La votación solo se puede cerrar cuando hayan votado todos los miembros'],
   opcion_no_valida: [400, 'opcion_no_valida', 'La opción no es de esta votación'],
 };
 

@@ -920,7 +920,7 @@ Cuerpo (`application/json`):
 | `votaciones[].descripcion` | string \| null | No |  | `null` |
 | `votaciones[].tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `votaciones[].estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `votaciones[].opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `votaciones[].opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `votaciones[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `votaciones[].creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `votaciones[].cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -933,6 +933,7 @@ Cuerpo (`application/json`):
 | `votaciones[].opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `votaciones[].total_votos` | integer | No |  | `3` |
 | `votaciones[].total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `votaciones[].todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `votaciones[].mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador no es un UUID o un filtro no es válido
@@ -1006,7 +1007,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1019,6 +1020,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — Faltan datos, no son válidos o hay opciones repetidas
@@ -1086,7 +1088,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1099,6 +1101,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1170,7 +1173,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1183,6 +1186,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1259,7 +1263,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1272,6 +1276,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — Identificadores mal formados, falta la opción o la opción no es de esta votación
@@ -1342,7 +1347,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1355,6 +1360,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1403,7 +1409,8 @@ Cuerpo (`application/json`):
 Cierra la votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas elegida al azar
 (la PWA avisa del empate antes de confirmar). Ya no se puede votar ni proponer opciones.
 En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
-pendiente de destino. La de destino necesita al menos un voto; las demás, sin votos, se cierran sin ganadora.
+pendiente de destino.
+Solo se puede cerrar cuando han votado todos los miembros activos del viaje (RF9): `todos_han_votado` lo indica.
 Solo lo puede hacer el creador del viaje, con el viaje activo.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -1429,7 +1436,7 @@ Cuerpo (`application/json`):
 | `votacion.descripcion` | string \| null | No |  | `null` |
 | `votacion.tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `votacion.estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `votacion.opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `votacion.opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `votacion.creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `votacion.creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `votacion.cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1442,6 +1449,7 @@ Cuerpo (`application/json`):
 | `votacion.opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `votacion.total_votos` | integer | No |  | `3` |
 | `votacion.total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `votacion.todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `votacion.mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 | `hubo_empate` | boolean | No | true si varias opciones empataron con más votos y la ganadora se eligió al azar | `false` |
 | `destino` | string \| null | No | Destino guardado en el viaje (solo al cerrar la votación de destino) | `null` |
@@ -1472,12 +1480,12 @@ Cuerpo (`application/json`):
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 | `votacion_no_encontrada` | La votación no existe en este viaje |
 
-**409** — La votación ya está cerrada, el viaje no está activo o la de destino no tiene votos
+**409** — La votación ya está cerrada, el viaje no está activo o todavía no han votado todos los miembros
 
 | Código de error | Mensaje |
 | --- | --- |
 | `votacion_cerrada` | La votación ya está cerrada |
-| `sin_votos` | La votación de destino necesita al menos un voto para cerrarse |
+| `faltan_votos` | La votación solo se puede cerrar cuando hayan votado todos los miembros |
 
 **500** — Error interno del servidor
 

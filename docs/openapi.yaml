@@ -1366,7 +1366,8 @@ paths:
         Cierra la votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas elegida al azar
         (la PWA avisa del empate antes de confirmar). Ya no se puede votar ni proponer opciones.
         En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
-        pendiente de destino. La de destino necesita al menos un voto; las demás, sin votos, se cierran sin ganadora.
+        pendiente de destino.
+        Solo se puede cerrar cuando han votado todos los miembros activos del viaje (RF9): `todos_han_votado` lo indica.
         Solo lo puede hacer el creador del viaje, con el viaje activo.
       security:
         - bearerAuth: []
@@ -1397,7 +1398,7 @@ paths:
         '404':
           $ref: '#/components/responses/VotacionNoEncontrada'
         '409':
-          description: La votación ya está cerrada, el viaje no está activo o la de destino no tiene votos
+          description: La votación ya está cerrada, el viaje no está activo o todavía no han votado todos los miembros
           content:
             application/json:
               schema:
@@ -1408,11 +1409,11 @@ paths:
                     error:
                       codigo: votacion_cerrada
                       mensaje: La votación ya está cerrada
-                sinVotos:
+                faltanVotos:
                   value:
                     error:
-                      codigo: sin_votos
-                      mensaje: La votación de destino necesita al menos un voto para cerrarse
+                      codigo: faltan_votos
+                      mensaje: La votación solo se puede cerrar cuando hayan votado todos los miembros
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -2322,7 +2323,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos)
+          description: Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta)
           example: null
         creado_por:
           type: string
@@ -2350,6 +2351,10 @@ components:
           type: integer
           description: Miembros activos del viaje, es decir, cuántos pueden votar
           example: 4
+        todos_han_votado:
+          type: boolean
+          description: true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9)
+          example: false
         mi_voto:
           type: string
           format: uuid
