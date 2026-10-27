@@ -15,8 +15,8 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
 | [votos](#votos) | 5 | Activada | 4 |
 | [actividades](#actividades) | 16 | Activada | 4 |
-| [gastos](#gastos) | 10 | No activada | 0 |
-| [repartos_gasto](#repartos_gasto) | 4 | No activada | 0 |
+| [gastos](#gastos) | 10 | Activada | 4 |
+| [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
 
 ## Relaciones
 
@@ -216,7 +216,7 @@ Voto de un usuario en una votación. Cambiar el voto actualiza la fila; retirarl
 
 Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos
 
-**Seguridad por filas (RLS):** no activada
+**Seguridad por filas (RLS):** activada, 4 políticas
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -244,7 +244,7 @@ Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidaci�
 
 Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el importe del gasto: lo comprueba el backend al guardar, porque la base de datos no puede exigirlo fila a fila
 
-**Seguridad por filas (RLS):** no activada
+**Seguridad por filas (RLS):** activada, 4 políticas
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -338,3 +338,21 @@ Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el i
 | `actividades_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `actividades_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `actividades_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
+#### gastos
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `gastos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `gastos_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `gastos_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `gastos_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
+#### repartos_gasto
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `repartos_gasto_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `repartos_gasto_insert` | INSERT | authenticated |  | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `repartos_gasto_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `repartos_gasto_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |

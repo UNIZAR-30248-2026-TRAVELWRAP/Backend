@@ -66,6 +66,8 @@ ALTER TABLE public.votaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.opciones_votacion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.votos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -183,6 +185,48 @@ CREATE POLICY actividades_update ON public.actividades FOR UPDATE TO authenticat
 
 DROP POLICY IF EXISTS actividades_delete ON public.actividades;
 CREATE POLICY actividades_delete ON public.actividades FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS GASTOS
+-- Los miembros ven todos los gastos de su viaje (historial, detalle, balance y liquidación)
+DROP POLICY IF EXISTS gastos_select ON public.gastos;
+CREATE POLICY gastos_select ON public.gastos FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro registra gastos mientras el viaje está activo; queda como autor del registro
+DROP POLICY IF EXISTS gastos_insert ON public.gastos;
+CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
+  WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Cualquier miembro corrige o borra gastos mientras el viaje está activo (como con las actividades).
+-- En un viaje cerrado o archivado los gastos quedan de solo lectura
+DROP POLICY IF EXISTS gastos_update ON public.gastos;
+CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS gastos_delete ON public.gastos;
+CREATE POLICY gastos_delete ON public.gastos FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS REPARTOS_GASTO
+-- Las partes de cada gasto siguen las mismas reglas que el gasto: las ven los miembros y
+-- solo se escriben mientras el viaje está activo. La clave ajena a gastos garantiza que la parte es de ese viaje
+DROP POLICY IF EXISTS repartos_gasto_select ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_select ON public.repartos_gasto FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+DROP POLICY IF EXISTS repartos_gasto_insert ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_insert ON public.repartos_gasto FOR INSERT TO authenticated
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS repartos_gasto_update ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_update ON public.repartos_gasto FOR UPDATE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS repartos_gasto_delete ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_delete ON public.repartos_gasto FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN
