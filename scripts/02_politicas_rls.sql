@@ -478,7 +478,66 @@ $$;
 REVOKE ALL ON FUNCTION public.cerrar_votacion(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cerrar_votacion(uuid, uuid) TO authenticated;
 
--- 13. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
+-- 13. FUNCIÓN CREAR GASTO
+-- Registra un gasto y lo reparte a partes iguales entre los participantes en una sola operación:
+-- si falla una parte, no se guarda nada. Las partes se calculan en céntimos y los céntimos que sobran
+-- se reparten uno a uno entre los primeros participantes, así que siempre suman el importe del gasto.
+-- Es SECURITY INVOKER: se aplican las mismas políticas RLS que a un insert directo en las tablas.
+-- Devuelve { estado }: no_existe | no_activo | no_miembro | ok (con gasto_id)
+CREATE OR REPLACE FUNCTION public.crear_gasto(
+  p_viaje_id uuid,
+  p_concepto text,
+  p_importe numeric,
+  p_categoria public.categoria_gasto,
+  p_pagado_por uuid,
+  p_fecha date,
+  p_participantes uuid[]
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_gasto_id uuid;
+  v_centimos bigint := round(p_importe * 100);
+  v_total int := cardinality(p_participantes);
+BEGIN
+  IF NOT public.es_miembro(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_existe');
+  END IF;
+  IF NOT public.es_editable(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
+  END IF;
+
+  -- Quien paga y todos los participantes tienen que ser miembros actuales del viaje
+  IF EXISTS (
+    SELECT 1 FROM unnest(p_participantes || p_pagado_por) AS u (usuario_id)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.miembros_viaje m
+      WHERE m.viaje_id = p_viaje_id AND m.usuario_id = u.usuario_id AND m.abandonado_en IS NULL
+    )
+  ) THEN
+    RETURN jsonb_build_object('estado', 'no_miembro');
+  END IF;
+
+  INSERT INTO public.gastos (viaje_id, concepto, importe, categoria, pagado_por, fecha, creado_por)
+  VALUES (p_viaje_id, btrim(p_concepto), p_importe, COALESCE(p_categoria, 'otros'), p_pagado_por,
+          COALESCE(p_fecha, current_date), auth.uid())
+  RETURNING id INTO v_gasto_id;
+
+  INSERT INTO public.repartos_gasto (gasto_id, viaje_id, usuario_id, importe)
+  SELECT v_gasto_id, p_viaje_id, p.usuario_id,
+         (v_centimos / v_total + CASE WHEN p.posicion <= v_centimos % v_total THEN 1 ELSE 0 END) / 100.0
+  FROM unnest(p_participantes) WITH ORDINALITY AS p (usuario_id, posicion);
+
+  RETURN jsonb_build_object('estado', 'ok', 'gasto_id', v_gasto_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
+
+-- 14. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
 -- Abre la votación de destino de los viajes activos sin destino que todavía no la tienen.
 -- Se puede ejecutar varias veces: solo crea las que faltan
 INSERT INTO public.votaciones (viaje_id, titulo, tipo, creado_por)
