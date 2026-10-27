@@ -15,6 +15,8 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
 | [votos](#votos) | 5 | Activada | 4 |
 | [actividades](#actividades) | 16 | Activada | 4 |
+| [gastos](#gastos) | 10 | No activada | 0 |
+| [repartos_gasto](#repartos_gasto) | 4 | No activada | 0 |
 
 ## Relaciones
 
@@ -33,6 +35,12 @@ erDiagram
     perfiles ||--o{ votos : "usuario_id"
     viajes ||--o{ actividades : "viaje_id"
     perfiles |o--o{ actividades : "creado_por"
+    viajes ||--o{ gastos : "viaje_id"
+    perfiles ||--o{ gastos : "pagado_por"
+    perfiles |o--o{ gastos : "creado_por"
+    gastos ||--o{ repartos_gasto : "gasto_id"
+    gastos ||--o{ repartos_gasto : "viaje_id"
+    miembros_viaje ||--o{ repartos_gasto : "usuario_id"
 ```
 
 ## Tipos enumerados
@@ -43,6 +51,7 @@ erDiagram
 | `rol_miembro` | `creador`, `miembro` |
 | `tipo_votacion` | `fecha`, `destino`, `presupuesto`, `actividad`, `otro` |
 | `estado_votacion` | `abierta`, `cerrada` |
+| `categoria_gasto` | `comida`, `transporte`, `entradas`, `alojamiento`, `ocio`, `otros` |
 
 ## Tablas
 
@@ -202,6 +211,56 @@ Voto de un usuario en una votación. Cambiar el voto actualiza la fila; retirarl
 **Índices**
 
 - `actividades_viaje_fecha_idx` sobre (viaje_id, fecha)
+
+### gastos
+
+Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos
+
+**Seguridad por filas (RLS):** no activada
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus gastos, y con ellos sus repartos |
+| `concepto` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(concepto)) BETWEEN 1 AND 100` |
+| `importe` | `numeric(12,2)` | Sí |  |  | Importe total en la moneda del viaje<br>Debe cumplir: `importe > 0` |
+| `categoria` | `categoria_gasto` | Sí |  | `'otros'` |  |
+| `pagado_por` | `uuid` | Sí | FK → perfiles.id |  | Miembro que adelanta el pago. Un perfil con gastos no se puede borrar mientras existan |
+| `fecha` | `date` | Sí |  | `current_date` |  |
+| `creado_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+| `actualizado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Restricciones**
+
+- `gastos_id_viaje_unico`: `UNIQUE (id, viaje_id)` — Permite exigir que los repartos sean de miembros del mismo viaje que el gasto
+- `gastos_pagado_por_un_miembro`: `FOREIGN KEY (viaje_id, pagado_por) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Quien paga tiene que ser miembro del viaje
+
+**Índices**
+
+- `gastos_viaje_fecha_idx` sobre (viaje_id, fecha DESC, creado_en DESC) — Historial de gastos del viaje, del más reciente al más antiguo
+
+### repartos_gasto
+
+Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el importe del gasto: lo comprueba el backend al guardar, porque la base de datos no puede exigirlo fila a fila
+
+**Seguridad por filas (RLS):** no activada
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `gasto_id` | `uuid` | Sí | PK, FK → gastos.id (ON DELETE CASCADE) |  |  |
+| `viaje_id` | `uuid` | Sí | FK → gastos.viaje_id (ON DELETE CASCADE) |  |  |
+| `usuario_id` | `uuid` | Sí | PK, FK → miembros_viaje.usuario_id |  |  |
+| `importe` | `numeric(12,2)` | Sí |  |  | Debe cumplir: `importe >= 0` |
+
+**Restricciones**
+
+- `repartos_gasto_del_gasto`: `FOREIGN KEY (gasto_id, viaje_id) REFERENCES public.gastos (id, viaje_id) ON DELETE CASCADE` — Al borrar el gasto se borran sus repartos
+- `repartos_gasto_de_un_miembro`: `FOREIGN KEY (viaje_id, usuario_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo se reparte entre miembros del viaje
+
+**Índices**
+
+- `repartos_gasto_miembro_idx` sobre (viaje_id, usuario_id)
 
 ## Seguridad (RLS)
 
