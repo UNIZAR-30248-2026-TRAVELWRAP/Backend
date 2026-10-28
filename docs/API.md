@@ -41,6 +41,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
+| POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 
 ## General
 
@@ -1890,3 +1891,97 @@ está activo. Responde 204 sin cuerpo.
 | Código de error | Mensaje |
 | --- | --- |
 | `error_actividad` | No se ha podido eliminar la actividad |
+
+## Gastos
+
+### POST /viajes/{viajeId}/gastos
+
+**Registra un gasto compartido**
+
+Registra un gasto del viaje y lo reparte entre los participantes indicados a partes iguales en una única
+operación (función SQL `crear_gasto`): si falla una parte, no se guarda nada. Se calcula en céntimos y los que
+sobran se asignan a los primeros participantes para que el total siempre sume el importe introducido.
+
+Cualquier miembro puede registrar un gasto mientras el viaje esté activo. El pagador y los participantes deben
+ser miembros; quien hace la petición queda marcado como `creado_por`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `concepto` | string | Sí | Qué se ha pagado. Se guardan sin los espacios del principio y del final | `Cena en el Trastevere` |
+| `importe` | number | Sí | Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) \| null | No | Tipo de gasto. Opcional; si no se envía se guarda «otros» | `comida` |
+| `pagado_por` | string (uuid) | Sí | Miembro del viaje que ha pagado | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) \| null | No | Día del gasto (AAAA-MM-DD). Opcional; si no se envía se guarda la fecha de hoy | `2027-05-12` |
+| `participantes` | array<string (uuid)> | Sí | Miembros del viaje entre los que se divide el gasto a partes iguales, sin repetir ninguno | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc","5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f"]` |
+
+**Respuestas**
+
+**201** — Gasto registrado, con la parte de cada participante
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `concepto` | string | No |  | `Cena en el Trastevere` |
+| `importe` | number | No |  | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) | No |  | `comida` |
+| `pagado_por` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) | No |  | `2027-05-12` |
+| `creado_por` | string (uuid) \| null | No | Quién registró el gasto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `actualizado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `repartos` | array<RepartoGasto> | No | Parte de cada participante; suman el importe del gasto | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","importe":30.25},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","importe":30.25}]` |
+| `repartos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `repartos[].importe` | number | No | Parte del gasto que le corresponde a este miembro | `30.25` |
+
+**400** — Faltan datos o no son válidos, el identificador del viaje no es un UUID, o quien paga o algún
+participante no es miembro del viaje
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El importe debe ser un número mayor que 0 con dos decimales como máximo |
+| `datos_invalidos` | Quien paga y los participantes tienen que ser miembros del viaje |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido registrar el gasto |

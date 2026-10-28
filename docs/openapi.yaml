@@ -1780,6 +1780,89 @@ paths:
                   codigo: error_actividad
                   mensaje: No se ha podido eliminar la actividad
 
+  /viajes/{viajeId}/gastos:
+    post:
+      tags:
+        - Gastos
+      summary: Registra un gasto compartido
+      description: |
+        Registra un gasto del viaje y lo reparte entre los participantes indicados a partes iguales en una única
+        operación (función SQL `crear_gasto`): si falla una parte, no se guarda nada. Se calcula en céntimos y los que
+        sobran se asignan a los primeros participantes para que el total siempre sume el importe introducido.
+
+        Cualquier miembro puede registrar un gasto mientras el viaje esté activo. El pagador y los participantes deben
+        ser miembros; quien hace la petición queda marcado como `creado_por`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoGastoRequest'
+      responses:
+        '201':
+          description: Gasto registrado, con la parte de cada participante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gasto'
+        '400':
+          description: |
+            Faltan datos o no son válidos, el identificador del viaje no es un UUID, o quien paga o algún
+            participante no es miembro del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                datosInvalidos:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El importe debe ser un número mayor que 0 con dos decimales como máximo
+                noMiembro:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Quien paga y los participantes tienen que ser miembros del viaje
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está cerrado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido registrar el gasto
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2625,6 +2708,123 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Actividad'
+
+    NuevoGastoRequest:
+      type: object
+      required:
+        - concepto
+        - importe
+        - pagado_por
+        - participantes
+      properties:
+        concepto:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Qué se ha pagado. Se guardan sin los espacios del principio y del final
+          example: Cena en el Trastevere
+        importe:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
+          description: Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo
+          example: 60.5
+        categoria:
+          type: string
+          nullable: true
+          enum: [comida, transporte, entradas, alojamiento, ocio, otros]
+          description: Tipo de gasto. Opcional; si no se envía se guarda «otros»
+          example: comida
+        pagado_por:
+          type: string
+          format: uuid
+          description: Miembro del viaje que ha pagado
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        fecha:
+          type: string
+          format: date
+          nullable: true
+          description: Día del gasto (AAAA-MM-DD). Opcional; si no se envía se guarda la fecha de hoy
+          example: '2027-05-12'
+        participantes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Miembros del viaje entre los que se divide el gasto a partes iguales, sin repetir ninguno
+          items:
+            type: string
+            format: uuid
+          example:
+            - df77cba6-4be5-4cbc-814b-1e228dd73dcc
+            - 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+
+    RepartoGasto:
+      type: object
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        importe:
+          type: number
+          description: Parte del gasto que le corresponde a este miembro
+          example: 30.25
+
+    Gasto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        concepto:
+          type: string
+          example: Cena en el Trastevere
+        importe:
+          type: number
+          example: 60.5
+        categoria:
+          type: string
+          enum: [comida, transporte, entradas, alojamiento, ocio, otros]
+          example: comida
+        pagado_por:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        fecha:
+          type: string
+          format: date
+          example: '2027-05-12'
+        creado_por:
+          type: string
+          format: uuid
+          nullable: true
+          description: Quién registró el gasto (null si su cuenta se ha eliminado)
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-10-28T10:00:00Z'
+        actualizado_en:
+          type: string
+          format: date-time
+          example: '2026-10-28T10:00:00Z'
+        repartos:
+          type: array
+          description: Parte de cada participante; suman el importe del gasto
+          items:
+            $ref: '#/components/schemas/RepartoGasto'
+          example:
+            - usuario_id: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+              importe: 30.25
+            - usuario_id: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+              importe: 30.25
 
     Error:
       type: object
