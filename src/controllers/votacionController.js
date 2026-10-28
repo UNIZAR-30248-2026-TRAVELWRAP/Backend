@@ -10,7 +10,6 @@ const TIPOS_CREABLES = TIPOS.filter((tipo) => tipo !== 'destino');
 const MAX_TITULO = 200;
 const MAX_DESCRIPCION = 500;
 const MAX_TEXTO_OPCION = 100;
-const MIN_OPCIONES = 2;
 const MAX_OPCIONES = 20;
 
 // Códigos de PostgreSQL: opción repetida en la votación (índice único) y check incumplido
@@ -64,11 +63,13 @@ const validarNuevaVotacion = (cuerpo) => {
     return { error: `El tipo debe ser ${TIPOS_CREABLES.join(', ')}` };
   }
 
-  if (!Array.isArray(datos.opciones) || datos.opciones.length < MIN_OPCIONES || datos.opciones.length > MAX_OPCIONES) {
-    return { error: `La votación necesita entre ${MIN_OPCIONES} y ${MAX_OPCIONES} opciones` };
+  // Las opciones iniciales son opcionales: los miembros pueden proponerlas después
+  const iniciales = datos.opciones ?? [];
+  if (!Array.isArray(iniciales) || iniciales.length > MAX_OPCIONES) {
+    return { error: `Las opciones deben ser una lista de ${MAX_OPCIONES} como máximo` };
   }
   const opciones = [];
-  for (const valor of datos.opciones) {
+  for (const valor of iniciales) {
     const opcion = validarOpcion(valor);
     if (opcion.error) return opcion;
     opciones.push(opcion.valor);

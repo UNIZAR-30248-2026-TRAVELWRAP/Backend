@@ -298,10 +298,22 @@ describe('POST /viajes/:viajeId/votaciones (crear)', () => {
     });
   });
 
+  it('las opciones son opcionales: se puede crear sin ninguna o con una sola', async () => {
+    const crear = simular('crear', async () => ({ estado: 'ok', votacion: { id: VOTACION_ID } }));
+
+    const sinOpciones = await llamar('crear', { body: { titulo: '¿Dónde cenamos?' } });
+    const conUna = await llamar('crear', { body: { titulo: '¿Dónde cenamos?', opciones: [{ texto: 'Tasca' }] } });
+
+    assert.equal(sinOpciones.codigo, 201);
+    assert.equal(conUna.codigo, 201);
+    assert.deepEqual(crear.mock.calls[0].arguments[3].opciones, []);
+    assert.deepEqual(crear.mock.calls[1].arguments[3].opciones, [{ texto: 'Tasca', valor_fecha: null }]);
+  });
+
   for (const [caso, body] of [
     ['sin título', { ...valida, titulo: '  ' }],
     ['de tipo destino', { ...valida, tipo: 'destino' }],
-    ['con menos de dos opciones', { ...valida, opciones: [{ texto: 'Sábado' }] }],
+    ['con más de 20 opciones', { ...valida, opciones: Array.from({ length: 21 }, (_, i) => ({ texto: `Opción ${i}` })) }],
     ['con opciones repetidas', { ...valida, opciones: [{ texto: 'Sábado' }, { texto: ' sábado' }] }],
     ['con una fecha mal escrita', { ...valida, opciones: [{ texto: 'Viernes', valor_fecha: '2027-02-30' }, { texto: 'Sábado' }] }],
   ]) {
