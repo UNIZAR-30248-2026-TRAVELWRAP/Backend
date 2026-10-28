@@ -1061,8 +1061,9 @@ paths:
         - Votaciones
       summary: Crea una votación
       description: |
-        Crea una votación del viaje con sus opciones iniciales (entre 2 y 20, sin repetir), en una sola operación.
-        La puede crear cualquier miembro mientras el viaje está activo. Después, cualquier miembro puede proponer más opciones.
+        Crea una votación del viaje y, si se envían, sus opciones iniciales (hasta 20, sin repetir), en una sola operación.
+        Las opciones son opcionales: se puede crear sin ninguna y que los miembros las propongan después.
+        La puede crear cualquier miembro mientras el viaje está activo.
         No se pueden crear votaciones de destino: la del destino se abre sola al crear un viaje sin destino.
       security:
         - bearerAuth: []
@@ -1090,7 +1091,7 @@ paths:
               example:
                 error:
                   codigo: datos_invalidos
-                  mensaje: La votación necesita entre 2 y 20 opciones
+                  mensaje: Las opciones no se pueden repetir
         '401':
           $ref: '#/components/responses/SinSesion'
         '404':
@@ -2316,7 +2317,6 @@ components:
       type: object
       required:
         - titulo
-        - opciones
       properties:
         titulo:
           type: string
@@ -2335,9 +2335,9 @@ components:
           example: fecha
         opciones:
           type: array
-          minItems: 2
           maxItems: 20
-          description: Opciones iniciales, en el orden en que se mostrarán. No se pueden repetir
+          default: []
+          description: Opciones iniciales (opcionales), en el orden en que se mostrarán. No se pueden repetir
           items:
             $ref: '#/components/schemas/NuevaOpcionRequest'
 

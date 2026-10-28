@@ -1758,7 +1758,7 @@
           ]
         },
         {
-          "name": "Crear una votación con una sola opción",
+          "name": "Crear una votación sin opciones (se proponen después)",
           "request": {
             "method": "POST",
             "header": [
@@ -1774,7 +1774,7 @@
             "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"titulo\": \"¿Hotel o apartamento?\",\n  \"opciones\": [\n    {\n      \"texto\": \"Hotel\"\n    }\n  ]\n}"
+              "raw": "{\n  \"titulo\": \"¿Hotel o apartamento?\"\n}"
             }
           },
           "event": [
@@ -1783,9 +1783,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
-                  "pm.test('Código datos_invalidos', () => {",
-                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Se crea abierta y sin opciones', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('abierta');",
+                  "  pm.expect(pm.response.json().opciones).to.eql([]);",
                   "});"
                 ]
               }
