@@ -109,6 +109,15 @@ describe('Votaciones en tiempo real (namespace /votaciones)', () => {
     assert.deepEqual(ana, [{ viaje_id: VIAJE, votacion_id: VOTACION, motivo: 'cerrada', destino: 'Praga' }]);
   });
 
+  it('avisa cuando cambian los miembros del viaje, sin votación', async () => {
+    const ana = recibidos((await unirse('token-ana', VIAJE)).cliente);
+
+    votacionesSocket.avisarCambio(VIAJE, { motivo: 'miembros' });
+    await esperar(100);
+
+    assert.deepEqual(ana, [{ viaje_id: VIAJE, motivo: 'miembros' }]);
+  });
+
   it('quien sale del viaje deja de recibir avisos', async () => {
     const { cliente } = await unirse('token-ana', VIAJE);
     const ana = recibidos(cliente);
