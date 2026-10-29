@@ -973,8 +973,9 @@ Cuerpo (`application/json`):
 
 **Crea una votación**
 
-Crea una votación del viaje con sus opciones iniciales (entre 2 y 20, sin repetir), en una sola operación.
-La puede crear cualquier miembro mientras el viaje está activo. Después, cualquier miembro puede proponer más opciones.
+Crea una votación del viaje y, si se envían, sus opciones iniciales (hasta 20, sin repetir), en una sola operación.
+Las opciones son opcionales: se puede crear sin ninguna y que los miembros las propongan después.
+La puede crear cualquier miembro mientras el viaje está activo.
 No se pueden crear votaciones de destino: la del destino se abre sola al crear un viaje sin destino.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -992,7 +993,7 @@ No se pueden crear votaciones de destino: la del destino se abre sola al crear u
 | `titulo` | string | Sí |  | `¿Qué fin de semana salimos?` |
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, presupuesto, actividad, otro) | No | Las de destino no se crean a mano | `fecha` |
-| `opciones` | array<NuevaOpcionRequest> | Sí | Opciones iniciales, en el orden en que se mostrarán. No se pueden repetir |  |
+| `opciones` | array<NuevaOpcionRequest> | No | Opciones iniciales (opcionales), en el orden en que se mostrarán. No se pueden repetir |  |
 | `opciones[].texto` | string | Sí | Se guarda sin espacios a los lados | `Viernes 14` |
 | `opciones[].valor_fecha` | string (date) \| null | No | Fecha que representa la opción, en las votaciones de fechas (opcional) | `2027-05-14` |
 
@@ -1029,7 +1030,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `datos_invalidos` | La votación necesita entre 2 y 20 opciones |
+| `datos_invalidos` | Las opciones no se pueden repetir |
 
 **401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
 

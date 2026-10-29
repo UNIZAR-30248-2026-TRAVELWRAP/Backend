@@ -50,8 +50,9 @@ Al reconectarse, el cliente tiene que volver a emitir `unirse_viaje`, porque las
 | `opcion` | Se ha propuesto una opción (`POST .../votaciones/{votacionId}/opciones`) |
 | `voto` | Alguien ha votado, cambiado o retirado su voto (`PUT` y `DELETE .../voto`) |
 | `cerrada` | El creador ha cerrado la votación (`POST .../cerrar`). Si es la de destino, incluye además `destino` con el destino fijado en el viaje |
+| `miembros` | Alguien nuevo se ha unido al viaje (`POST /invitaciones/{token}/unirse`). No lleva `votacion_id`: cambia quién puede votar en todas las votaciones del viaje, y con ello `total_miembros` y `todos_han_votado` |
 
-El aviso **no lleva los datos de la votación**: el cliente la vuelve a pedir con `GET /viajes/{viajeId}/votaciones/{votacionId}`, o la lista entera si el motivo es `creada`. Así cada usuario recibe su propio `mi_voto` y se siguen aplicando las políticas RLS.
+El aviso **no lleva los datos de la votación**: el cliente la vuelve a pedir con `GET /viajes/{viajeId}/votaciones/{votacionId}`, o la lista entera si el motivo es `creada`. Con `miembros` vuelve a pedir también el viaje, para mostrar a los miembros nuevos. Así cada usuario recibe su propio `mi_voto` y se siguen aplicando las políticas RLS.
 
 ### Seguridad
 
@@ -61,5 +62,5 @@ El aviso **no lleva los datos de la votación**: el cliente la vuelve a pedir co
 
 ### Código y pruebas
 
-- Servidor: `src/sockets/votacionesSocket.js`, configurado en `src/index.js`. Los controladores de votaciones avisan después de cada cambio que sale bien.
-- Pruebas: `test/votacionesSocket.test.js`, con un servidor de Socket.io y clientes reales, y los avisos de `test/votacion.test.js`.
+- Servidor: `src/sockets/votacionesSocket.js`, configurado en `src/index.js`. Los controladores de votaciones avisan después de cada cambio que sale bien, y el de invitaciones cuando se une un miembro nuevo.
+- Pruebas: `test/votacionesSocket.test.js`, con un servidor de Socket.io y clientes reales, y los avisos de `test/votacion.test.js` y `test/invitationController.test.js`.

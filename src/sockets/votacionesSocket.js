@@ -5,8 +5,9 @@
 // «mi_voto» y se siguen aplicando las políticas RLS
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Motivos por los que cambia una votación
-const MOTIVOS = ['creada', 'opcion', 'voto', 'cerrada'];
+// Motivos del aviso: cambios en una votación, o en los miembros del viaje (cambia quién puede votar y,
+// con ello, si ya han votado todos)
+const MOTIVOS = ['creada', 'opcion', 'voto', 'cerrada', 'miembros'];
 
 const sala = (viajeId) => `viaje:${viajeId}`;
 
@@ -61,8 +62,9 @@ const configurar = (namespace, { comprobarToken, esMiembro }) => {
   });
 };
 
-// Avisa a los miembros conectados de que ha cambiado una votación del viaje.
+// Avisa a los miembros conectados de que ha cambiado una votación del viaje o sus miembros.
 // cambio: { votacion_id, motivo (creada | opcion | voto | cerrada), destino (solo al cerrar la de destino) }
+// o { motivo: miembros }, sin votación
 const avisarCambio = (viajeId, cambio) => {
   if (!espacio || !MOTIVOS.includes(cambio.motivo)) return;
   espacio.to(sala(viajeId)).emit('votacion_cambiada', { viaje_id: viajeId, ...cambio });
