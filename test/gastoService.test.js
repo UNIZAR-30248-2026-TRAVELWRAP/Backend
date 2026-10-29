@@ -1,8 +1,9 @@
 // Pruebas del servicio de gastos: llamada a la función SQL crear_gasto y lectura del gasto creado.
 // Supabase se sustituye por un cliente falso
-const { describe, it } = require('node:test');
+const { afterEach, describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const gastoService = require('../src/services/gastoService');
+const viajeService = require('../src/services/viajeService');
 
 // Identificadores de ejemplo
 const VIAJE_ID = '123e4567-e89b-12d3-a456-426614174000';
@@ -181,5 +182,84 @@ describe('gastoService.crear', () => {
     });
 
     assert.deepEqual(await gastoService.crear(cliente, VIAJE_ID, DATOS), { error });
+  });
+});
+
+// Historial: primero se comprueba el viaje y después se leen sus gastos
+describe('gastoService.listar', () => {
+  afterEach(() => mock.restoreAll());
+
+  const conViaje = (viaje = { id: VIAJE_ID }) => mock.method(viajeService, 'obtener', async () => ({ viaje }));
+
+  it('lista los gastos del viaje del más reciente al más antiguo, con los importes como número', async () => {
+    const obtenerViaje = conViaje();
+    const cliente = clienteFalso({
+      respuestas: [{ data: [{ ...FILA, id: 'g2', fecha: '2027-05-13' }, FILA], error: null }],
+    });
+
+    const resultado = await gastoService.listar(cliente, ADRIANA, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.deepEqual(resultado.gastos.map((g) => g.id), ['g2', GASTO_ID]);
+    assert.equal(resultado.gastos[1].importe, 10);
+    assert.deepEqual(resultado.gastos[1].repartos[0], { usuario_id: ADRIANA, importe: 3.34 });
+    assert.deepEqual(obtenerViaje.mock.calls[0].arguments.slice(1), [ADRIANA, VIAJE_ID]);
+    const [consulta] = cliente.consultas;
+    assert.equal(consulta.tabla, 'gastos');
+    assert.deepEqual(operacion(consulta, 'eq'), [['eq', 'viaje_id', VIAJE_ID]]);
+    assert.deepEqual(operacion(consulta, 'order'), [
+      ['order', 'fecha', { ascending: false }],
+      ['order', 'creado_en', { ascending: false }],
+    ]);
+  });
+
+  it('suma el total en céntimos, sin errores de coma flotante', async () => {
+    conViaje();
+    const cliente = clienteFalso({
+      respuestas: [{ data: [{ ...FILA, importe: '0.10' }, { ...FILA, importe: '0.20' }], error: null }],
+    });
+
+    const resultado = await gastoService.listar(cliente, ADRIANA, VIAJE_ID);
+
+    assert.equal(resultado.total, 0.3);
+  });
+
+  it('devuelve una lista vacía y total 0 si el viaje no tiene gastos', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [{ data: [], error: null }] });
+
+    assert.deepEqual(await gastoService.listar(cliente, ADRIANA, VIAJE_ID), { estado: 'ok', gastos: [], total: 0 });
+  });
+
+  it('trata una respuesta sin filas como una lista vacía', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [{ data: null, error: null }] });
+
+    assert.deepEqual(await gastoService.listar(cliente, ADRIANA, VIAJE_ID), { estado: 'ok', gastos: [], total: 0 });
+  });
+
+  it('devuelve no_existe sin leer los gastos si el viaje no existe o no se es miembro', async () => {
+    conViaje(null);
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.listar(cliente, ADRIANA, VIAJE_ID), { estado: 'no_existe' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve el error si falla la comprobación del viaje', async () => {
+    const error = { code: 'PGRST301' };
+    mock.method(viajeService, 'obtener', async () => ({ error }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.listar(cliente, ADRIANA, VIAJE_ID), { error });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve el error si falla la lectura de los gastos', async () => {
+    conViaje();
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [{ data: null, error }] });
+
+    assert.deepEqual(await gastoService.listar(cliente, ADRIANA, VIAJE_ID), { error });
   });
 });

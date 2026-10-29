@@ -197,3 +197,82 @@ describe('POST /viajes/:viajeId/gastos (crear)', () => {
     esperarError(res, 500, 'error_interno');
   });
 });
+
+// Historial
+
+// Llama a GET /viajes/:viajeId/gastos como lo haría Express tras pasar por requiereSesion
+const llamarListar = async ({ viajeId = VIAJE_ID } = {}) => {
+  const req = { params: { viajeId }, usuario: USUARIO, supabase: {} };
+  const res = crearRes();
+  await gastoController.listar(req, res);
+  return res;
+};
+
+const simularListar = (implementacion) => mock.method(gastoService, 'listar', implementacion);
+
+describe('GET /viajes/:viajeId/gastos (listar)', () => {
+  it('devuelve los gastos y el total con 200', async () => {
+    const gastos = [{ id: 'g2', concepto: 'Taxi', importe: 35 }, { id: 'g1', concepto: 'Cena', importe: 60.5 }];
+    const listar = simularListar(async () => ({ estado: 'ok', gastos, total: 95.5 }));
+
+    const res = await llamarListar();
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { gastos, total: 95.5 });
+    const [, usuarioId, viajeId] = listar.mock.calls[0].arguments;
+    assert.equal(usuarioId, ADRIANA);
+    assert.equal(viajeId, VIAJE_ID);
+  });
+
+  it('devuelve una lista vacía y total 0 si el viaje no tiene gastos', async () => {
+    simularListar(async () => ({ estado: 'ok', gastos: [], total: 0 }));
+
+    const res = await llamarListar();
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { gastos: [], total: 0 });
+  });
+
+  it('rechaza un identificador de viaje que no es un UUID sin llamar al servicio', async () => {
+    const listar = simularListar(async () => ({ estado: 'ok', gastos: [], total: 0 }));
+
+    const res = await llamarListar({ viajeId: 'roma-2027' });
+
+    esperarError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
+    assert.equal(listar.mock.callCount(), 0);
+  });
+
+  it('responde 404 si el viaje no existe o no se es miembro', async () => {
+    simularListar(async () => ({ estado: 'no_existe' }));
+
+    const res = await llamarListar();
+
+    esperarError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
+  });
+
+  it('responde 502 si falla la base de datos', async () => {
+    simularListar(async () => ({ error: { code: 'PGRST301' } }));
+
+    const res = await llamarListar();
+
+    esperarError(res, 502, 'error_gasto', 'No se han podido obtener los gastos');
+  });
+
+  it('responde 502 ante un estado desconocido del servicio', async () => {
+    simularListar(async () => ({ estado: 'desconocido' }));
+
+    const res = await llamarListar();
+
+    esperarError(res, 502, 'error_gasto', 'No se han podido obtener los gastos');
+  });
+
+  it('responde 500 si el servicio lanza una excepción', async () => {
+    simularListar(async () => {
+      throw new Error('sin red');
+    });
+
+    const res = await llamarListar();
+
+    esperarError(res, 500, 'error_interno');
+  });
+});
