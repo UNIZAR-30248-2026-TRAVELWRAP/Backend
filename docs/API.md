@@ -41,6 +41,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 
 ## General
@@ -1893,6 +1894,78 @@ está activo. Responde 204 sin cuerpo.
 | `error_actividad` | No se ha podido eliminar la actividad |
 
 ## Gastos
+
+### GET /viajes/{viajeId}/gastos
+
+**Lista el historial de gastos del viaje con el total**
+
+Devuelve los gastos del viaje del más reciente al más antiguo (por fecha y, en el mismo día, por la hora a
+la que se registraron), cada uno con la parte de cada participante, y el total gastado, sumado en céntimos.
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Historial de gastos y total (lista vacía y total 0 si el viaje aún no tiene gastos)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `gastos` | array<Gasto> | No | Gastos del viaje, del más reciente al más antiguo |  |
+| `gastos[].id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+| `gastos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `gastos[].concepto` | string | No |  | `Cena en el Trastevere` |
+| `gastos[].importe` | number | No |  | `60.5` |
+| `gastos[].categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) | No |  | `comida` |
+| `gastos[].pagado_por` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `gastos[].fecha` | string (date) | No |  | `2027-05-12` |
+| `gastos[].creado_por` | string (uuid) \| null | No | Quién registró el gasto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `gastos[].creado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `gastos[].actualizado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `gastos[].repartos` | array<RepartoGasto> | No | Parte de cada participante; suman el importe del gasto | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","importe":30.25},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","importe":30.25}]` |
+| `gastos[].repartos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `gastos[].repartos[].importe` | number | No | Parte del gasto que le corresponde a este miembro | `30.25` |
+| `total` | number | No | Suma de los importes de todos los gastos del viaje | `107.84` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se han podido obtener los gastos |
 
 ### POST /viajes/{viajeId}/gastos
 

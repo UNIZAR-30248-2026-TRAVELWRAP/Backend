@@ -4804,6 +4804,118 @@
           ]
         },
         {
+          "name": "Listar el historial de gastos con el total",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Están los tres gastos registrados', () => {",
+                  "  pm.expect(body.gastos.map((g) => g.concepto)).to.have.members(['Cena en el Trastevere', 'Taxi al aeropuerto', 'Entradas del Coliseo']);",
+                  "});",
+                  "pm.test('Del más reciente al más antiguo', () => {",
+                  "  const claves = body.gastos.map((g) => g.fecha + ' ' + g.creado_en);",
+                  "  pm.expect(claves).to.eql([...claves].sort().reverse());",
+                  "});",
+                  "pm.test('El total es la suma de los importes: 60,50 + 35 + 12,34', () => pm.expect(body.total).to.eql(107.84));",
+                  "pm.test('Cada gasto trae la parte de cada participante', () => {",
+                  "  body.gastos.forEach((g) => pm.expect(g.repartos).to.have.lengthOf(1));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar gastos con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma-2027/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar gastos sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar gastos de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Registrar un gasto sin concepto",
           "request": {
             "method": "POST",
@@ -5305,6 +5417,42 @@
                   "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
                   "pm.test('Código viaje_no_activo', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los gastos de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Están los tres gastos registrados', () => {",
+                  "  pm.expect(body.gastos.map((g) => g.concepto)).to.have.members(['Cena en el Trastevere', 'Taxi al aeropuerto', 'Entradas del Coliseo']);",
+                  "});",
+                  "pm.test('Del más reciente al más antiguo', () => {",
+                  "  const claves = body.gastos.map((g) => g.fecha + ' ' + g.creado_en);",
+                  "  pm.expect(claves).to.eql([...claves].sort().reverse());",
+                  "});",
+                  "pm.test('El total es la suma de los importes: 60,50 + 35 + 12,34', () => pm.expect(body.total).to.eql(107.84));",
+                  "pm.test('Cada gasto trae la parte de cada participante', () => {",
+                  "  body.gastos.forEach((g) => pm.expect(g.repartos).to.have.lengthOf(1));",
                   "});"
                 ]
               }
