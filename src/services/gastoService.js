@@ -1,3 +1,5 @@
+const viajeService = require('./viajeService');
+
 const CAMPOS_GASTO =
   'id, viaje_id, concepto, importe, categoria, pagado_por, fecha, creado_por, creado_en, actualizado_en, ' +
   'repartos:repartos_gasto (usuario_id, importe)';
@@ -23,6 +25,29 @@ const obtener = async (cliente, viajeId, gastoId) => {
   return { estado: 'ok', gasto: formatear(data) };
 };
 
+// Suma de los importes, en céntimos para no arrastrar errores de coma flotante (0,1 + 0,2 = 0,3)
+const sumar = (gastos) => gastos.reduce((total, gasto) => total + Math.round(gasto.importe * 100), 0) / 100;
+
+// Historial de gastos del viaje, del más reciente al más antiguo, con el total gastado.
+// También se puede consultar en viajes archivados o finalizados: solo lee
+// Devuelve { error } | { estado: no_existe | ok (con gastos y total) }
+const listar = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  const { data, error } = await cliente
+    .from('gastos')
+    .select(CAMPOS_GASTO)
+    .eq('viaje_id', viajeId)
+    .order('fecha', { ascending: false })
+    .order('creado_en', { ascending: false });
+  if (error) return { error };
+
+  const gastos = (data ?? []).map(formatear);
+  return { estado: 'ok', gastos, total: sumar(gastos) };
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -43,4 +68,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, crear };
+module.exports = { obtener, listar, crear };

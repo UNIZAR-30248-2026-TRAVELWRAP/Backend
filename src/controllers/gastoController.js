@@ -96,11 +96,27 @@ const responderMotivo = (res, estado, mensajeFallo) => {
   return responderError(res, codigoHttp, codigo, mensaje);
 };
 
+const idViajeInvalido = (res) =>
+  responderError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
+
+const listar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  try {
+    const resultado = await gastoService.listar(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se han podido obtener los gastos');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se han podido obtener los gastos');
+    return res.status(200).json({ gastos: resultado.gastos, total: resultado.total });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const crear = async (req, res) => {
   const { viajeId } = req.params;
-  if (!UUID_REGEX.test(viajeId)) {
-    return responderError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
-  }
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
 
   const validacion = validarNuevoGasto(req.body);
   if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
@@ -121,4 +137,4 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { crear };
+module.exports = { listar, crear };
