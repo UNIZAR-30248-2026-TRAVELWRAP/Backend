@@ -43,6 +43,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
 
 ## General
 
@@ -2059,3 +2060,67 @@ participante no es miembro del viaje
 | Código de error | Mensaje |
 | --- | --- |
 | `error_gasto` | No se ha podido registrar el gasto |
+
+### GET /viajes/{viajeId}/gastos/balance
+
+**Saldo de cada miembro del viaje**
+
+Devuelve, para cada miembro, lo que ha pagado, su parte de los gastos y su saldo (lo pagado menos su parte):
+positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
+siempre está al día y la suma de todos los saldos es 0.
+Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
+sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Saldo de cada miembro (todos a 0 si el viaje aún no tiene gastos)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `saldos` | array<SaldoMiembro> | No | Un saldo por miembro; entre todos suman 0 | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","nombre":"Adriana","pagado":10,"parte":6.34,"saldo":3.66},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","nombre":"Berta","pagado":6,"parte":6.33,"saldo":-0.33},{"usuario_id":"8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f","nombre":"Daniel","pagado":0,"parte":3.33,"saldo":-3.33}]` |
+| `saldos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `saldos[].nombre` | string \| null | No | Nombre del miembro (null si ya abandonó el viaje) | `Adriana` |
+| `saldos[].pagado` | number | No | Suma de los gastos que ha pagado | `10` |
+| `saldos[].parte` | number | No | Suma de sus partes en los repartos de los gastos | `6.34` |
+| `saldos[].saldo` | number | No | Lo pagado menos su parte. Positivo, le deben; negativo, debe | `3.66` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido calcular el balance |

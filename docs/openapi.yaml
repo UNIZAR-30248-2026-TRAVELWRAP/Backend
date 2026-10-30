@@ -1918,6 +1918,63 @@ paths:
                   codigo: error_gasto
                   mensaje: No se ha podido registrar el gasto
 
+  /viajes/{viajeId}/gastos/balance:
+    get:
+      tags:
+        - Gastos
+      summary: Saldo de cada miembro del viaje
+      description: |
+        Devuelve, para cada miembro, lo que ha pagado, su parte de los gastos y su saldo (lo pagado menos su parte):
+        positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
+        siempre está al día y la suma de todos los saldos es 0.
+        Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
+        sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Saldo de cada miembro (todos a 0 si el viaje aún no tiene gastos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido calcular el balance
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2892,6 +2949,56 @@ components:
           type: number
           description: Suma de los importes de todos los gastos del viaje
           example: 107.84
+
+    SaldoMiembro:
+      type: object
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        nombre:
+          type: string
+          nullable: true
+          description: Nombre del miembro (null si ya abandonó el viaje)
+          example: Adriana
+        pagado:
+          type: number
+          description: Suma de los gastos que ha pagado
+          example: 10
+        parte:
+          type: number
+          description: Suma de sus partes en los repartos de los gastos
+          example: 6.34
+        saldo:
+          type: number
+          description: Lo pagado menos su parte. Positivo, le deben; negativo, debe
+          example: 3.66
+
+    Balance:
+      type: object
+      properties:
+        saldos:
+          type: array
+          description: Un saldo por miembro; entre todos suman 0
+          items:
+            $ref: '#/components/schemas/SaldoMiembro'
+          example:
+            - usuario_id: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+              nombre: Adriana
+              pagado: 10
+              parte: 6.34
+              saldo: 3.66
+            - usuario_id: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+              nombre: Berta
+              pagado: 6
+              parte: 6.33
+              saldo: -0.33
+            - usuario_id: 8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f
+              nombre: Daniel
+              pagado: 0
+              parte: 3.33
+              saldo: -3.33
 
     Error:
       type: object

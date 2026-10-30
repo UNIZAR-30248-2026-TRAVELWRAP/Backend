@@ -4917,6 +4917,121 @@
           ]
         },
         {
+          "name": "Ver el balance del viaje",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { saldos } = pm.response.json();",
+                  "const yo = pm.collectionVariables.get('usuarioIdGasto');",
+                  "pm.test('Un saldo por miembro', () => {",
+                  "  pm.expect(saldos).to.have.lengthOf(1);",
+                  "  pm.expect(saldos[0].usuario_id).to.eql(yo);",
+                  "  pm.expect(saldos[0].nombre).to.be.a('string');",
+                  "});",
+                  "pm.test('Ha pagado 107,84 € y su parte es la misma, así que su saldo es 0', () => {",
+                  "  pm.expect(saldos[0].pagado).to.eql(107.84);",
+                  "  pm.expect(saldos[0].parte).to.eql(107.84);",
+                  "  pm.expect(saldos[0].saldo).to.eql(0);",
+                  "});",
+                  "pm.test('Los saldos suman 0', () => {",
+                  "  pm.expect(saldos.reduce((total, s) => total + Math.round(s.saldo * 100), 0)).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma-2027/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Registrar un gasto sin concepto",
           "request": {
             "method": "POST",
@@ -5454,6 +5569,45 @@
                   "pm.test('El total es la suma de los importes: 60,50 + 35 + 12,34', () => pm.expect(body.total).to.eql(107.84));",
                   "pm.test('Cada gasto trae la parte de cada participante', () => {",
                   "  body.gastos.forEach((g) => pm.expect(g.repartos).to.have.lengthOf(1));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { saldos } = pm.response.json();",
+                  "const yo = pm.collectionVariables.get('usuarioIdGasto');",
+                  "pm.test('Un saldo por miembro', () => {",
+                  "  pm.expect(saldos).to.have.lengthOf(1);",
+                  "  pm.expect(saldos[0].usuario_id).to.eql(yo);",
+                  "  pm.expect(saldos[0].nombre).to.be.a('string');",
+                  "});",
+                  "pm.test('Ha pagado 107,84 € y su parte es la misma, así que su saldo es 0', () => {",
+                  "  pm.expect(saldos[0].pagado).to.eql(107.84);",
+                  "  pm.expect(saldos[0].parte).to.eql(107.84);",
+                  "  pm.expect(saldos[0].saldo).to.eql(0);",
+                  "});",
+                  "pm.test('Los saldos suman 0', () => {",
+                  "  pm.expect(saldos.reduce((total, s) => total + Math.round(s.saldo * 100), 0)).to.eql(0);",
                   "});"
                 ]
               }
