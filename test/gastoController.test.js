@@ -276,3 +276,76 @@ describe('GET /viajes/:viajeId/gastos (listar)', () => {
     esperarError(res, 500, 'error_interno');
   });
 });
+
+// Balance 
+
+// Llama a GET /viajes/:viajeId/gastos/balance como lo haría Express tras pasar por requiereSesion
+const llamarBalance = async ({ viajeId = VIAJE_ID } = {}) => {
+  const req = { params: { viajeId }, usuario: USUARIO, supabase: {} };
+  const res = crearRes();
+  await gastoController.balance(req, res);
+  return res;
+};
+
+const simularBalance = (implementacion) => mock.method(gastoService, 'balance', implementacion);
+
+describe('GET /viajes/:viajeId/gastos/balance (balance)', () => {
+  it('devuelve el saldo de cada miembro con 200', async () => {
+    const saldos = [
+      { usuario_id: ADRIANA, nombre: 'Adriana', pagado: 60, parte: 30, saldo: 30 },
+      { usuario_id: BERTA, nombre: 'Berta', pagado: 0, parte: 30, saldo: -30 },
+    ];
+    const balance = simularBalance(async () => ({ estado: 'ok', saldos }));
+
+    const res = await llamarBalance();
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { saldos });
+    const [, usuarioId, viajeId] = balance.mock.calls[0].arguments;
+    assert.equal(usuarioId, ADRIANA);
+    assert.equal(viajeId, VIAJE_ID);
+  });
+
+  it('rechaza un identificador de viaje que no es un UUID sin llamar al servicio', async () => {
+    const balance = simularBalance(async () => ({ estado: 'ok', saldos: [] }));
+
+    const res = await llamarBalance({ viajeId: 'roma-2027' });
+
+    esperarError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
+    assert.equal(balance.mock.callCount(), 0);
+  });
+
+  it('responde 404 si el viaje no existe o no se es miembro', async () => {
+    simularBalance(async () => ({ estado: 'no_existe' }));
+
+    const res = await llamarBalance();
+
+    esperarError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
+  });
+
+  it('responde 502 si falla la base de datos', async () => {
+    simularBalance(async () => ({ error: { code: 'PGRST301' } }));
+
+    const res = await llamarBalance();
+
+    esperarError(res, 502, 'error_gasto', 'No se ha podido calcular el balance');
+  });
+
+  it('responde 502 ante un estado desconocido del servicio', async () => {
+    simularBalance(async () => ({ estado: 'desconocido' }));
+
+    const res = await llamarBalance();
+
+    esperarError(res, 502, 'error_gasto', 'No se ha podido calcular el balance');
+  });
+
+  it('responde 500 si el servicio lanza una excepción', async () => {
+    simularBalance(async () => {
+      throw new Error('sin red');
+    });
+
+    const res = await llamarBalance();
+
+    esperarError(res, 500, 'error_interno');
+  });
+});

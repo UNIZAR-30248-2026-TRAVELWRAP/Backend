@@ -263,3 +263,148 @@ describe('gastoService.listar', () => {
     assert.deepEqual(await gastoService.listar(cliente, ADRIANA, VIAJE_ID), { error });
   });
 });
+
+// Balance: saldo de cada miembro a partir de los gastos y sus repartos. El viaje (con sus miembros) es simulado
+describe('gastoService.balance', () => {
+  afterEach(() => mock.restoreAll());
+
+  const DANIEL = '8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f';
+  const MIEMBROS = [
+    { usuario_id: ADRIANA, nombre: 'Adriana' },
+    { usuario_id: BERTA, nombre: 'Berta' },
+    { usuario_id: DANIEL, nombre: 'Daniel' },
+  ];
+  const conMiembros = (miembros = MIEMBROS) =>
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, miembros } }));
+
+  // Así llegan las filas de Supabase: los numeric como texto
+  const gastoDe = (pagadoPor, importe, repartos) => ({
+    importe,
+    pagado_por: pagadoPor,
+    repartos: repartos.map(([usuarioId, parte]) => ({ usuario_id: usuarioId, importe: parte })),
+  });
+
+  const sumaDeSaldos = (saldos) => saldos.reduce((total, s) => total + Math.round(s.saldo * 100), 0);
+
+  it('calcula lo pagado, la parte y el saldo de cada miembro, y los saldos suman 0', async () => {
+    conMiembros();
+    const cliente = clienteFalso({
+      respuestas: [{
+        data: [
+          gastoDe(ADRIANA, '10.00', [[ADRIANA, '3.34'], [BERTA, '3.33'], [DANIEL, '3.33']]),
+          gastoDe(BERTA, '6.00', [[ADRIANA, '3.00'], [BERTA, '3.00']]),
+        ],
+        error: null,
+      }],
+    });
+
+    const resultado = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(resultado, {
+      estado: 'ok',
+      saldos: [
+        { usuario_id: ADRIANA, nombre: 'Adriana', pagado: 10, parte: 6.34, saldo: 3.66 },
+        { usuario_id: BERTA, nombre: 'Berta', pagado: 6, parte: 6.33, saldo: -0.33 },
+        { usuario_id: DANIEL, nombre: 'Daniel', pagado: 0, parte: 3.33, saldo: -3.33 },
+      ],
+    });
+    assert.equal(sumaDeSaldos(resultado.saldos), 0);
+  });
+
+  it('lee solo los gastos del viaje, con su importe, quién pagó y los repartos', async () => {
+    conMiembros();
+    const cliente = clienteFalso({ respuestas: [{ data: [], error: null }] });
+
+    await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    const [consulta] = cliente.consultas;
+    assert.equal(consulta.tabla, 'gastos');
+    assert.deepEqual(operacion(consulta, 'select'), [
+      ['select', 'importe, pagado_por, repartos:repartos_gasto (usuario_id, importe)'],
+    ]);
+    assert.deepEqual(operacion(consulta, 'eq'), [['eq', 'viaje_id', VIAJE_ID]]);
+  });
+
+  it('sin gastos todos los miembros tienen saldo 0', async () => {
+    conMiembros();
+    const cliente = clienteFalso({ respuestas: [{ data: null, error: null }] });
+
+    const { saldos } = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(saldos.map((s) => [s.nombre, s.pagado, s.parte, s.saldo]), [
+      ['Adriana', 0, 0, 0],
+      ['Berta', 0, 0, 0],
+      ['Daniel', 0, 0, 0],
+    ]);
+  });
+
+  it('suma en céntimos, sin errores de coma flotante', async () => {
+    conMiembros();
+    const gastos = Array.from({ length: 10 }, () => gastoDe(ADRIANA, '0.10', [[BERTA, '0.10']]));
+    const cliente = clienteFalso({ respuestas: [{ data: gastos, error: null }] });
+
+    const { saldos } = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.equal(saldos[0].pagado, 1);
+    assert.equal(saldos[0].saldo, 1);
+    assert.equal(saldos[1].saldo, -1);
+  });
+
+  it('incluye, al final y sin nombre, a quien abandonó el viaje con gastos', async () => {
+    conMiembros(MIEMBROS.slice(0, 2));
+    const cliente = clienteFalso({
+      respuestas: [{
+        data: [
+          gastoDe(DANIEL, '20.00', [[ADRIANA, '10.00'], [DANIEL, '10.00']]),
+          gastoDe(ADRIANA, '4.00', [[BERTA, '4.00']]),
+        ],
+        error: null,
+      }],
+    });
+
+    const { saldos } = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(saldos.map((s) => [s.usuario_id, s.nombre, s.saldo]), [
+      [ADRIANA, 'Adriana', -6],
+      [BERTA, 'Berta', -4],
+      [DANIEL, null, 10],
+    ]);
+    assert.equal(sumaDeSaldos(saldos), 0);
+  });
+
+  it('trata un gasto sin repartos como pagado y sin partes', async () => {
+    conMiembros();
+    const cliente = clienteFalso({
+      respuestas: [{ data: [{ importe: '5.00', pagado_por: BERTA, repartos: null }], error: null }],
+    });
+
+    const { saldos } = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.equal(saldos[1].pagado, 5);
+    assert.equal(saldos[1].parte, 0);
+  });
+
+  it('devuelve no_existe sin leer los gastos si el viaje no existe o no se es miembro', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.balance(cliente, ADRIANA, VIAJE_ID), { estado: 'no_existe' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve el error si falla la comprobación del viaje', async () => {
+    const error = { code: 'PGRST301' };
+    mock.method(viajeService, 'obtener', async () => ({ error }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.balance(cliente, ADRIANA, VIAJE_ID), { error });
+  });
+
+  it('devuelve el error si falla la lectura de los gastos', async () => {
+    conMiembros();
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [{ data: null, error }] });
+
+    assert.deepEqual(await gastoService.balance(cliente, ADRIANA, VIAJE_ID), { error });
+  });
+});
