@@ -48,6 +48,44 @@ const listar = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok', gastos, total: sumar(gastos) };
 };
 
+const aCentimos = (importe) => Math.round(Number(importe) * 100);
+
+// Saldo de cada miembro: lo que ha pagado menos su parte de los gastos. Positivo, le deben y negativo, debe.
+// Se calcula en céntimos a partir de los gastos y sus repartos, así que siempre está al día y la suma de todos
+// los saldos es 0. Salen primero los miembros actuales, en el orden del viaje, y después quien ya lo ha abandonado
+// pero sigue teniendo gastos (sin nombre, porque ya no aparece entre los miembros)
+// Devuelve { error } | { estado: no_existe | ok (con saldos) }
+const balance = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  const { data, error } = await cliente
+    .from('gastos')
+    .select('importe, pagado_por, repartos:repartos_gasto (usuario_id, importe)')
+    .eq('viaje_id', viajeId);
+  if (error) return { error };
+
+  const cuentas = new Map(previo.viaje.miembros.map((m) => [m.usuario_id, { nombre: m.nombre, pagado: 0, parte: 0 }]));
+  const cuentaDe = (id) => {
+    if (!cuentas.has(id)) cuentas.set(id, { nombre: null, pagado: 0, parte: 0 });
+    return cuentas.get(id);
+  };
+  for (const gasto of data ?? []) {
+    cuentaDe(gasto.pagado_por).pagado += aCentimos(gasto.importe);
+    for (const reparto of gasto.repartos ?? []) cuentaDe(reparto.usuario_id).parte += aCentimos(reparto.importe);
+  }
+
+  const saldos = [...cuentas].map(([id, { nombre, pagado, parte }]) => ({
+    usuario_id: id,
+    nombre,
+    pagado: pagado / 100,
+    parte: parte / 100,
+    saldo: (pagado - parte) / 100,
+  }));
+  return { estado: 'ok', saldos };
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -68,4 +106,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, crear };
+module.exports = { obtener, listar, balance, crear };

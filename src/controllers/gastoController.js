@@ -85,6 +85,7 @@ const validarNuevoGasto = (cuerpo) => {
   };
 };
 
+// Motivos de fallo que pueden devolver los servicios de gasto
 const ERRORES = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está cerrado y ya no se puede modificar'],
@@ -114,6 +115,21 @@ const listar = async (req, res) => {
   }
 };
 
+const balance = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  try {
+    const resultado = await gastoService.balance(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido calcular el balance');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido calcular el balance');
+    return res.status(200).json({ saldos: resultado.saldos });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const crear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
@@ -137,4 +153,4 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { listar, crear };
+module.exports = { listar, balance, crear };
