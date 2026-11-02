@@ -23,6 +23,15 @@ const validarPresupuesto = (presupuesto) => {
   return { valor: presupuesto };
 };
 
+// Al crear, el nombre es opcional: sin él (null), la base de datos le pone uno por defecto
+const validarNombreOpcional = (valor) => {
+  const nombre = textoOpcional(valor);
+  if (nombre === undefined || (nombre !== null && nombre.length > MAX_TEXTO)) {
+    return { error: `El nombre debe ser un texto de ${MAX_TEXTO} caracteres como máximo` };
+  }
+  return { valor: nombre };
+};
+
 // Al crear, un destino vacío deja el viaje pendiente de votación
 const validarDestino = (valor) => {
   const destino = textoOpcional(valor);
@@ -50,7 +59,7 @@ const validarFecha = (valor) => {
 const validarNuevoViaje = (cuerpo) => {
   const datos = cuerpo ?? {};
 
-  const nombre = validarNombre(datos.nombre);
+  const nombre = validarNombreOpcional(datos.nombre);
   if (nombre.error) return nombre;
   const presupuesto = validarPresupuesto(datos.presupuesto);
   if (presupuesto.error) return presupuesto;

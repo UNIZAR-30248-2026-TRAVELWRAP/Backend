@@ -485,7 +485,7 @@ paths:
                   value:
                     error:
                       codigo: datos_invalidos
-                      mensaje: El nombre es obligatorio y tiene un máximo de 100 caracteres
+                      mensaje: El nombre debe ser un texto de 100 caracteres como máximo
                 presupuesto:
                   value:
                     error:
@@ -2198,12 +2198,17 @@ components:
     NuevoViajeRequest:
       type: object
       required:
-        - nombre
         - presupuesto
       properties:
         nombre:
           type: string
+          nullable: true
           maxLength: 100
+          description: >-
+            Opcional. Sin nombre (ausente, null o vacío), el viaje se llama como su destino y el año de sus fechas
+            («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino lleva uno temporal («Viaje sin destino 2027»)
+            que pasa a ser el del destino cuando se fija por votación. Mientras nadie escriba otro nombre, se vuelve a
+            generar al cambiar el destino o las fechas
           example: "Verano 2027"
         presupuesto:
           type: number
