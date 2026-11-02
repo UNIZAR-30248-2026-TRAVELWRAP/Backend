@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   creador_id uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   nombre text NOT NULL,
+  -- true si el nombre lo ha puesto la aplicación (destino y año, o uno temporal mientras no hay destino):
+  -- se vuelve a generar al cambiar el destino o las fechas, hasta que alguien escriba otro nombre
+  nombre_automatico boolean NOT NULL DEFAULT false,
   -- Null mientras el destino está pendiente de decidir por votación
   destino text,
   descripcion text,
@@ -125,6 +128,9 @@ CREATE TABLE IF NOT EXISTS public.votos (
   CONSTRAINT votos_opcion_de_la_votacion FOREIGN KEY (opcion_id, votacion_id)
     REFERENCES public.opciones_votacion (id, votacion_id) ON DELETE CASCADE
 );
+
+-- Viajes creados antes de que existiera el nombre automático
+ALTER TABLE public.viajes ADD COLUMN IF NOT EXISTS nombre_automatico boolean NOT NULL DEFAULT false;
 
 -- votaciones y opciones_votacion se referencian entre sí: la clave de la opción ganadora se añade al final
 ALTER TABLE public.votaciones DROP CONSTRAINT IF EXISTS votaciones_opcion_ganadora_fk;
