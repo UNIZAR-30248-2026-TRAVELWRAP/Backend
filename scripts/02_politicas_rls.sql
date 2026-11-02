@@ -199,7 +199,7 @@ CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
   WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- Cualquier miembro corrige o borra gastos mientras el viaje está activo (como con las actividades).
--- En un viaje cerrado o archivado los gastos quedan de solo lectura
+-- En un viaje finalizado o archivado los gastos quedan de solo lectura
 DROP POLICY IF EXISTS gastos_update ON public.gastos;
 CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))

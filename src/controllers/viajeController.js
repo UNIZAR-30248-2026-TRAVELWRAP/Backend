@@ -109,7 +109,7 @@ const validarCambiosViaje = (cuerpo) => {
 const ERRORES_GESTION = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_creador: [403, 'no_creador', 'Solo el creador del viaje puede hacerlo'],
-  no_activo: [409, 'viaje_no_activo', 'El viaje está cerrado y ya no se puede modificar'],
+  no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
 };

@@ -91,7 +91,7 @@ const editar = async (cliente, usuarioId, viajeId, cambios) => {
   return actualizar(cliente, usuarioId, viajeId, cambios);
 };
 
-// Cierra el viaje y lo pasa al historial de solo lectura
+// Finaliza el viaje y lo pasa al historial de solo lectura
 // Devuelve { error } | { estado: no_existe | no_creador | ya_archivado | ok (con viaje) }
 const archivar = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeDelCreador(cliente, usuarioId, viajeId);

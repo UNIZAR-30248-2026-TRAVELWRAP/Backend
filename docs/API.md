@@ -26,7 +26,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}`](#get-viajesviajeid) | Obtiene el detalle de un viaje | Token de sesión |
 | PATCH | [`/viajes/{viajeId}`](#patch-viajesviajeid) | Edita los datos de un viaje | Token de sesión |
 | DELETE | [`/viajes/{viajeId}`](#delete-viajesviajeid) | Elimina un viaje archivado | Token de sesión |
-| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Cierra y archiva un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Finaliza y archiva un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 | GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
@@ -417,7 +417,7 @@ Si no se indica destino (`null`, ausente o cadena vacía) el viaje queda **pendi
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
-| `nombre` | string | Sí |  | `Verano 2027` |
+| `nombre` | string \| null | No | Opcional. Sin nombre (ausente, null o vacío), el viaje se llama como su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino lleva uno temporal («Viaje sin destino 2027») que pasa a ser el del destino cuando se fija por votación. Mientras nadie escriba otro nombre, se vuelve a generar al cambiar el destino o las fechas | `Verano 2027` |
 | `presupuesto` | number | Sí | Presupuesto estimado del viaje en su moneda (EUR). Se puede cambiar después | `850` |
 | `destino` | string \| null | No | Si es null, está ausente o es una cadena vacía, el viaje queda pendiente de decidir el destino por votación | `Roma` |
 | `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
@@ -447,7 +447,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `datos_invalidos` | El nombre es obligatorio y tiene un máximo de 100 caracteres |
+| `datos_invalidos` | El nombre debe ser un texto de 100 caracteres como máximo |
 | `datos_invalidos` | El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999 |
 | `datos_invalidos` | La fecha de fin no puede ser anterior a la de inicio |
 
@@ -615,11 +615,11 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está cerrado o archivado y ya no se puede modificar
+**409** — El viaje está finalizado o archivado y ya no se puede modificar
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -690,7 +690,7 @@ Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece de
 
 ### POST /viajes/{viajeId}/archivar
 
-**Cierra y archiva un viaje**
+**Finaliza y archiva un viaje**
 
 Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
 no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
@@ -1050,7 +1050,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1308,7 +1308,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 | `votacion_cerrada` | La votación ya está cerrada |
 
 **500** — Error interno del servidor
@@ -1391,7 +1391,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 | `votacion_cerrada` | La votación ya está cerrada |
 
 **500** — Error interno del servidor
@@ -1726,7 +1726,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1823,7 +1823,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1881,7 +1881,7 @@ está activo. Responde 204 sin cuerpo.
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -2047,7 +2047,7 @@ participante no es miembro del viaje
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
