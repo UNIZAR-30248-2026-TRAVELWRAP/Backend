@@ -58,6 +58,29 @@ AS $$
   );
 $$;
 
+-- Nombre por defecto de un viaje: su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de
+-- año). Sin destino, uno temporal («Viaje sin destino 2027»). Como mucho 100 caracteres
+CREATE OR REPLACE FUNCTION public.nombre_por_defecto(p_destino text, p_inicio date, p_fin date)
+RETURNS text
+LANGUAGE sql IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT CASE
+    WHEN anio IS NULL THEN left(lugar, 100)
+    ELSE rtrim(left(lugar, 100 - length(anio) - 1)) || ' ' || anio
+  END
+  FROM (
+    SELECT
+      COALESCE(nullif(btrim(p_destino), ''), 'Viaje sin destino') AS lugar,
+      CASE
+        WHEN p_inicio IS NOT NULL AND p_fin IS NOT NULL AND p_fin >= p_inicio
+             AND extract(year FROM p_fin) <> extract(year FROM p_inicio)
+          THEN extract(year FROM p_inicio)::int || '-' || extract(year FROM p_fin)::int
+        ELSE COALESCE(extract(year FROM p_inicio), extract(year FROM p_fin))::int::text
+      END AS anio
+  ) datos;
+$$;
+
 -- 2. ACTIVAR RLS
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.viajes ENABLE ROW LEVEL SECURITY;
@@ -199,7 +222,7 @@ CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
   WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- Cualquier miembro corrige o borra gastos mientras el viaje está activo (como con las actividades).
--- En un viaje cerrado o archivado los gastos quedan de solo lectura
+-- En un viaje finalizado o archivado los gastos quedan de solo lectura
 DROP POLICY IF EXISTS gastos_update ON public.gastos;
 CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
@@ -296,6 +319,7 @@ GRANT EXECUTE ON FUNCTION public.unirse_con_invitacion(text) TO authenticated;
 -- Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación.
 -- Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea).
 -- Un viaje sin destino (destino null) queda pendiente y se abre su votación de destino.
+-- Sin nombre (p_nombre null), el trigger viajes_nombre_automatico le pone el nombre por defecto.
 -- Devuelve { estado }: sin_sesion | ok (con viaje)
 CREATE OR REPLACE FUNCTION public.crear_viaje(
   p_nombre text,
@@ -537,7 +561,35 @@ $$;
 REVOKE ALL ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
 
--- 14. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
+-- 14. NOMBRE AUTOMÁTICO DEL VIAJE
+-- Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo
+-- sea, se vuelve a generar cada vez que cambian el destino o las fechas: así, al fijar el destino por votación
+-- (o al editarlo), el nombre temporal pasa a ser el del destino. En cuanto alguien escribe un nombre, se respeta
+CREATE OR REPLACE FUNCTION public.viajes_nombre_automatico()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.nombre_automatico := NEW.nombre IS NULL OR btrim(NEW.nombre) = '';
+  ELSIF NEW.nombre IS DISTINCT FROM OLD.nombre THEN
+    NEW.nombre_automatico := false;
+  END IF;
+
+  IF NEW.nombre_automatico THEN
+    NEW.nombre := public.nombre_por_defecto(NEW.destino, NEW.fecha_inicio, NEW.fecha_fin);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS viajes_nombre_automatico ON public.viajes;
+CREATE TRIGGER viajes_nombre_automatico
+  BEFORE INSERT OR UPDATE ON public.viajes
+  FOR EACH ROW EXECUTE FUNCTION public.viajes_nombre_automatico();
+
+-- 15. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
 -- Abre la votación de destino de los viajes activos sin destino que todavía no la tienen.
 -- Se puede ejecutar varias veces: solo crea las que faltan
 INSERT INTO public.votaciones (viaje_id, titulo, tipo, creado_por)

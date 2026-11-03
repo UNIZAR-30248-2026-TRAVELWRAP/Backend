@@ -160,7 +160,7 @@ const validarCambiosActividad = (cuerpo) => {
 const ERRORES = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_encontrada: [404, 'actividad_no_encontrada', 'La actividad no existe en este viaje'],
-  no_activo: [409, 'viaje_no_activo', 'El viaje está cerrado y ya no se puede modificar'],
+  no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   hora_fin_sin_inicio: [400, 'datos_invalidos', 'La hora de fin necesita una hora de inicio'],
   horas_invertidas: [400, 'datos_invalidos', 'La hora de fin no puede ser anterior a la de inicio'],
 };

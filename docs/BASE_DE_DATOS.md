@@ -9,7 +9,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | Tabla | Columnas | RLS | Políticas |
 | --- | --- | --- | --- |
 | [perfiles](#perfiles) | 5 | Activada | 3 |
-| [viajes](#viajes) | 14 | Activada | 4 |
+| [viajes](#viajes) | 15 | Activada | 4 |
 | [miembros_viaje](#miembros_viaje) | 5 | Activada | 3 |
 | [votaciones](#votaciones) | 10 | Activada | 3 |
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
@@ -76,6 +76,7 @@ erDiagram
 | `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
 | `creador_id` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
 | `nombre` | `text` | Sí |  |  |  |
+| `nombre_automatico` | `boolean` | Sí |  | `false` | true si el nombre lo ha puesto la aplicación (destino y año, o uno temporal mientras no hay destino): se vuelve a generar al cambiar el destino o las fechas, hasta que alguien escriba otro nombre |
 | `destino` | `text` | No |  |  | Null mientras el destino está pendiente de decidir por votación |
 | `descripcion` | `text` | No |  |  |  |
 | `fecha_inicio` | `date` | No |  |  |  |
@@ -274,11 +275,13 @@ Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el i
 | `es_editable` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje solo admite contenido nuevo mientras está activo: al cerrarlo o archivarlo queda de solo lectura. Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura |
 | `viaje_de_votacion` | `p_votacion_id uuid` | `uuid` | su propietario (SECURITY DEFINER) |  | Viaje al que pertenece una votación (lo usan las políticas de opciones y votos) |
 | `puede_votar` | `p_votacion_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Se pueden proponer opciones y votar si eres miembro del viaje, el viaje está activo y la votación sigue abierta |
+| `nombre_por_defecto` | `p_destino text, p_inicio date, p_fin date` | `text` | quien la llama |  | Nombre por defecto de un viaje: su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino, uno temporal («Viaje sin destino 2027»). Como mucho 100 caracteres |
 | `unirse_con_invitacion` | `p_token text` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated |  |
-| `crear_viaje` | `p_nombre text, p_destino text, p_fecha_inicio date, p_fecha_fin date, p_presupuesto numeric` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación. Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea). Un viaje sin destino (destino null) queda pendiente y se abre su votación de destino. Devuelve { estado }: sin_sesion \| ok (con viaje) |
+| `crear_viaje` | `p_nombre text, p_destino text, p_fecha_inicio date, p_fecha_fin date, p_presupuesto numeric` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación. Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea). Un viaje sin destino (destino null) queda pendiente y se abre su votación de destino. Sin nombre (p_nombre null), el trigger viajes_nombre_automatico le pone el nombre por defecto. Devuelve { estado }: sin_sesion \| ok (con viaje) |
 | `crear_votacion` | `p_viaje_id uuid, p_titulo text, p_descripcion text, p_tipo public.tipo_votacion, p_opciones jsonb` | `jsonb` | quien la llama | authenticated | Crea una votación con sus opciones iniciales en una sola operación: si falla una opción, no se crea nada. Es SECURITY INVOKER: se aplican las mismas políticas RLS que a un insert directo en las tablas. p_opciones es una lista JSON de { texto, valor_fecha }; el orden de la lista es el de las opciones. Devuelve { estado }: no_existe \| no_activo \| ok (con votacion_id) |
 | `cerrar_votacion` | `p_viaje_id uuid, p_votacion_id uuid` | `jsonb` | quien la llama | authenticated | Cierra una votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas al azar. En la votación de destino fija además el destino del viaje, todo en una sola operación. Solo la cierra el creador del viaje, con el viaje activo y cuando han votado todos sus miembros (RF9). Es SECURITY INVOKER (se aplican las políticas RLS). Devuelve { estado }: no_existe \| no_creador \| no_activo \| ya_cerrada \| faltan_votos \| ok (con opcion_ganadora_id, hubo_empate y destino) |
 | `crear_gasto` | `p_viaje_id uuid, p_concepto text, p_importe numeric, p_categoria public.categoria_gasto, p_pagado_por uuid, p_fecha date, p_participantes uuid[]` | `jsonb` | quien la llama | authenticated | Registra un gasto y lo reparte a partes iguales entre los participantes en una sola operación: si falla una parte, no se guarda nada. Las partes se calculan en céntimos y los céntimos que sobran se reparten uno a uno entre los primeros participantes, así que siempre suman el importe del gasto. Es SECURITY INVOKER: se aplican las mismas políticas RLS que a un insert directo en las tablas. Devuelve { estado }: no_existe \| no_activo \| no_miembro \| ok (con gasto_id) |
+| `viajes_nombre_automatico` |  | `trigger` | quien la llama |  | Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo sea, se vuelve a generar cada vez que cambian el destino o las fechas: así, al fijar el destino por votación (o al editarlo), el nombre temporal pasa a ser el del destino. En cuanto alguien escribe un nombre, se respeta |
 
 ### Políticas por tabla
 

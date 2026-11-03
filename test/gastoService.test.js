@@ -141,7 +141,7 @@ describe('gastoService.crear', () => {
     assert.deepEqual(operacion(cliente.consultas[0], 'eq')[0], ['eq', 'id', GASTO_ID]);
   });
 
-  // Rechazos de la función: viaje inexistente, viaje cerrado o alguien que no es miembro
+  // Rechazos de la función: viaje inexistente, viaje finalizado o alguien que no es miembro
   for (const estado of ['no_existe', 'no_activo', 'no_miembro']) {
     it(`devuelve ${estado} sin buscar el gasto cuando la función lo rechaza`, async () => {
       const cliente = clienteFalso({ respuestaRpc: { data: { estado }, error: null } });

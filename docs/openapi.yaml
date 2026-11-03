@@ -485,7 +485,7 @@ paths:
                   value:
                     error:
                       codigo: datos_invalidos
-                      mensaje: El nombre es obligatorio y tiene un máximo de 100 caracteres
+                      mensaje: El nombre debe ser un texto de 100 caracteres como máximo
                 presupuesto:
                   value:
                     error:
@@ -662,7 +662,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está cerrado o archivado y ya no se puede modificar
+          description: El viaje está finalizado o archivado y ya no se puede modificar
           content:
             application/json:
               schema:
@@ -670,7 +670,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           description: Error interno del servidor
           content:
@@ -772,7 +772,7 @@ paths:
     post:
       tags:
         - Viajes
-      summary: Cierra y archiva un viaje
+      summary: Finaliza y archiva un viaje
       description: |
         Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
         no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
@@ -1113,7 +1113,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1286,7 +1286,7 @@ paths:
                   value:
                     error:
                       codigo: viaje_no_activo
-                      mensaje: El viaje está cerrado y ya no se puede modificar
+                      mensaje: El viaje está finalizado y ya no se puede modificar
                 votacionCerrada:
                   value:
                     error:
@@ -1339,7 +1339,7 @@ paths:
                   value:
                     error:
                       codigo: viaje_no_activo
-                      mensaje: El viaje está cerrado y ya no se puede modificar
+                      mensaje: El viaje está finalizado y ya no se puede modificar
                 votacionCerrada:
                   value:
                     error:
@@ -1619,7 +1619,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1701,7 +1701,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1767,7 +1767,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1904,7 +1904,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -2198,12 +2198,17 @@ components:
     NuevoViajeRequest:
       type: object
       required:
-        - nombre
         - presupuesto
       properties:
         nombre:
           type: string
+          nullable: true
           maxLength: 100
+          description: >-
+            Opcional. Sin nombre (ausente, null o vacío), el viaje se llama como su destino y el año de sus fechas
+            («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino lleva uno temporal («Viaje sin destino 2027»)
+            que pasa a ser el del destino cuando se fija por votación. Mientras nadie escriba otro nombre, se vuelve a
+            generar al cambiar el destino o las fechas
           example: "Verano 2027"
         presupuesto:
           type: number

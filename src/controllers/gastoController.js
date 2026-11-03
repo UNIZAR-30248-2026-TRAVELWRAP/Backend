@@ -88,7 +88,7 @@ const validarNuevoGasto = (cuerpo) => {
 // Motivos de fallo que pueden devolver los servicios de gasto
 const ERRORES = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
-  no_activo: [409, 'viaje_no_activo', 'El viaje está cerrado y ya no se puede modificar'],
+  no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   no_miembro: [400, 'datos_invalidos', 'Quien paga y los participantes tienen que ser miembros del viaje'],
 };
 

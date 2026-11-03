@@ -740,7 +740,7 @@
           ]
         },
         {
-          "name": "Crear viaje sin nombre",
+          "name": "Crear viaje con nombre demasiado largo",
           "request": {
             "method": "POST",
             "header": [
@@ -756,7 +756,7 @@
             "url": "{{baseUrl}}/viajes",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"  \",\n  \"presupuesto\": 100\n}"
+              "raw": "{\n  \"nombre\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\n  \"presupuesto\": 100\n}"
             }
           },
           "event": [
