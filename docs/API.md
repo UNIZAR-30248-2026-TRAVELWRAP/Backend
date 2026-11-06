@@ -1569,6 +1569,10 @@ Devuelve las actividades del viaje ordenadas por día, después por hora de inic
 final de su día) y por último por su posición dentro del día (`orden`). Con `fecha` solo devuelve las de ese día.
 Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
 
+Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
+dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
+actividad en el mapa del día; las actividades sin coordenadas no tienen marcador.
+
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
 **Parámetros**

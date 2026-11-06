@@ -4079,6 +4079,43 @@
           ]
         },
         {
+          "name": "Listar las actividades de un día con y sin coordenadas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades?fecha=2027-05-13"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividades = pm.response.json().actividades;",
+                  "const con = actividades.find((a) => a.id === pm.collectionVariables.get('actividadIdCoordenadas'));",
+                  "const sin = actividades.find((a) => a.id === pm.collectionVariables.get('actividadIdSinCoordenadas'));",
+                  "pm.test('La actividad localizada trae latitud y longitud como números y su lugar de OpenStreetMap', () => {",
+                  "  pm.expect(con.latitud).to.eql(41.890214);",
+                  "  pm.expect(con.longitud).to.eql(12.492231);",
+                  "  pm.expect(con.lugar_externo_id).to.eql('way/24146600');",
+                  "});",
+                  "pm.test('La actividad sin ubicación elegida trae las tres a null', () => {",
+                  "  pm.expect(sin.latitud).to.eql(null);",
+                  "  pm.expect(sin.longitud).to.eql(null);",
+                  "  pm.expect(sin.lugar_externo_id).to.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Crear una actividad solo con la latitud",
           "request": {
             "method": "POST",
