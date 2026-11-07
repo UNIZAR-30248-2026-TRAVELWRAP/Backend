@@ -412,8 +412,10 @@ const bloquePoliticas = (t) =>
 
 const formatearTamano = (bytes) => {
   if (bytes === null) return 'Sin límite';
-  const megas = bytes / (1024 * 1024);
-  return Number.isInteger(megas) ? `${megas} MB` : `${bytes} bytes`;
+  const conPuntos = bytes.toLocaleString('es-ES', { useGrouping: 'always' });
+  if (Number.isInteger(bytes / (1024 * 1024))) return `${bytes / (1024 * 1024)} MiB (${conPuntos} bytes)`;
+  if (Number.isInteger(bytes / 1_000_000)) return `${bytes / 1_000_000} MB (${conPuntos} bytes)`;
+  return `${conPuntos} bytes`;
 };
 
 // Buckets de Supabase Storage y políticas sobre sus archivos (storage.objects)

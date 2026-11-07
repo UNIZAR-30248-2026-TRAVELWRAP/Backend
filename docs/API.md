@@ -2160,7 +2160,7 @@ Cuerpo (`application/json`):
 | `documentos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `documentos[].nombre` | string | No |  | `Billete de tren Madrid-Roma` |
 | `documentos[].tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
-| `documentos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (10 MB como máximo) | `248731` |
+| `documentos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
 | `documentos[].subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `documentos[].creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
 
@@ -2199,7 +2199,7 @@ Cuerpo (`application/json`):
 
 **Sube un documento a la cartera del viaje**
 
-Sube un PDF o una imagen JPEG o PNG de 10 MB como máximo a la cartera compartida del viaje. El archivo se
+Sube un PDF o una imagen JPEG o PNG de 8 MB como máximo a la cartera compartida del viaje. El archivo se
 guarda en el bucket privado `documentos` de Supabase Storage, en la carpeta del viaje y con un nombre
 aleatorio, y sus datos quedan registrados en la tabla `documentos`. Si el registro falla, el archivo se
 borra del bucket.
@@ -2220,7 +2220,7 @@ queda como `subido_por`.
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
-| `archivo` | string (binary) | Sí | PDF, JPEG o PNG de 10 MB como máximo. Un solo archivo por petición |  |
+| `archivo` | string (binary) | Sí | PDF, JPEG o PNG de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición |  |
 | `nombre` | string | No | Nombre que verán los miembros. Si no se indica, se usa el del archivo (recortado a 150 caracteres) | `Billete de tren Madrid-Roma` |
 
 **Respuestas**
@@ -2235,11 +2235,11 @@ Cuerpo (`application/json`):
 | `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
 | `tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
-| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (10 MB como máximo) | `248731` |
+| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
 | `subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
 
-**400** — Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 10 MB, el nombre
+**400** — Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 8 MB, el nombre
 no es válido o el identificador del viaje no es un UUID
 
 
@@ -2247,7 +2247,7 @@ no es válido o el identificador del viaje no es un UUID
 | --- | --- |
 | `datos_invalidos` | Adjunta el archivo del documento en el campo «archivo» |
 | `tipo_no_permitido` | Solo se pueden subir documentos PDF o imágenes JPEG o PNG |
-| `archivo_demasiado_grande` | El documento no puede ocupar más de 10 MB |
+| `archivo_demasiado_grande` | El documento no puede ocupar más de 8 MB |
 
 **401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
 

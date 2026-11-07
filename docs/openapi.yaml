@@ -2036,7 +2036,7 @@ paths:
         - Documentos
       summary: Sube un documento a la cartera del viaje
       description: |
-        Sube un PDF o una imagen JPEG o PNG de 10 MB como máximo a la cartera compartida del viaje. El archivo se
+        Sube un PDF o una imagen JPEG o PNG de 8 MB como máximo a la cartera compartida del viaje. El archivo se
         guarda en el bucket privado `documentos` de Supabase Storage, en la carpeta del viaje y con un nombre
         aleatorio, y sus datos quedan registrados en la tabla `documentos`. Si el registro falla, el archivo se
         borra del bucket.
@@ -2063,7 +2063,7 @@ paths:
                 $ref: '#/components/schemas/Documento'
         '400':
           description: |
-            Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 10 MB, el nombre
+            Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 8 MB, el nombre
             no es válido o el identificador del viaje no es un UUID
           content:
             application/json:
@@ -2084,7 +2084,7 @@ paths:
                   value:
                     error:
                       codigo: archivo_demasiado_grande
-                      mensaje: El documento no puede ocupar más de 10 MB
+                      mensaje: El documento no puede ocupar más de 8 MB
         '401':
           $ref: '#/components/responses/SinSesion'
         '404':
@@ -3158,7 +3158,7 @@ components:
         archivo:
           type: string
           format: binary
-          description: PDF, JPEG o PNG de 10 MB como máximo. Un solo archivo por petición
+          description: PDF, JPEG o PNG de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición
         nombre:
           type: string
           maxLength: 150
@@ -3186,7 +3186,7 @@ components:
           example: application/pdf
         tamano_bytes:
           type: integer
-          description: Tamaño del archivo en bytes (10 MB como máximo)
+          description: Tamaño del archivo en bytes (8.000.000 como máximo)
           example: 248731
         subido_por:
           type: string

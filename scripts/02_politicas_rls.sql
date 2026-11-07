@@ -278,9 +278,9 @@ CREATE POLICY documentos_insert ON public.documentos FOR INSERT TO authenticated
   WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada)
--- y Storage rechaza por sí mismo los de más de 10 MB o de otro tipo
+-- y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('documentos', 'documentos', false, 10485760, ARRAY['application/pdf', 'image/jpeg', 'image/png'])
+VALUES ('documentos', 'documentos', false, 8000000, ARRAY['application/pdf', 'image/jpeg', 'image/png'])
 ON CONFLICT (id) DO UPDATE SET
   public = EXCLUDED.public,
   file_size_limit = EXCLUDED.file_size_limit,

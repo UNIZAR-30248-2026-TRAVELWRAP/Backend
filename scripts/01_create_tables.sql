@@ -227,13 +227,18 @@ CREATE TABLE IF NOT EXISTS public.documentos (
   -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
   ruta text NOT NULL UNIQUE,
   tipo_mime text NOT NULL CHECK (tipo_mime IN ('application/pdf', 'image/jpeg', 'image/png')),
-  -- Tamaño del archivo, como máximo 10 MB
-  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 10485760),
+  -- Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000),
   subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   creado_en timestamptz NOT NULL DEFAULT now(),
   -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
   CONSTRAINT documentos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
 );
+
+-- La tabla se creó con un máximo de 10 MB: en las bases de datos que ya la tienen, se cambia el límite a 8 MB
+ALTER TABLE public.documentos
+  DROP CONSTRAINT IF EXISTS documentos_tamano_bytes_check,
+  ADD CONSTRAINT documentos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000);
 
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);

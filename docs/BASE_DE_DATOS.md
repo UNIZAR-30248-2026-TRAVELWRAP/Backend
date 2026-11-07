@@ -279,7 +279,7 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 | `nombre` | `text` | Sí |  |  | Nombre que ve el usuario (por defecto, el del archivo original)<br>Debe cumplir: `char_length(btrim(nombre)) BETWEEN 1 AND 150` |
 | `ruta` | `text` | Sí | UNIQUE |  | Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original |
 | `tipo_mime` | `text` | Sí |  |  | Debe cumplir: `tipo_mime IN ('application/pdf', 'image/jpeg', 'image/png')` |
-| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 10 MB<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 10485760` |
+| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 8000000` |
 | `subido_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
 
@@ -403,7 +403,7 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 
 | Bucket | Acceso | Tamaño máximo | Tipos permitidos | Descripción |
 | --- | --- | --- | --- | --- |
-| `documentos` | Privado | 10 MB | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 10 MB o de otro tipo |
+| `documentos` | Privado | 8 MB (8.000.000 bytes) | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo |
 
 ### Políticas de `storage.objects`
 
