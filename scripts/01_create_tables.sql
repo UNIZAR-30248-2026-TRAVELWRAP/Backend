@@ -216,6 +216,25 @@ CREATE TABLE IF NOT EXISTS public.repartos_gasto (
     REFERENCES public.miembros_viaje (viaje_id, usuario_id)
 );
 
+-- Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). El archivo se guarda en el
+-- bucket privado «documentos» de Supabase Storage y esta fila guarda sus datos y dónde está
+CREATE TABLE IF NOT EXISTS public.documentos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Al eliminar el viaje se borran sus filas, pero no los archivos del bucket
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  -- Nombre que ve el usuario (por defecto, el del archivo original)
+  nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 150),
+  -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
+  ruta text NOT NULL UNIQUE,
+  tipo_mime text NOT NULL CHECK (tipo_mime IN ('application/pdf', 'image/jpeg', 'image/png')),
+  -- Tamaño del archivo, como máximo 10 MB
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 10485760),
+  subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+  CONSTRAINT documentos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
+);
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -228,3 +247,5 @@ CREATE INDEX IF NOT EXISTS actividades_viaje_fecha_idx ON public.actividades (vi
 -- Historial de gastos del viaje, del más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS gastos_viaje_fecha_idx ON public.gastos (viaje_id, fecha DESC, creado_en DESC);
 CREATE INDEX IF NOT EXISTS repartos_gasto_miembro_idx ON public.repartos_gasto (viaje_id, usuario_id);
+-- Cartera del viaje, del documento más reciente al más antiguo
+CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);

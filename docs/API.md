@@ -44,6 +44,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
 
 ## General
 
@@ -633,8 +635,9 @@ Cuerpo (`application/json`):
 
 **Elimina un viaje archivado**
 
-Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros y, en el futuro, gastos,
-tareas, documentos...), que se elimina en cascada (PB-13). No se puede deshacer.
+Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros, votaciones, actividades,
+gastos y los datos de sus documentos), que se elimina en cascada (PB-13). No se puede deshacer.
+Los archivos de la cartera siguen en el bucket `documentos` de Supabase Storage.
 Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -2124,3 +2127,155 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_gasto` | No se ha podido calcular el balance |
+
+## Documentos
+
+### GET /viajes/{viajeId}/documentos
+
+**Lista los documentos de la cartera del viaje**
+
+Devuelve los datos de los documentos de la cartera compartida del viaje (billetes, reservas, seguros...),
+del más reciente al más antiguo. No incluye el contenido de los archivos.
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Documentos del viaje (lista vacía si aún no tiene ninguno)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `documentos` | array<Documento> | No | Documentos del viaje, del más reciente al más antiguo |  |
+| `documentos[].id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `documentos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `documentos[].nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `documentos[].tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
+| `documentos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (10 MB como máximo) | `248731` |
+| `documentos[].subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `documentos[].creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se han podido obtener los documentos |
+
+### POST /viajes/{viajeId}/documentos
+
+**Sube un documento a la cartera del viaje**
+
+Sube un PDF o una imagen JPEG o PNG de 10 MB como máximo a la cartera compartida del viaje. El archivo se
+guarda en el bucket privado `documentos` de Supabase Storage, en la carpeta del viaje y con un nombre
+aleatorio, y sus datos quedan registrados en la tabla `documentos`. Si el registro falla, el archivo se
+borra del bucket.
+
+El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+navegador. Cualquier miembro puede subir documentos mientras el viaje esté activo; quien hace la petición
+queda como `subido_por`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `archivo` | string (binary) | Sí | PDF, JPEG o PNG de 10 MB como máximo. Un solo archivo por petición |  |
+| `nombre` | string | No | Nombre que verán los miembros. Si no se indica, se usa el del archivo (recortado a 150 caracteres) | `Billete de tren Madrid-Roma` |
+
+**Respuestas**
+
+**201** — Documento subido y registrado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
+| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (10 MB como máximo) | `248731` |
+| `subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+
+**400** — Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 10 MB, el nombre
+no es válido o el identificador del viaje no es un UUID
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta el archivo del documento en el campo «archivo» |
+| `tipo_no_permitido` | Solo se pueden subir documentos PDF o imágenes JPEG o PNG |
+| `archivo_demasiado_grande` | El documento no puede ocupar más de 10 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido subir el documento |

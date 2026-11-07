@@ -34,6 +34,19 @@ AS $$
   );
 $$;
 
+-- Viaje al que pertenece un archivo del bucket «documentos», sacado de la primera carpeta de su ruta.
+-- Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage)
+CREATE OR REPLACE FUNCTION public.viaje_de_ruta(p_ruta text)
+RETURNS uuid
+LANGUAGE sql IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT CASE
+    WHEN split_part(p_ruta, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN split_part(p_ruta, '/', 1)::uuid
+  END;
+$$;
+
 -- Viaje al que pertenece una votación (lo usan las políticas de opciones y votos)
 CREATE OR REPLACE FUNCTION public.viaje_de_votacion(p_votacion_id uuid)
 RETURNS uuid
@@ -91,6 +104,7 @@ ALTER TABLE public.votos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -251,6 +265,54 @@ CREATE POLICY repartos_gasto_update ON public.repartos_gasto FOR UPDATE TO authe
 DROP POLICY IF EXISTS repartos_gasto_delete ON public.repartos_gasto;
 CREATE POLICY repartos_gasto_delete ON public.repartos_gasto FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS DOCUMENTOS
+-- Los miembros ven todos los documentos de la cartera de su viaje, también en viajes finalizados o archivados
+DROP POLICY IF EXISTS documentos_select ON public.documentos;
+CREATE POLICY documentos_select ON public.documentos FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro sube documentos mientras el viaje está activo; queda como quien lo ha subido
+DROP POLICY IF EXISTS documentos_insert ON public.documentos;
+CREATE POLICY documentos_insert ON public.documentos FOR INSERT TO authenticated
+  WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada)
+-- y Storage rechaza por sí mismo los de más de 10 MB o de otro tipo
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('documentos', 'documentos', false, 10485760, ARRAY['application/pdf', 'image/jpeg', 'image/png'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- POLÍTICAS STORAGE DOCUMENTOS
+
+-- Los archivos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlos
+-- (para abrirlos o generar URLs firmadas), también en viajes finalizados o archivados
+DROP POLICY IF EXISTS documentos_storage_select ON storage.objects;
+CREATE POLICY documentos_storage_select ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)));
+
+-- Los miembros suben archivos a la carpeta de su viaje mientras está activo
+DROP POLICY IF EXISTS documentos_storage_insert ON storage.objects;
+CREATE POLICY documentos_storage_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'documentos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+  );
+
+-- Solo para deshacer una subida cuando falla el registro del documento: se puede borrar un archivo
+-- de la carpeta de un viaje activo que todavía no tiene fila en documentos
+DROP POLICY IF EXISTS documentos_storage_delete_huerfano ON storage.objects;
+CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'documentos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+    AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)
+  );
 
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)

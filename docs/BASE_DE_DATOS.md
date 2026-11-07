@@ -17,6 +17,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [actividades](#actividades) | 16 | Activada | 4 |
 | [gastos](#gastos) | 10 | Activada | 4 |
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
+| [documentos](#documentos) | 8 | Activada | 2 |
 
 ## Relaciones
 
@@ -41,6 +42,8 @@ erDiagram
     gastos ||--o{ repartos_gasto : "gasto_id"
     gastos ||--o{ repartos_gasto : "viaje_id"
     miembros_viaje ||--o{ repartos_gasto : "usuario_id"
+    viajes ||--o{ documentos : "viaje_id"
+    perfiles |o--o{ documentos : "subido_por"
 ```
 
 ## Tipos enumerados
@@ -263,6 +266,31 @@ Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el i
 
 - `repartos_gasto_miembro_idx` sobre (viaje_id, usuario_id)
 
+### documentos
+
+Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). El archivo se guarda en el bucket privado «documentos» de Supabase Storage y esta fila guarda sus datos y dónde está
+
+**Seguridad por filas (RLS):** activada, 2 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus filas, pero no los archivos del bucket |
+| `nombre` | `text` | Sí |  |  | Nombre que ve el usuario (por defecto, el del archivo original)<br>Debe cumplir: `char_length(btrim(nombre)) BETWEEN 1 AND 150` |
+| `ruta` | `text` | Sí | UNIQUE |  | Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original |
+| `tipo_mime` | `text` | Sí |  |  | Debe cumplir: `tipo_mime IN ('application/pdf', 'image/jpeg', 'image/png')` |
+| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 10 MB<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 10485760` |
+| `subido_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Restricciones**
+
+- `documentos_ruta_del_viaje`: `CHECK (ruta LIKE viaje_id::text || '/%')` — El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+
+**Índices**
+
+- `documentos_viaje_idx` sobre (viaje_id, creado_en DESC) — Cartera del viaje, del documento más reciente al más antiguo
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -273,6 +301,7 @@ Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el i
 | `es_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_creador` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_editable` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje solo admite contenido nuevo mientras está activo: al cerrarlo o archivarlo queda de solo lectura. Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura |
+| `viaje_de_ruta` | `p_ruta text` | `uuid` | quien la llama |  | Viaje al que pertenece un archivo del bucket «documentos», sacado de la primera carpeta de su ruta. Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage) |
 | `viaje_de_votacion` | `p_votacion_id uuid` | `uuid` | su propietario (SECURITY DEFINER) |  | Viaje al que pertenece una votación (lo usan las políticas de opciones y votos) |
 | `puede_votar` | `p_votacion_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Se pueden proponer opciones y votar si eres miembro del viaje, el viaje está activo y la votación sigue abierta |
 | `nombre_por_defecto` | `p_destino text, p_inicio date, p_fin date` | `text` | quien la llama |  | Nombre por defecto de un viaje: su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino, uno temporal («Viaje sin destino 2027»). Como mucho 100 caracteres |
@@ -360,3 +389,26 @@ Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el i
 | `repartos_gasto_insert` | INSERT | authenticated |  | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `repartos_gasto_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `repartos_gasto_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
+#### documentos
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `documentos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `documentos_insert` | INSERT | authenticated |  | `subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+
+## Almacenamiento de archivos (Supabase Storage)
+
+### Buckets
+
+| Bucket | Acceso | Tamaño máximo | Tipos permitidos | Descripción |
+| --- | --- | --- | --- | --- |
+| `documentos` | Privado | 10 MB | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 10 MB o de otro tipo |
+
+### Políticas de `storage.objects`
+
+| Política | Operación | Rol | USING (qué archivos puede ver o borrar) | WITH CHECK (qué archivos puede subir) | Descripción |
+| --- | --- | --- | --- | --- | --- |
+| `documentos_storage_select` | SELECT | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name))` |  | Los archivos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlos (para abrirlos o generar URLs firmadas), también en viajes finalizados o archivados |
+| `documentos_storage_insert` | INSERT | authenticated |  | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Los miembros suben archivos a la carpeta de su viaje mientras está activo |
+| `documentos_storage_delete_huerfano` | DELETE | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name)) AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)` |  | Solo para deshacer una subida cuando falla el registro del documento: se puede borrar un archivo de la carpeta de un viaje activo que todavía no tiene fila en documentos |
