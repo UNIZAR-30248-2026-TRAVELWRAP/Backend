@@ -13,6 +13,7 @@ const votacionesSocket = require('./sockets/votacionesSocket');
 const { comprobarToken } = require('./middleware/authMiddleware');
 const viajeService = require('./services/viajeService');
 const gastoRoutes = require('./routes/gastoRoutes');
+const documentoRoutes = require('./routes/documentoRoutes');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
@@ -84,6 +85,7 @@ app.use('/api/viajes', viajeRoutes);
 app.use('/api/viajes/:viajeId/votaciones', votacionRoutes);
 app.use('/api/viajes/:viajeId/actividades', actividadRoutes);
 app.use('/api/viajes/:viajeId/gastos', gastoRoutes);
+app.use('/api/viajes/:viajeId/documentos', documentoRoutes);
 app.use('/api/direcciones', direccionRoutes);
 app.use('/api', invitationRoutes); // /api/viajes/:viajeId/invitacion y /api/invitaciones/:token/unirse
 
