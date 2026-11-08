@@ -1573,6 +1573,9 @@ Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar
 dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
 actividad en el mapa del día; las actividades sin coordenadas no tienen marcador.
 
+No hay notificaciones en tiempo real (WebSocket): para recargar la agenda y el mapa basta con volver a pedir
+este listado después de crear, modificar o eliminar una actividad. Siempre refleja el estado actual.
+
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
 **Parámetros**

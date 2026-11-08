@@ -4453,6 +4453,37 @@
           ]
         },
         {
+          "name": "Recargar el listado tras quitar las coordenadas refleja el cambio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades?fecha=2027-05-13"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividad = pm.response.json().actividades.find((a) => a.id === pm.collectionVariables.get('actividadIdCoordenadas'));",
+                  "pm.test('La actividad sigue en la agenda pero sin coordenadas', () => {",
+                  "  pm.expect(actividad.latitud).to.eql(null);",
+                  "  pm.expect(actividad.longitud).to.eql(null);",
+                  "  pm.expect(actividad.lugar_externo_id).to.eql(null);",
+                  "  pm.expect(actividad.ubicacion_nombre).to.eql('Via del Corso, Roma');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Eliminar la actividad de las pruebas de coordenadas",
           "request": {
             "method": "DELETE",
@@ -4495,6 +4526,35 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recargar el listado tras eliminar las actividades de las pruebas de coordenadas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades?fecha=2027-05-13"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const ids = pm.response.json().actividades.map((a) => a.id);",
+                  "pm.test('Ya no aparece ninguna de las dos actividades eliminadas', () => {",
+                  "  pm.expect(ids).to.not.include(pm.collectionVariables.get('actividadIdCoordenadas'));",
+                  "  pm.expect(ids).to.not.include(pm.collectionVariables.get('actividadIdSinCoordenadas'));",
+                  "});"
                 ]
               }
             }

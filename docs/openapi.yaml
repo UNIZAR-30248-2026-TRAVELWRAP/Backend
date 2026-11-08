@@ -1511,6 +1511,9 @@ paths:
         Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
         dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
         actividad en el mapa del día; las actividades sin coordenadas no tienen marcador.
+
+        No hay notificaciones en tiempo real (WebSocket): para recargar la agenda y el mapa basta con volver a pedir
+        este listado después de crear, modificar o eliminar una actividad. Siempre refleja el estado actual.
       security:
         - bearerAuth: []
       parameters:
