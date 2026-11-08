@@ -41,6 +41,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
+| GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
 
 ## General
 
@@ -1889,3 +1890,96 @@ está activo. Responde 204 sin cuerpo.
 | Código de error | Mensaje |
 | --- | --- |
 | `error_actividad` | No se ha podido eliminar la actividad |
+
+## Rutas
+
+### GET /viajes/{viajeId}/ruta
+
+**Calcula la ruta a pie del día entre las actividades con ubicación**
+
+Toma las actividades del día indicado que tienen coordenadas, en el orden de la agenda, y devuelve la ruta a
+pie por calles que las une junto con distancia, duración y un orden más corto para visitarlas. Solo lo pueden
+pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+
+La ruta la calcula un servicio externo basado en OSRM con datos de OpenStreetMap (por defecto el servidor de rutas
+a pie de OpenStreetMap Alemania; se cambia con la variable de entorno `RUTAS_URL`). Para respetar su política de
+uso las llamadas salen de una en una, a razón de una por segundo; un mismo usuario no puede pedir dos rutas en
+menos de un segundo, el tiempo máximo de espera es de 8 segundos y las rutas repetidas se sirven de una caché de
+10 minutos.
+
+La ruta sigue el orden de la agenda. El orden más corto (`orden_sugerido`) siempre empieza por la primera
+actividad y se calcula con distancias en línea recta, por lo que `ahorro_m` es una estimación: la diferencia en
+línea recta entre el recorrido de la agenda y el sugerido.
+
+Con menos de dos actividades con ubicación no se llama al servicio externo y `ruta` vale `null`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `fecha` | query | Sí | string (date) | Día del que se quiere la ruta (AAAA-MM-DD) | `2027-05-12` |
+
+**Respuestas**
+
+**200** — Actividades con ubicación del día, orden más corto y ruta (null si hay menos de dos actividades con ubicación)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `puntos` | array<PuntoDeRuta> | No | Actividades del día con ubicación, en el orden de la agenda |  |
+| `puntos[].id` | string (uuid) | No | Identificador de la actividad |  |
+| `puntos[].titulo` | string | No |  | `Visita al Coliseo` |
+| `puntos[].latitud` | number | No |  | `41.890214` |
+| `puntos[].longitud` | number | No |  | `12.492231` |
+| `orden_sugerido` | array<string (uuid)> | No | Identificadores de esas actividades en un orden más corto, empezando siempre por la primera |  |
+| `ahorro_m` | integer | No | Metros que se ahorran en línea recta con el orden sugerido respecto al de la agenda (0 si la agenda ya es el más corto) | `1240` |
+| `ruta` | object \| null | No | Ruta a pie por calles siguiendo el orden de la agenda; null con menos de dos actividades con ubicación |  |
+
+**400** — El identificador del viaje no es un UUID, la fecha falta o no es válida, o hay más de 25 actividades con ubicación
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha es obligatoria y debe tener el formato AAAA-MM-DD |
+| `datos_invalidos` | Hay demasiadas actividades con ubicación para trazar la ruta (máximo 25) |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**422** — El servicio de rutas no encuentra un camino a pie entre las actividades
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_ruta` | No se ha encontrado un camino entre las actividades de ese día |
+
+**429** — El usuario pide rutas demasiado rápido o hay demasiados cálculos en cola
+
+| Código de error | Mensaje |
+| --- | --- |
+| `demasiadas_rutas` | Espera un segundo entre un cálculo de ruta y otro |
+| `servicio_ocupado` | Hay muchos cálculos de ruta en este momento. Inténtalo de nuevo en unos segundos |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — El servicio de rutas no responde, tarda demasiado o devuelve un error, o falla la consulta de las actividades
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_ruta` | No se ha podido calcular la ruta |
