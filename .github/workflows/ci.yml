@@ -19,7 +19,7 @@ jobs:
       - name: Configurar entorno de Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Instalar dependencias
@@ -31,8 +31,9 @@ jobs:
       - name: Comprobar que la documentación generada está al día
         run: npm run docs:check
 
-      - name: Ejecutar pruebas automatizadas (si existen)
-        run: npm test --if-present
+      # Genera coverage/lcov.info, que SonarCloud usa para medir la cobertura
+      - name: Ejecutar pruebas automatizadas con cobertura
+        run: npm run test:coverage
 
       - name: Analizar código con SonarCloud
         uses: SonarSource/sonarcloud-github-action@master

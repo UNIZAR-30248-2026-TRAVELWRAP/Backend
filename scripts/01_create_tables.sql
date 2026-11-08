@@ -31,6 +31,15 @@ BEGIN
 END
 $$;
 
+-- Categorías de la pantalla «Añadir Gasto» del prototipo
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'categoria_gasto') THEN
+    CREATE TYPE public.categoria_gasto AS ENUM ('comida', 'transporte', 'entradas', 'alojamiento', 'ocio', 'otros');
+  END IF;
+END
+$$;
+
 -- 2. TABLAS
 CREATE TABLE IF NOT EXISTS public.perfiles (
   id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
@@ -44,6 +53,9 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   creador_id uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   nombre text NOT NULL,
+  -- true si el nombre lo ha puesto la aplicación (destino y año, o uno temporal mientras no hay destino):
+  -- se vuelve a generar al cambiar el destino o las fechas, hasta que alguien escriba otro nombre
+  nombre_automatico boolean NOT NULL DEFAULT false,
   -- Null mientras el destino está pendiente de decidir por votación
   destino text,
   descripcion text,
@@ -117,6 +129,9 @@ CREATE TABLE IF NOT EXISTS public.votos (
     REFERENCES public.opciones_votacion (id, votacion_id) ON DELETE CASCADE
 );
 
+-- Viajes creados antes de que existiera el nombre automático
+ALTER TABLE public.viajes ADD COLUMN IF NOT EXISTS nombre_automatico boolean NOT NULL DEFAULT false;
+
 -- votaciones y opciones_votacion se referencian entre sí: la clave de la opción ganadora se añade al final
 ALTER TABLE public.votaciones DROP CONSTRAINT IF EXISTS votaciones_opcion_ganadora_fk;
 ALTER TABLE public.votaciones ADD CONSTRAINT votaciones_opcion_ganadora_fk
@@ -157,6 +172,74 @@ CREATE TRIGGER actividades_actualizado_en
   BEFORE UPDATE ON public.actividades
   FOR EACH ROW EXECUTE FUNCTION public.marcar_actualizado_en();
 
+-- Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan
+-- siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos
+CREATE TABLE IF NOT EXISTS public.gastos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Al eliminar el viaje se borran sus gastos, y con ellos sus repartos
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  concepto text NOT NULL CHECK (char_length(btrim(concepto)) BETWEEN 1 AND 100),
+  -- Importe total en la moneda del viaje
+  importe numeric(12,2) NOT NULL CHECK (importe > 0),
+  categoria public.categoria_gasto NOT NULL DEFAULT 'otros',
+  -- Miembro que adelanta el pago. Un perfil con gastos no se puede borrar mientras existan
+  pagado_por uuid NOT NULL REFERENCES public.perfiles (id),
+  fecha date NOT NULL DEFAULT current_date,
+  creado_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  actualizado_en timestamptz NOT NULL DEFAULT now(),
+  -- Permite exigir que los repartos sean de miembros del mismo viaje que el gasto
+  CONSTRAINT gastos_id_viaje_unico UNIQUE (id, viaje_id),
+  -- Quien paga tiene que ser miembro del viaje
+  CONSTRAINT gastos_pagado_por_un_miembro FOREIGN KEY (viaje_id, pagado_por)
+    REFERENCES public.miembros_viaje (viaje_id, usuario_id)
+);
+
+DROP TRIGGER IF EXISTS gastos_actualizado_en ON public.gastos;
+CREATE TRIGGER gastos_actualizado_en
+  BEFORE UPDATE ON public.gastos
+  FOR EACH ROW EXECUTE FUNCTION public.marcar_actualizado_en();
+
+-- Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el importe del gasto:
+-- lo comprueba el backend al guardar, porque la base de datos no puede exigirlo fila a fila
+CREATE TABLE IF NOT EXISTS public.repartos_gasto (
+  gasto_id uuid NOT NULL,
+  viaje_id uuid NOT NULL,
+  usuario_id uuid NOT NULL,
+  importe numeric(12,2) NOT NULL CHECK (importe >= 0),
+  PRIMARY KEY (gasto_id, usuario_id),
+  -- Al borrar el gasto se borran sus repartos
+  CONSTRAINT repartos_gasto_del_gasto FOREIGN KEY (gasto_id, viaje_id)
+    REFERENCES public.gastos (id, viaje_id) ON DELETE CASCADE,
+  -- Solo se reparte entre miembros del viaje
+  CONSTRAINT repartos_gasto_de_un_miembro FOREIGN KEY (viaje_id, usuario_id)
+    REFERENCES public.miembros_viaje (viaje_id, usuario_id)
+);
+
+-- Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). El archivo se guarda en el
+-- bucket privado «documentos» de Supabase Storage y esta fila guarda sus datos y dónde está
+CREATE TABLE IF NOT EXISTS public.documentos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Al eliminar el viaje se borran sus filas, pero no los archivos del bucket
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  -- Nombre que ve el usuario (por defecto, el del archivo original)
+  nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 150),
+  -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
+  ruta text NOT NULL UNIQUE,
+  tipo_mime text NOT NULL CHECK (tipo_mime IN ('application/pdf', 'image/jpeg', 'image/png')),
+  -- Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000),
+  subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+  CONSTRAINT documentos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
+);
+
+-- La tabla se creó con un máximo de 10 MB: en las bases de datos que ya la tienen, se cambia el límite a 8 MB
+ALTER TABLE public.documentos
+  DROP CONSTRAINT IF EXISTS documentos_tamano_bytes_check,
+  ADD CONSTRAINT documentos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000);
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -166,3 +249,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS votaciones_destino_unica_idx ON public.votacio
 CREATE UNIQUE INDEX IF NOT EXISTS opciones_votacion_texto_unico_idx ON public.opciones_votacion (votacion_id, lower(btrim(texto)));
 CREATE INDEX IF NOT EXISTS votos_opcion_idx ON public.votos (opcion_id);
 CREATE INDEX IF NOT EXISTS actividades_viaje_fecha_idx ON public.actividades (viaje_id, fecha);
+-- Historial de gastos del viaje, del más reciente al más antiguo
+CREATE INDEX IF NOT EXISTS gastos_viaje_fecha_idx ON public.gastos (viaje_id, fecha DESC, creado_en DESC);
+CREATE INDEX IF NOT EXISTS repartos_gasto_miembro_idx ON public.repartos_gasto (viaje_id, usuario_id);
+-- Cartera del viaje, del documento más reciente al más antiguo
+CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);

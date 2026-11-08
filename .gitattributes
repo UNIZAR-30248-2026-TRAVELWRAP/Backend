@@ -1,2 +1,5 @@
 # Los hooks de git se ejecutan con sh: necesitan saltos de línea LF aunque git convierta el resto a CRLF en Windows
 .husky/* text eol=lf
+
+# Archivos de prueba de la colección de Postman: se suben tal cual, sin convertir saltos de línea
+docs/archivos_prueba/* binary

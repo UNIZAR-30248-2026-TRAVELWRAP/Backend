@@ -1,4 +1,5 @@
 const invitationService = require('../services/invitationService');
+const votacionesSocket = require('../sockets/votacionesSocket');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_REGEX = /^[0-9a-f]{32}$/;
@@ -51,6 +52,8 @@ const unirse = async (req, res) => {
 
     switch (resultado.estado) {
       case 'ok':
+        // Un miembro nuevo cambia quién puede votar: se avisa a las pantallas de votaciones abiertas
+        if (!resultado.ya_era_miembro) votacionesSocket.avisarCambio(resultado.viaje.id, { motivo: 'miembros' });
         return res.status(200).json({
           viaje: resultado.viaje,
           miembro: resultado.miembro,

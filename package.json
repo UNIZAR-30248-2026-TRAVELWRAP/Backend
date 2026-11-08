@@ -2,13 +2,18 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "Repositorio para gestionar el código fuente del backend de la asignatura de Gestión de Proyecto Software de la Universidad de Zaragoza.",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
+    "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "node --test",
+    "test:coverage": "node -e \"require('fs').mkdirSync('coverage', { recursive: true })\" && node --test --experimental-test-coverage --test-coverage-include=src/** --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info",
     "docs": "node scripts/generar-docs.js",
     "docs:check": "node scripts/generar-docs.js --check",
     "prepare": "husky"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "repository": {
     "type": "git",
@@ -27,6 +32,7 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",
     "express": "^5.2.1",
+    "multer": "^2.5.0",
     "redis": "^6.2.1",
     "socket.io": "^4.8.4",
     "swagger-ui-express": "^5.0.1",
@@ -34,6 +40,7 @@
   },
   "devDependencies": {
     "husky": "^9.1.7",
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "socket.io-client": "^4.8.4"
   }
 }

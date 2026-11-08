@@ -109,9 +109,21 @@ describe('POST /viajes (crear)', () => {
     }
   });
 
+  it('un viaje sin nombre (ausente, null o vacío) se crea con el nombre por defecto de la base de datos', async () => {
+    for (const nombre of [undefined, null, '', '   ']) {
+      const supabase = clienteFalso({ rpc: { data: { estado: 'ok', viaje: viajeCreado }, error: null } });
+
+      const res = await llamar(viajeController.crear, { body: { ...valido, nombre }, supabase });
+
+      assert.equal(res.estado, 201, `nombre ${JSON.stringify(nombre)}`);
+      assert.equal(res.cuerpo.nombre, 'Roma 2027');
+      assert.equal(supabase.registro.rpc[0].parametros.p_nombre, null);
+    }
+  });
+
   it('rechaza con 400 los datos inválidos sin llegar a la base de datos', async () => {
     const invalidos = {
-      'sin nombre': { ...valido, nombre: '   ' },
+      'nombre que no es texto': { ...valido, nombre: 5 },
       'nombre demasiado largo': { ...valido, nombre: 'x'.repeat(101) },
       'sin presupuesto': { nombre: 'Roma' },
       'presupuesto negativo': { ...valido, presupuesto: -1 },

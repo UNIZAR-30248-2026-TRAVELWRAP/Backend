@@ -177,9 +177,9 @@ describe('POST /viajes (crear) tras separar los validadores', () => {
     const crear = simular('crear', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID } }));
     const req = (body) => ({ body, usuario: USUARIO, supabase: {} });
 
-    const sinNombre = crearRes();
-    await viajeController.crear(req({ presupuesto: 1 }), sinNombre);
-    assert.equal(sinNombre.cuerpo.error.mensaje, 'El nombre es obligatorio y tiene un máximo de 100 caracteres');
+    const nombreLargo = crearRes();
+    await viajeController.crear(req({ nombre: 'x'.repeat(101), presupuesto: 1 }), nombreLargo);
+    assert.equal(nombreLargo.cuerpo.error.mensaje, 'El nombre debe ser un texto de 100 caracteres como máximo');
 
     const invertidas = crearRes();
     await viajeController.crear(req({ nombre: 'X', presupuesto: 1, fecha_inicio: '2027-05-15', fecha_fin: '2027-05-12' }), invertidas);

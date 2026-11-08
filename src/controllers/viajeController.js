@@ -1,30 +1,9 @@
 const viajeService = require('../services/viajeService');
+const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const ESTADOS = ['activo', 'finalizado', 'archivado'];
 const MAX_TEXTO = 100;
 const MAX_PRESUPUESTO = 1e10; // numeric(12,2): 10 dígitos enteros
-
-// Código de PostgreSQL cuando se incumple un check (p. ej. fecha_fin < fecha_inicio o presupuesto < 0)
-const CHECK_VIOLATION = '23514';
-
-const responderError = (res, estado, codigo, mensaje) =>
-  res.status(estado).json({ error: { codigo, mensaje } });
-
-const fechaValida = (texto) => {
-  if (!FECHA_REGEX.test(texto)) return false;
-  const fecha = new Date(`${texto}T00:00:00Z`);
-  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().startsWith(texto);
-};
-
-// Texto opcional: null, ausente o vacío (null). Devuelve undefined si no es un texto válido
-const textoOpcional = (valor) => {
-  if (valor === undefined || valor === null) return null;
-  if (typeof valor !== 'string') return undefined;
-  const texto = valor.trim();
-  return texto === '' ? null : texto;
-};
 
 const FECHAS_INVERTIDAS = 'La fecha de fin no puede ser anterior a la de inicio';
 
@@ -42,6 +21,15 @@ const validarPresupuesto = (presupuesto) => {
     return { error: 'El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999' };
   }
   return { valor: presupuesto };
+};
+
+// Al crear, el nombre es opcional: sin él (null), la base de datos le pone uno por defecto
+const validarNombreOpcional = (valor) => {
+  const nombre = textoOpcional(valor);
+  if (nombre === undefined || (nombre !== null && nombre.length > MAX_TEXTO)) {
+    return { error: `El nombre debe ser un texto de ${MAX_TEXTO} caracteres como máximo` };
+  }
+  return { valor: nombre };
 };
 
 // Al crear, un destino vacío deja el viaje pendiente de votación
@@ -71,7 +59,7 @@ const validarFecha = (valor) => {
 const validarNuevoViaje = (cuerpo) => {
   const datos = cuerpo ?? {};
 
-  const nombre = validarNombre(datos.nombre);
+  const nombre = validarNombreOpcional(datos.nombre);
   if (nombre.error) return nombre;
   const presupuesto = validarPresupuesto(datos.presupuesto);
   if (presupuesto.error) return presupuesto;
@@ -130,7 +118,7 @@ const validarCambiosViaje = (cuerpo) => {
 const ERRORES_GESTION = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_creador: [403, 'no_creador', 'Solo el creador del viaje puede hacerlo'],
-  no_activo: [409, 'viaje_no_activo', 'El viaje está cerrado y ya no se puede modificar'],
+  no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
 };

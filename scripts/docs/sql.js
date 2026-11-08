@@ -252,6 +252,49 @@ const analizarFuncion = ({ texto, comentarios }) => {
   };
 };
 
+// Divide una lista separada por comas sin partir lo que va entre comillas, paréntesis o corchetes
+const dividirLista = (texto) => {
+  const elementos = [];
+  let actual = '';
+  let profundidad = 0;
+  let enComilla = false;
+  for (const caracter of texto) {
+    if (caracter === "'") enComilla = !enComilla;
+    else if (!enComilla && '(['.includes(caracter)) profundidad += 1;
+    else if (!enComilla && ')]'.includes(caracter)) profundidad -= 1;
+
+    if (caracter === ',' && !enComilla && profundidad === 0) {
+      elementos.push(actual.trim());
+      actual = '';
+    } else {
+      actual += caracter;
+    }
+  }
+  if (actual.trim()) elementos.push(actual.trim());
+  return elementos;
+};
+
+const sinComillas = (valor) => valor.replace(/^'(.*)'$/s, '$1');
+
+// Bucket de Supabase Storage creado con INSERT INTO storage.buckets (columnas) VALUES (valores)
+const analizarBucket = ({ texto, comentarios }) => {
+  const c = texto.match(/^INSERT\s+INTO\s+storage\.buckets\s*\(([^)]*)\)\s*VALUES\s*\(/is);
+  if (!c) return null;
+  const valores = expresionEntreParentesis(texto, /\bVALUES\s*\(/i);
+  if (valores === null) return null;
+
+  const columnas = dividirLista(c[1]);
+  const fila = Object.fromEntries(dividirLista(valores).map((valor, i) => [columnas[i], valor]));
+  const tipos = fila.allowed_mime_types?.match(/^ARRAY\s*\[(.*)\]$/is);
+  return {
+    nombre: sinComillas(fila.name ?? fila.id ?? ''),
+    publico: /^true$/i.test(fila.public ?? 'false'),
+    tamanoMaximo: fila.file_size_limit && !/^null$/i.test(fila.file_size_limit) ? Number(fila.file_size_limit) : null,
+    tipos: tipos ? dividirLista(tipos[1]).map(sinComillas) : [],
+    comentarios,
+  };
+};
+
 // ── Análisis conjunto ─────────────────────────────────────────────────────────
 
 const analizar = (scriptEsquema, scriptPoliticas) => {
@@ -259,14 +302,27 @@ const analizar = (scriptEsquema, scriptPoliticas) => {
   const enums = [];
   const politicas = [];
   const funciones = [];
+  const buckets = [];
   const tablasConRls = new Set();
 
+  // El comentario de una política va encima de su DROP POLICY IF EXISTS: pasa a la CREATE POLICY siguiente
+  let comentariosDeDrop = [];
   for (const sentencia of [...dividirSentencias(scriptEsquema), ...dividirSentencias(scriptPoliticas)]) {
     const { texto } = sentencia;
+    if (/^DROP\s+POLICY\b/i.test(texto)) {
+      comentariosDeDrop = sentencia.comentarios;
+      continue;
+    }
+    const heredados = comentariosDeDrop;
+    comentariosDeDrop = [];
+
     if (/^CREATE\s+TABLE\b/i.test(texto)) tablas.push(analizarTabla(sentencia));
     else if (/^(CREATE\s+TYPE|DO)\b/i.test(texto)) enums.push(...analizarEnums(sentencia));
-    else if (/^CREATE\s+POLICY\b/i.test(texto)) politicas.push(analizarPolitica(sentencia));
+    else if (/^CREATE\s+POLICY\b/i.test(texto)) {
+      politicas.push(analizarPolitica({ ...sentencia, comentarios: [...heredados, ...sentencia.comentarios] }));
+    }
     else if (/^CREATE\s+(OR\s+REPLACE\s+)?FUNCTION\b/i.test(texto)) funciones.push(analizarFuncion(sentencia));
+    else if (/^INSERT\s+INTO\s+storage\.buckets\b/i.test(texto)) buckets.push(analizarBucket(sentencia));
     else if (/^CREATE\s+(UNIQUE\s+)?INDEX\b/i.test(texto)) {
       const indice = analizarIndice(sentencia);
       tablas.find((t) => t.nombre === indice?.tabla)?.indices.push(indice);
@@ -286,7 +342,17 @@ const analizar = (scriptEsquema, scriptPoliticas) => {
     t.rls = tablasConRls.has(t.nombre);
     t.politicas = politicas.filter((p) => p?.tabla === t.nombre);
   }
-  return { tablas, enums: enums.filter(Boolean), politicas: politicas.filter(Boolean), funciones: funciones.filter(Boolean) };
+  // Políticas sobre tablas que no crean los scripts, como storage.objects (archivos de Supabase Storage)
+  const nombresTablas = new Set(tablas.map((t) => t.nombre));
+  const politicasExternas = politicas.filter((p) => p && !nombresTablas.has(p.tabla));
+  return {
+    tablas,
+    enums: enums.filter(Boolean),
+    politicas: politicas.filter(Boolean),
+    politicasExternas,
+    buckets: buckets.filter(Boolean),
+    funciones: funciones.filter(Boolean),
+  };
 };
 
 // ── Markdown ──────────────────────────────────────────────────────────────────
@@ -344,8 +410,49 @@ const bloquePoliticas = (t) =>
     ),
   ]).trimEnd();
 
+const formatearTamano = (bytes) => {
+  if (bytes === null) return 'Sin límite';
+  const conPuntos = bytes.toLocaleString('es-ES', { useGrouping: 'always' });
+  if (Number.isInteger(bytes / (1024 * 1024))) return `${bytes / (1024 * 1024)} MiB (${conPuntos} bytes)`;
+  if (Number.isInteger(bytes / 1_000_000)) return `${bytes / 1_000_000} MB (${conPuntos} bytes)`;
+  return `${conPuntos} bytes`;
+};
+
+// Buckets de Supabase Storage y políticas sobre sus archivos (storage.objects)
+const bloqueStorage = (buckets, politicasExternas) => {
+  const partes = ['## Almacenamiento de archivos (Supabase Storage)'];
+  if (buckets.length) {
+    partes.push(
+      '### Buckets',
+      tabla(
+        ['Bucket', 'Acceso', 'Tamaño máximo', 'Tipos permitidos', 'Descripción'],
+        buckets.map((b) => [
+          codigo(b.nombre),
+          b.publico ? 'Público' : 'Privado',
+          formatearTamano(b.tamanoMaximo),
+          b.tipos.length ? b.tipos.map((t) => codigo(t)).join(', ') : 'Todos',
+          b.comentarios.join(' '),
+        ]),
+      ),
+    );
+  }
+  const porTabla = [...new Set(politicasExternas.map((p) => p.tabla))];
+  for (const nombreTabla of porTabla) {
+    partes.push(
+      `### Políticas de ${codigo(nombreTabla)}`,
+      tabla(
+        ['Política', 'Operación', 'Rol', 'USING (qué archivos puede ver o borrar)', 'WITH CHECK (qué archivos puede subir)', 'Descripción'],
+        politicasExternas
+          .filter((p) => p.tabla === nombreTabla)
+          .map((p) => [codigo(p.nombre), p.operacion, p.roles, codigo(p.using), codigo(p.withCheck), p.comentarios.join(' ')]),
+      ),
+    );
+  }
+  return unirBloques(partes).trimEnd();
+};
+
 const generarBaseDeDatos = (scriptEsquema, scriptPoliticas) => {
-  const { tablas, enums, funciones } = analizar(scriptEsquema, scriptPoliticas);
+  const { tablas, enums, funciones, buckets, politicasExternas } = analizar(scriptEsquema, scriptPoliticas);
 
   const bloques = [
     '# Base de datos de TravelWrap',
@@ -384,6 +491,8 @@ const generarBaseDeDatos = (scriptEsquema, scriptPoliticas) => {
     );
   }
   bloques.push('### Políticas por tabla', ...tablas.filter((t) => t.politicas.length).map(bloquePoliticas));
+
+  if (buckets.length || politicasExternas.length) bloques.push(bloqueStorage(buckets, politicasExternas));
 
   return unirBloques(bloques);
 };

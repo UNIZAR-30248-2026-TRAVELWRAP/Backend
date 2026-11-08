@@ -485,7 +485,7 @@ paths:
                   value:
                     error:
                       codigo: datos_invalidos
-                      mensaje: El nombre es obligatorio y tiene un máximo de 100 caracteres
+                      mensaje: El nombre debe ser un texto de 100 caracteres como máximo
                 presupuesto:
                   value:
                     error:
@@ -662,7 +662,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está cerrado o archivado y ya no se puede modificar
+          description: El viaje está finalizado o archivado y ya no se puede modificar
           content:
             application/json:
               schema:
@@ -670,7 +670,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           description: Error interno del servidor
           content:
@@ -692,8 +692,9 @@ paths:
         - Viajes
       summary: Elimina un viaje archivado
       description: |
-        Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros y, en el futuro, gastos,
-        tareas, documentos...), que se elimina en cascada (PB-13). No se puede deshacer.
+        Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros, votaciones, actividades,
+        gastos y los datos de sus documentos), que se elimina en cascada (PB-13). No se puede deshacer.
+        Los archivos de la cartera siguen en el bucket `documentos` de Supabase Storage.
         Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
       security:
         - bearerAuth: []
@@ -772,7 +773,7 @@ paths:
     post:
       tags:
         - Viajes
-      summary: Cierra y archiva un viaje
+      summary: Finaliza y archiva un viaje
       description: |
         Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
         no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
@@ -1061,8 +1062,9 @@ paths:
         - Votaciones
       summary: Crea una votación
       description: |
-        Crea una votación del viaje con sus opciones iniciales (entre 2 y 20, sin repetir), en una sola operación.
-        La puede crear cualquier miembro mientras el viaje está activo. Después, cualquier miembro puede proponer más opciones.
+        Crea una votación del viaje y, si se envían, sus opciones iniciales (hasta 20, sin repetir), en una sola operación.
+        Las opciones son opcionales: se puede crear sin ninguna y que los miembros las propongan después.
+        La puede crear cualquier miembro mientras el viaje está activo.
         No se pueden crear votaciones de destino: la del destino se abre sola al crear un viaje sin destino.
       security:
         - bearerAuth: []
@@ -1090,7 +1092,7 @@ paths:
               example:
                 error:
                   codigo: datos_invalidos
-                  mensaje: La votación necesita entre 2 y 20 opciones
+                  mensaje: Las opciones no se pueden repetir
         '401':
           $ref: '#/components/responses/SinSesion'
         '404':
@@ -1112,7 +1114,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1285,7 +1287,7 @@ paths:
                   value:
                     error:
                       codigo: viaje_no_activo
-                      mensaje: El viaje está cerrado y ya no se puede modificar
+                      mensaje: El viaje está finalizado y ya no se puede modificar
                 votacionCerrada:
                   value:
                     error:
@@ -1338,7 +1340,7 @@ paths:
                   value:
                     error:
                       codigo: viaje_no_activo
-                      mensaje: El viaje está cerrado y ya no se puede modificar
+                      mensaje: El viaje está finalizado y ya no se puede modificar
                 votacionCerrada:
                   value:
                     error:
@@ -1366,7 +1368,8 @@ paths:
         Cierra la votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas elegida al azar
         (la PWA avisa del empate antes de confirmar). Ya no se puede votar ni proponer opciones.
         En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
-        pendiente de destino. La de destino necesita al menos un voto; las demás, sin votos, se cierran sin ganadora.
+        pendiente de destino.
+        Solo se puede cerrar cuando han votado todos los miembros activos del viaje (RF9): `todos_han_votado` lo indica.
         Solo lo puede hacer el creador del viaje, con el viaje activo.
       security:
         - bearerAuth: []
@@ -1397,7 +1400,7 @@ paths:
         '404':
           $ref: '#/components/responses/VotacionNoEncontrada'
         '409':
-          description: La votación ya está cerrada, el viaje no está activo o la de destino no tiene votos
+          description: La votación ya está cerrada, el viaje no está activo o todavía no han votado todos los miembros
           content:
             application/json:
               schema:
@@ -1408,11 +1411,11 @@ paths:
                     error:
                       codigo: votacion_cerrada
                       mensaje: La votación ya está cerrada
-                sinVotos:
+                faltanVotos:
                   value:
                     error:
-                      codigo: sin_votos
-                      mensaje: La votación de destino necesita al menos un voto para cerrarse
+                      codigo: faltan_votos
+                      mensaje: La votación solo se puede cerrar cuando hayan votado todos los miembros
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1624,7 +1627,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1706,7 +1709,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1772,7 +1775,7 @@ paths:
               example:
                 error:
                   codigo: viaje_no_activo
-                  mensaje: El viaje está cerrado y ya no se puede modificar
+                  mensaje: El viaje está finalizado y ya no se puede modificar
         '500':
           $ref: '#/components/responses/ErrorInterno'
         '502':
@@ -1785,6 +1788,344 @@ paths:
                 error:
                   codigo: error_actividad
                   mensaje: No se ha podido eliminar la actividad
+
+  /viajes/{viajeId}/gastos:
+    get:
+      tags:
+        - Gastos
+      summary: Lista el historial de gastos del viaje con el total
+      description: |
+        Devuelve los gastos del viaje del más reciente al más antiguo (por fecha y, en el mismo día, por la hora a
+        la que se registraron), cada uno con la parte de cada participante, y el total gastado, sumado en céntimos.
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Historial de gastos y total (lista vacía y total 0 si el viaje aún no tiene gastos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaGastos'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se han podido obtener los gastos
+    post:
+      tags:
+        - Gastos
+      summary: Registra un gasto compartido
+      description: |
+        Registra un gasto del viaje y lo reparte entre los participantes indicados a partes iguales en una única
+        operación (función SQL `crear_gasto`): si falla una parte, no se guarda nada. Se calcula en céntimos y los que
+        sobran se asignan a los primeros participantes para que el total siempre sume el importe introducido.
+
+        Cualquier miembro puede registrar un gasto mientras el viaje esté activo. El pagador y los participantes deben
+        ser miembros; quien hace la petición queda marcado como `creado_por`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoGastoRequest'
+      responses:
+        '201':
+          description: Gasto registrado, con la parte de cada participante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gasto'
+        '400':
+          description: |
+            Faltan datos o no son válidos, el identificador del viaje no es un UUID, o quien paga o algún
+            participante no es miembro del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                datosInvalidos:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El importe debe ser un número mayor que 0 con dos decimales como máximo
+                noMiembro:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Quien paga y los participantes tienen que ser miembros del viaje
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido registrar el gasto
+
+  /viajes/{viajeId}/gastos/balance:
+    get:
+      tags:
+        - Gastos
+      summary: Saldo de cada miembro del viaje
+      description: |
+        Devuelve, para cada miembro, lo que ha pagado, su parte de los gastos y su saldo (lo pagado menos su parte):
+        positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
+        siempre está al día y la suma de todos los saldos es 0.
+        Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
+        sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Saldo de cada miembro (todos a 0 si el viaje aún no tiene gastos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido calcular el balance
+
+  /viajes/{viajeId}/documentos:
+    get:
+      tags:
+        - Documentos
+      summary: Lista los documentos de la cartera del viaje
+      description: |
+        Devuelve los datos de los documentos de la cartera compartida del viaje (billetes, reservas, seguros...),
+        del más reciente al más antiguo. No incluye el contenido de los archivos.
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Documentos del viaje (lista vacía si aún no tiene ninguno)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaDocumentos'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_documento
+                  mensaje: No se han podido obtener los documentos
+    post:
+      tags:
+        - Documentos
+      summary: Sube un documento a la cartera del viaje
+      description: |
+        Sube un PDF o una imagen JPEG o PNG de 8 MB como máximo a la cartera compartida del viaje. El archivo se
+        guarda en el bucket privado `documentos` de Supabase Storage, en la carpeta del viaje y con un nombre
+        aleatorio, y sus datos quedan registrados en la tabla `documentos`. Si el registro falla, el archivo se
+        borra del bucket.
+
+        El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+        navegador. Cualquier miembro puede subir documentos mientras el viaje esté activo; quien hace la petición
+        queda como `subido_por`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaDocumentoRequest'
+      responses:
+        '201':
+          description: Documento subido y registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Documento'
+        '400':
+          description: |
+            Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 8 MB, el nombre
+            no es válido o el identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta el archivo del documento en el campo «archivo»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: Solo se pueden subir documentos PDF o imágenes JPEG o PNG
+                demasiadoGrande:
+                  value:
+                    error:
+                      codigo: archivo_demasiado_grande
+                      mensaje: El documento no puede ocupar más de 8 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_documento
+                  mensaje: No se ha podido subir el documento
 
   /viajes/{viajeId}/ruta:
     get:
@@ -2149,12 +2490,17 @@ components:
     NuevoViajeRequest:
       type: object
       required:
-        - nombre
         - presupuesto
       properties:
         nombre:
           type: string
+          nullable: true
           maxLength: 100
+          description: >-
+            Opcional. Sin nombre (ausente, null o vacío), el viaje se llama como su destino y el año de sus fechas
+            («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino lleva uno temporal («Viaje sin destino 2027»)
+            que pasa a ser el del destino cuando se fija por votación. Mientras nadie escriba otro nombre, se vuelve a
+            generar al cambiar el destino o las fechas
           example: "Verano 2027"
         presupuesto:
           type: number
@@ -2379,7 +2725,6 @@ components:
       type: object
       required:
         - titulo
-        - opciones
       properties:
         titulo:
           type: string
@@ -2398,9 +2743,9 @@ components:
           example: fecha
         opciones:
           type: array
-          minItems: 2
           maxItems: 20
-          description: Opciones iniciales, en el orden en que se mostrarán. No se pueden repetir
+          default: []
+          description: Opciones iniciales (opcionales), en el orden en que se mostrarán. No se pueden repetir
           items:
             $ref: '#/components/schemas/NuevaOpcionRequest'
 
@@ -2469,7 +2814,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos)
+          description: Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta)
           example: null
         creado_por:
           type: string
@@ -2497,6 +2842,10 @@ components:
           type: integer
           description: Miembros activos del viaje, es decir, cuántos pueden votar
           example: 4
+        todos_han_votado:
+          type: boolean
+          description: true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9)
+          example: false
         mi_voto:
           type: string
           format: uuid
@@ -2767,6 +3116,244 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Actividad'
+
+    NuevoGastoRequest:
+      type: object
+      required:
+        - concepto
+        - importe
+        - pagado_por
+        - participantes
+      properties:
+        concepto:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Qué se ha pagado. Se guardan sin los espacios del principio y del final
+          example: Cena en el Trastevere
+        importe:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+          maximum: 9999999999.99
+          multipleOf: 0.01
+          description: Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo
+          example: 60.5
+        categoria:
+          type: string
+          nullable: true
+          enum: [comida, transporte, entradas, alojamiento, ocio, otros]
+          description: Tipo de gasto. Opcional; si no se envía se guarda «otros»
+          example: comida
+        pagado_por:
+          type: string
+          format: uuid
+          description: Miembro del viaje que ha pagado
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        fecha:
+          type: string
+          format: date
+          nullable: true
+          description: Día del gasto (AAAA-MM-DD). Opcional; si no se envía se guarda la fecha de hoy
+          example: '2027-05-12'
+        participantes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Miembros del viaje entre los que se divide el gasto a partes iguales, sin repetir ninguno
+          items:
+            type: string
+            format: uuid
+          example:
+            - df77cba6-4be5-4cbc-814b-1e228dd73dcc
+            - 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+
+    RepartoGasto:
+      type: object
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        importe:
+          type: number
+          description: Parte del gasto que le corresponde a este miembro
+          example: 30.25
+
+    Gasto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        concepto:
+          type: string
+          example: Cena en el Trastevere
+        importe:
+          type: number
+          example: 60.5
+        categoria:
+          type: string
+          enum: [comida, transporte, entradas, alojamiento, ocio, otros]
+          example: comida
+        pagado_por:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        fecha:
+          type: string
+          format: date
+          example: '2027-05-12'
+        creado_por:
+          type: string
+          format: uuid
+          nullable: true
+          description: Quién registró el gasto (null si su cuenta se ha eliminado)
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-10-28T10:00:00Z'
+        actualizado_en:
+          type: string
+          format: date-time
+          example: '2026-10-28T10:00:00Z'
+        repartos:
+          type: array
+          description: Parte de cada participante; suman el importe del gasto
+          items:
+            $ref: '#/components/schemas/RepartoGasto'
+          example:
+            - usuario_id: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+              importe: 30.25
+            - usuario_id: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+              importe: 30.25
+
+    ListaGastos:
+      type: object
+      properties:
+        gastos:
+          type: array
+          description: Gastos del viaje, del más reciente al más antiguo
+          items:
+            $ref: '#/components/schemas/Gasto'
+        total:
+          type: number
+          description: Suma de los importes de todos los gastos del viaje
+          example: 107.84
+
+    SaldoMiembro:
+      type: object
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        nombre:
+          type: string
+          nullable: true
+          description: Nombre del miembro (null si ya abandonó el viaje)
+          example: Adriana
+        pagado:
+          type: number
+          description: Suma de los gastos que ha pagado
+          example: 10
+        parte:
+          type: number
+          description: Suma de sus partes en los repartos de los gastos
+          example: 6.34
+        saldo:
+          type: number
+          description: Lo pagado menos su parte. Positivo, le deben; negativo, debe
+          example: 3.66
+
+    Balance:
+      type: object
+      properties:
+        saldos:
+          type: array
+          description: Un saldo por miembro; entre todos suman 0
+          items:
+            $ref: '#/components/schemas/SaldoMiembro'
+          example:
+            - usuario_id: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+              nombre: Adriana
+              pagado: 10
+              parte: 6.34
+              saldo: 3.66
+            - usuario_id: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+              nombre: Berta
+              pagado: 6
+              parte: 6.33
+              saldo: -0.33
+            - usuario_id: 8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f
+              nombre: Daniel
+              pagado: 0
+              parte: 3.33
+              saldo: -3.33
+
+    SubidaDocumentoRequest:
+      type: object
+      required:
+        - archivo
+      properties:
+        archivo:
+          type: string
+          format: binary
+          description: PDF, JPEG o PNG de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición
+        nombre:
+          type: string
+          maxLength: 150
+          description: Nombre que verán los miembros. Si no se indica, se usa el del archivo (recortado a 150 caracteres)
+          example: Billete de tren Madrid-Roma
+
+    Documento:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        nombre:
+          type: string
+          example: Billete de tren Madrid-Roma
+        tipo_mime:
+          type: string
+          enum: [application/pdf, image/jpeg, image/png]
+          description: Tipo reconocido a partir del contenido del archivo
+          example: application/pdf
+        tamano_bytes:
+          type: integer
+          description: Tamaño del archivo en bytes (8.000.000 como máximo)
+          example: 248731
+        subido_por:
+          type: string
+          format: uuid
+          nullable: true
+          description: Quién subió el documento (null si su cuenta se ha eliminado)
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-11-08T10:00:00Z'
+
+    ListaDocumentos:
+      type: object
+      properties:
+        documentos:
+          type: array
+          description: Documentos del viaje, del más reciente al más antiguo
+          items:
+            $ref: '#/components/schemas/Documento'
 
     PuntoDeRuta:
       type: object

@@ -10,6 +10,11 @@ const votacionRoutes = require('./routes/votacionRoutes');
 const actividadRoutes = require('./routes/actividadRoutes');
 const direccionRoutes = require('./routes/direccionRoutes');
 const rutaRoutes = require('./routes/rutaRoutes');
+const votacionesSocket = require('./sockets/votacionesSocket');
+const { comprobarToken } = require('./middleware/authMiddleware');
+const viajeService = require('./services/viajeService');
+const gastoRoutes = require('./routes/gastoRoutes');
+const documentoRoutes = require('./routes/documentoRoutes');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
@@ -43,13 +48,14 @@ chatNamespace.on('connection', (socket) => {
   });
 });
 
-// Lógica básica para las votaciones
-votacionesNamespace.on('connection', (socket) => {
-  console.log(`Usuario conectado al namespace /votaciones [ID: ${socket.id}]`);
-  
-  socket.on('disconnect', () => {
-    console.log(`Usuario desconectado de /votaciones [ID: ${socket.id}]`);
-  });
+// Votaciones en tiempo real: avisa a los miembros de un viaje cuando cambia una de sus votaciones
+votacionesSocket.configurar(votacionesNamespace, {
+  comprobarToken,
+  esMiembro: async (cliente, usuarioId, viajeId) => {
+    const { viaje, error } = await viajeService.obtener(cliente, usuarioId, viajeId);
+    if (error) throw new Error('No se ha podido comprobar el viaje');
+    return Boolean(viaje);
+  },
 });
 
 // Lógica básica para las notificaciones
@@ -62,7 +68,13 @@ notificacionesNamespace.on('connection', (socket) => {
 });
 
 // --- Middlewares globales ---
-app.use(cors()); // Permite peticiones desde el frontend a la API REST
+// Solo el frontend puede llamar a la API REST. CORS_ORIGINS admite varios orígenes separados por comas;
+// sin definir, se aceptan los del frontend en local (vite dev y vite preview)
+const origenesPermitidos = (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:4173')
+  .split(',')
+  .map((origen) => origen.trim())
+  .filter(Boolean);
+app.use(cors({ origin: origenesPermitidos }));
 app.use(express.json()); // Permite leer req.body en formato JSON
 
 // Accesible la documentación de la API desde http://localhost:3000/api-docs
@@ -74,6 +86,8 @@ app.use('/api/viajes', viajeRoutes);
 app.use('/api/viajes/:viajeId/votaciones', votacionRoutes);
 app.use('/api/viajes/:viajeId/actividades', actividadRoutes);
 app.use('/api/viajes/:viajeId/ruta', rutaRoutes);
+app.use('/api/viajes/:viajeId/gastos', gastoRoutes);
+app.use('/api/viajes/:viajeId/documentos', documentoRoutes);
 app.use('/api/direcciones', direccionRoutes);
 app.use('/api', invitationRoutes); // /api/viajes/:viajeId/invitacion y /api/invitaciones/:token/unirse
 

@@ -96,6 +96,18 @@
     {
       "key": "actividadIdSinCoordenadas",
       "value": ""
+    },
+    {
+      "key": "viajeIdGasto",
+      "value": ""
+    },
+    {
+      "key": "usuarioIdGasto",
+      "value": ""
+    },
+    {
+      "key": "viajeIdDocumento",
+      "value": ""
     }
   ],
   "item": [
@@ -732,7 +744,7 @@
           ]
         },
         {
-          "name": "Crear viaje sin nombre",
+          "name": "Crear viaje con nombre demasiado largo",
           "request": {
             "method": "POST",
             "header": [
@@ -748,7 +760,7 @@
             "url": "{{baseUrl}}/viajes",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"  \",\n  \"presupuesto\": 100\n}"
+              "raw": "{\n  \"nombre\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\n  \"presupuesto\": 100\n}"
             }
           },
           "event": [
@@ -1325,6 +1337,7 @@
                   "  pm.expect(destino.opciones).to.eql([]);",
                   "  pm.expect(destino.mi_voto).to.eql(null);",
                   "  pm.expect(destino.total_miembros).to.eql(1);",
+                  "  pm.expect(destino.todos_han_votado).to.eql(false);",
                   "});",
                   "pm.collectionVariables.set('votacionIdDestino', destino.id);"
                 ]
@@ -1333,7 +1346,7 @@
           ]
         },
         {
-          "name": "Cerrar la votación de destino sin votos",
+          "name": "Cerrar la votación de destino antes de que voten todos",
           "request": {
             "method": "POST",
             "header": [
@@ -1351,8 +1364,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
-                  "pm.test('Código sin_votos', () => {",
-                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_votos');",
+                  "pm.test('Código faltan_votos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('faltan_votos');",
                   "});"
                 ]
               }
@@ -1664,7 +1677,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Ya han votado todos (el viaje solo tiene un miembro)', () => {",
+                  "  pm.expect(pm.response.json().todos_han_votado).to.eql(true);",
+                  "});"
                 ]
               }
             }
@@ -1746,7 +1762,7 @@
           ]
         },
         {
-          "name": "Crear una votación con una sola opción",
+          "name": "Crear una votación sin opciones (se proponen después)",
           "request": {
             "method": "POST",
             "header": [
@@ -1762,7 +1778,7 @@
             "url": "{{baseUrl}}/viajes/{{viajeIdVotacion}}/votaciones",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"titulo\": \"¿Hotel o apartamento?\",\n  \"opciones\": [\n    {\n      \"texto\": \"Hotel\"\n    }\n  ]\n}"
+              "raw": "{\n  \"titulo\": \"¿Hotel o apartamento?\"\n}"
             }
           },
           "event": [
@@ -1771,9 +1787,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
-                  "pm.test('Código datos_invalidos', () => {",
-                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Se crea abierta y sin opciones', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('abierta');",
+                  "  pm.expect(pm.response.json().opciones).to.eql([]);",
                   "});"
                 ]
               }
@@ -2094,7 +2111,7 @@
           ]
         },
         {
-          "name": "Cerrar una votación sin votos (se cierra sin ganadora)",
+          "name": "Cerrar una votación en la que falta votar",
           "request": {
             "method": "POST",
             "header": [
@@ -2111,11 +2128,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Cerrada sin ganadora', () => {",
-                  "  pm.expect(pm.response.json().votacion.estado).to.eql('cerrada');",
-                  "  pm.expect(pm.response.json().votacion.opcion_ganadora_id).to.eql(null);",
-                  "  pm.expect(pm.response.json().destino).to.eql(null);",
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código faltan_votos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('faltan_votos');",
                   "});"
                 ]
               }
@@ -4856,6 +4871,1563 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Sigue mostrando las actividades', () => pm.expect(pm.response.json().actividades.length).to.eql(6));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Gastos",
+      "item": [
+        {
+          "name": "Crear viaje para los gastos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Gastos en Roma\",\n  \"presupuesto\": 600,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('viajeIdGasto', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener el viaje para saber el id de quien paga",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const yo = pm.response.json().miembros.find((m) => m.rol === 'creador');",
+                  "pm.test('El creador es miembro del viaje', () => pm.expect(yo).to.be.an('object'));",
+                  "pm.collectionVariables.set('usuarioIdGasto', yo.usuario_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con todos los datos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"  Cena en el Trastevere \",\n  \"importe\": 60.5,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"categoria\": \"comida\",\n  \"fecha\": \"2027-05-12\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "const yo = pm.collectionVariables.get('usuarioIdGasto');",
+                  "pm.test('Guarda los datos con el concepto sin espacios de más', () => {",
+                  "  pm.expect(body.concepto).to.eql('Cena en el Trastevere');",
+                  "  pm.expect(body.importe).to.eql(60.5);",
+                  "  pm.expect(body.categoria).to.eql('comida');",
+                  "  pm.expect(body.fecha).to.eql('2027-05-12');",
+                  "  pm.expect(body.pagado_por).to.eql(yo);",
+                  "  pm.expect(body.creado_por).to.eql(yo);",
+                  "});",
+                  "pm.test('El reparto suma el importe', () => {",
+                  "  pm.expect(body.repartos).to.eql([{ usuario_id: yo, importe: 60.5 }]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto sin categoría ni fecha",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Taxi al aeropuerto\",\n  \"importe\": 35,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Categoría «otros» y fecha de hoy', () => {",
+                  "  pm.expect(body.categoria).to.eql('otros');",
+                  "  pm.expect(body.fecha).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con céntimos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Entradas del Coliseo\",\n  \"importe\": 12.34,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"categoria\": \"entradas\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Importe y parte como número con sus céntimos', () => {",
+                  "  pm.expect(body.importe).to.eql(12.34);",
+                  "  pm.expect(body.repartos[0].importe).to.eql(12.34);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar el historial de gastos con el total",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Están los tres gastos registrados', () => {",
+                  "  pm.expect(body.gastos.map((g) => g.concepto)).to.have.members(['Cena en el Trastevere', 'Taxi al aeropuerto', 'Entradas del Coliseo']);",
+                  "});",
+                  "pm.test('Del más reciente al más antiguo', () => {",
+                  "  const claves = body.gastos.map((g) => g.fecha + ' ' + g.creado_en);",
+                  "  pm.expect(claves).to.eql([...claves].sort().reverse());",
+                  "});",
+                  "pm.test('El total es la suma de los importes: 60,50 + 35 + 12,34', () => pm.expect(body.total).to.eql(107.84));",
+                  "pm.test('Cada gasto trae la parte de cada participante', () => {",
+                  "  body.gastos.forEach((g) => pm.expect(g.repartos).to.have.lengthOf(1));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar gastos con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma-2027/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar gastos sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar gastos de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance del viaje",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { saldos } = pm.response.json();",
+                  "const yo = pm.collectionVariables.get('usuarioIdGasto');",
+                  "pm.test('Un saldo por miembro', () => {",
+                  "  pm.expect(saldos).to.have.lengthOf(1);",
+                  "  pm.expect(saldos[0].usuario_id).to.eql(yo);",
+                  "  pm.expect(saldos[0].nombre).to.be.a('string');",
+                  "});",
+                  "pm.test('Ha pagado 107,84 € y su parte es la misma, así que su saldo es 0', () => {",
+                  "  pm.expect(saldos[0].pagado).to.eql(107.84);",
+                  "  pm.expect(saldos[0].parte).to.eql(107.84);",
+                  "  pm.expect(saldos[0].saldo).to.eql(0);",
+                  "});",
+                  "pm.test('Los saldos suman 0', () => {",
+                  "  pm.expect(saldos.reduce((total, s) => total + Math.round(s.saldo * 100), 0)).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma-2027/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto sin concepto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"   \",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('El concepto es obligatorio y tiene un máximo de 100 caracteres');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con importe 0",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 0,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('El importe debe ser un número mayor que 0 con dos decimales como máximo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con tres decimales",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 10.123,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('El importe debe ser un número mayor que 0 con dos decimales como máximo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con el importe como texto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": \"60\",\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('El importe debe ser un número mayor que 0 con dos decimales como máximo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con una categoría que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"categoria\": \"cultura\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('La categoría debe ser comida, transporte, entradas, alojamiento, ocio u otros');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con una fecha que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"fecha\": \"2027-02-30\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('La fecha debe tener el formato AAAA-MM-DD');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto sin participantes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('Indica al menos un miembro del viaje entre los que se divide el gasto');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con un participante repetido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\", \"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('Cada miembro solo puede aparecer una vez en el reparto');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto pagado por alguien que no es miembro",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"00000000-0000-4000-8000-000000000000\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('Quien paga y los participantes tienen que ser miembros del viaje');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto con identificador de viaje no válido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma-2027/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});",
+                  "pm.test('Explica el motivo', () => {",
+                  "  pm.expect(pm.response.json().error.mensaje).to.eql('El identificador del viaje no es válido');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto sin sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto en un viaje que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar el viaje de los gastos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El viaje queda archivado', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto en un viaje archivado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena\",\n  \"importe\": 60,\n  \"pagado_por\": \"{{usuarioIdGasto}}\",\n  \"participantes\": [\"{{usuarioIdGasto}}\"]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los gastos de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Están los tres gastos registrados', () => {",
+                  "  pm.expect(body.gastos.map((g) => g.concepto)).to.have.members(['Cena en el Trastevere', 'Taxi al aeropuerto', 'Entradas del Coliseo']);",
+                  "});",
+                  "pm.test('Del más reciente al más antiguo', () => {",
+                  "  const claves = body.gastos.map((g) => g.fecha + ' ' + g.creado_en);",
+                  "  pm.expect(claves).to.eql([...claves].sort().reverse());",
+                  "});",
+                  "pm.test('El total es la suma de los importes: 60,50 + 35 + 12,34', () => pm.expect(body.total).to.eql(107.84));",
+                  "pm.test('Cada gasto trae la parte de cada participante', () => {",
+                  "  body.gastos.forEach((g) => pm.expect(g.repartos).to.have.lengthOf(1));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver el balance de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/balance"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { saldos } = pm.response.json();",
+                  "const yo = pm.collectionVariables.get('usuarioIdGasto');",
+                  "pm.test('Un saldo por miembro', () => {",
+                  "  pm.expect(saldos).to.have.lengthOf(1);",
+                  "  pm.expect(saldos[0].usuario_id).to.eql(yo);",
+                  "  pm.expect(saldos[0].nombre).to.be.a('string');",
+                  "});",
+                  "pm.test('Ha pagado 107,84 € y su parte es la misma, así que su saldo es 0', () => {",
+                  "  pm.expect(saldos[0].pagado).to.eql(107.84);",
+                  "  pm.expect(saldos[0].parte).to.eql(107.84);",
+                  "  pm.expect(saldos[0].saldo).to.eql(0);",
+                  "});",
+                  "pm.test('Los saldos suman 0', () => {",
+                  "  pm.expect(saldos.reduce((total, s) => total + Math.round(s.saldo * 100), 0)).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Documentos",
+      "item": [
+        {
+          "name": "Crear viaje para los documentos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Documentos de Roma\",\n  \"presupuesto\": 600,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('viajeIdDocumento', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar la cartera de un viaje sin documentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('La lista está vacía', () => pm.expect(pm.response.json().documentos).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un PDF sin nombre (se usa el del archivo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/billete.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Guarda el nombre del archivo y el tipo reconocido por su contenido', () => {",
+                  "  pm.expect(body.nombre).to.eql('billete.pdf');",
+                  "  pm.expect(body.tipo_mime).to.eql('application/pdf');",
+                  "  pm.expect(body.tamano_bytes).to.be.above(0);",
+                  "  pm.expect(body.viaje_id).to.eql(pm.collectionVariables.get('viajeIdDocumento'));",
+                  "  pm.expect(body.subido_por).to.be.a('string');",
+                  "});",
+                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una imagen PNG con nombre",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "nombre",
+                  "value": "  Foto del pasaporte  ",
+                  "type": "text"
+                },
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.png"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Usa el nombre indicado sin espacios de más', () => pm.expect(body.nombre).to.eql('Foto del pasaporte'));",
+                  "pm.test('Tipo image/png', () => pm.expect(body.tipo_mime).to.eql('image/png'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los documentos del más reciente al más antiguo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { documentos } = pm.response.json();",
+                  "pm.test('Están los dos documentos, primero el último subido', () => {",
+                  "  pm.expect(documentos.map((d) => d.nombre)).to.eql(['Foto del pasaporte', 'billete.pdf']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un archivo de texto con extensión .pdf",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/no_es_un_pdf.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código tipo_no_permitido', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('tipo_no_permitido');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un documento sin archivo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "nombre",
+                  "value": "Billete",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un documento con un nombre de más de 150 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "nombre",
+                  "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "type": "text"
+                },
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/billete.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un documento con identificador de viaje no válido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/billete.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un documento sin sesión",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/billete.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un documento a un viaje que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/billete.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar documentos con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/documentos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar documentos sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar documentos de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/documentos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar el viaje de los documentos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El viaje queda archivado', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un documento a un viaje archivado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/billete.pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los documentos de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Siguen los dos documentos', () => pm.expect(pm.response.json().documentos).to.have.length(2));"
                 ]
               }
             }

@@ -16,8 +16,9 @@ const opcionesYVotos = async (cliente, ids) => {
   return { opciones: opciones.data ?? [], votos: votos.data ?? [] };
 };
 
-// Da a la votación el formato de la API: sus opciones con el recuento, el voto del usuario y cuántos pueden votar
-const formatear = (votacion, opciones, votos, usuarioId, totalMiembros) => {
+// Da a la votación el formato de la API: sus opciones con el recuento, el voto del usuario, cuántos pueden
+// votar y si ya han votado todos (solo entonces se puede cerrar, RF9)
+const formatear = (votacion, opciones, votos, usuarioId, miembros) => {
   const { viaje_id: _viaje, ...datos } = votacion;
   const propios = votos.filter((v) => v.votacion_id === votacion.id);
   return {
@@ -29,7 +30,8 @@ const formatear = (votacion, opciones, votos, usuarioId, totalMiembros) => {
         return { ...opcion, votos: votantes.length, votantes };
       }),
     total_votos: propios.length,
-    total_miembros: totalMiembros,
+    total_miembros: miembros.length,
+    todos_han_votado: miembros.every((m) => propios.some((v) => v.usuario_id === m.usuario_id)),
     mi_voto: propios.find((v) => v.usuario_id === usuarioId)?.opcion_id ?? null,
   };
 };
@@ -39,7 +41,7 @@ const conRecuento = async (cliente, usuarioId, viaje, votaciones) => {
   const resultado = await opcionesYVotos(cliente, votaciones.map((v) => v.id));
   if (resultado.error) return { error: resultado.error };
   return {
-    votaciones: votaciones.map((v) => formatear(v, resultado.opciones, resultado.votos, usuarioId, viaje.miembros.length)),
+    votaciones: votaciones.map((v) => formatear(v, resultado.opciones, resultado.votos, usuarioId, viaje.miembros)),
   };
 };
 
@@ -193,7 +195,7 @@ const retirarVoto = async (cliente, usuarioId, viajeId, votacionId) => {
 
 // Cierra la votación con la función cerrar_votacion: elige la ganadora (al azar si hay empate) y, si es
 // la de destino, lo guarda en el viaje en la misma operación
-// Devuelve { error } | { estado: no_existe | no_encontrada | no_creador | no_activo | votacion_cerrada | sin_votos
+// Devuelve { error } | { estado: no_existe | no_encontrada | no_creador | no_activo | votacion_cerrada | faltan_votos
 //   | ok (con votacion, hubo_empate y destino) }
 const cerrar = async (cliente, usuarioId, viajeId, votacionId) => {
   const previo = await votacionDelViaje(cliente, usuarioId, viajeId, votacionId);

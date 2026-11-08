@@ -4,6 +4,7 @@ const { afterEach, describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const votacionService = require('../src/services/votacionService');
 const votacionController = require('../src/controllers/votacionController');
+const votacionesSocket = require('../src/sockets/votacionesSocket');
 
 const USUARIO = 'df77cba6-4be5-4cbc-814b-1e228dd73dcc';
 const OTRO = 'a1b2c3d4-0000-4000-8000-000000000001';
@@ -107,9 +108,20 @@ describe('votacionService.listar', () => {
     assert.deepEqual(v.opciones[1].votantes, [USUARIO, OTRO]);
     assert.equal(v.total_votos, 2);
     assert.equal(v.total_miembros, 2);
+    assert.equal(v.todos_han_votado, true);
     assert.equal(v.mi_voto, PRAGA);
     assert.deepEqual(operacion(cliente.consultas[1], 'eq').slice(1), ['viaje_id', VIAJE_ID]);
     assert.ok(cliente.consultas[1].operaciones.some(([m, c, val]) => m === 'eq' && c === 'estado' && val === 'abierta'));
+  });
+
+  it('todos_han_votado es false mientras falte algún miembro por votar', async () => {
+    const soloOtro = ok([{ votacion_id: VOTACION_ID, opcion_id: PRAGA, usuario_id: OTRO }]);
+    const cliente = clienteFalso([viaje(), ok([votacion()]), opciones, soloOtro]);
+
+    const [v] = (await votacionService.listar(cliente, USUARIO, VIAJE_ID)).votaciones;
+
+    assert.equal(v.todos_han_votado, false);
+    assert.equal(v.mi_voto, null);
   });
 
   it('sin votaciones no consulta opciones ni votos', async () => {
@@ -233,9 +245,9 @@ describe('votacionService.cerrar', () => {
     assert.equal(cliente.llamadasRpc.length, 0);
   });
 
-  it('pasa los motivos de la función: sin votos o cerrada justo antes por otro', async () => {
-    const sinVotos = clienteFalso([viaje(), ok(votacion())], [ok({ estado: 'sin_votos' })]);
-    assert.deepEqual(await votacionService.cerrar(sinVotos, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'sin_votos' });
+  it('pasa los motivos de la función: faltan votos o cerrada justo antes por otro', async () => {
+    const faltan = clienteFalso([viaje(), ok(votacion())], [ok({ estado: 'faltan_votos' })]);
+    assert.deepEqual(await votacionService.cerrar(faltan, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'faltan_votos' });
 
     const yaCerrada = clienteFalso([viaje(), ok(votacion())], [ok({ estado: 'ya_cerrada' })]);
     assert.deepEqual(await votacionService.cerrar(yaCerrada, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'votacion_cerrada' });
@@ -286,10 +298,22 @@ describe('POST /viajes/:viajeId/votaciones (crear)', () => {
     });
   });
 
+  it('las opciones son opcionales: se puede crear sin ninguna o con una sola', async () => {
+    const crear = simular('crear', async () => ({ estado: 'ok', votacion: { id: VOTACION_ID } }));
+
+    const sinOpciones = await llamar('crear', { body: { titulo: '¿Dónde cenamos?' } });
+    const conUna = await llamar('crear', { body: { titulo: '¿Dónde cenamos?', opciones: [{ texto: 'Tasca' }] } });
+
+    assert.equal(sinOpciones.codigo, 201);
+    assert.equal(conUna.codigo, 201);
+    assert.deepEqual(crear.mock.calls[0].arguments[3].opciones, []);
+    assert.deepEqual(crear.mock.calls[1].arguments[3].opciones, [{ texto: 'Tasca', valor_fecha: null }]);
+  });
+
   for (const [caso, body] of [
     ['sin título', { ...valida, titulo: '  ' }],
     ['de tipo destino', { ...valida, tipo: 'destino' }],
-    ['con menos de dos opciones', { ...valida, opciones: [{ texto: 'Sábado' }] }],
+    ['con más de 20 opciones', { ...valida, opciones: Array.from({ length: 21 }, (_, i) => ({ texto: `Opción ${i}` })) }],
     ['con opciones repetidas', { ...valida, opciones: [{ texto: 'Sábado' }, { texto: ' sábado' }] }],
     ['con una fecha mal escrita', { ...valida, opciones: [{ texto: 'Viernes', valor_fecha: '2027-02-30' }, { texto: 'Sábado' }] }],
   ]) {
@@ -352,16 +376,56 @@ describe('POST /viajes/:viajeId/votaciones/:votacionId/cerrar', () => {
     assert.deepEqual(res.cuerpo, { votacion: { id: VOTACION_ID, estado: 'cerrada' }, hubo_empate: false, destino: 'Praga' });
   });
 
-  it('sin votos en la de destino responde 409 sin_votos', async () => {
-    simular('cerrar', async () => ({ estado: 'sin_votos' }));
+  it('si no han votado todos los miembros responde 409 faltan_votos (RF9)', async () => {
+    simular('cerrar', async () => ({ estado: 'faltan_votos' }));
     const res = await llamar('cerrar');
     assert.equal(res.codigo, 409);
-    assert.equal(res.cuerpo.error.codigo, 'sin_votos');
+    assert.equal(res.cuerpo.error.codigo, 'faltan_votos');
   });
 
   it('quien no es el creador recibe 403', async () => {
     simular('cerrar', async () => ({ estado: 'no_creador' }));
     const res = await llamar('cerrar');
     assert.equal(res.codigo, 403);
+  });
+});
+
+describe('avisos en tiempo real', () => {
+  const avisos = () => mock.method(votacionesSocket, 'avisarCambio', () => {});
+
+  for (const [accion, motivo, body] of [
+    ['crear', 'creada', { titulo: '¿Qué día?', opciones: [{ texto: 'Viernes' }, { texto: 'Sábado' }] }],
+    ['anadirOpcion', 'opcion', { texto: 'Lisboa' }],
+    ['votar', 'voto', { opcion_id: LISBOA }],
+    ['retirarVoto', 'voto', undefined],
+  ]) {
+    it(`${accion} avisa a los miembros del viaje con el motivo «${motivo}»`, async () => {
+      simular(accion, async () => ({ estado: 'ok', votacion: { id: VOTACION_ID } }));
+      const avisar = avisos();
+
+      await llamar(accion, { body });
+
+      assert.deepEqual(avisar.mock.calls[0].arguments, [VIAJE_ID, { votacion_id: VOTACION_ID, motivo }]);
+    });
+  }
+
+  it('cerrar avisa con el destino fijado', async () => {
+    simular('cerrar', async () => ({ estado: 'ok', votacion: { id: VOTACION_ID }, hubo_empate: false, destino: 'Praga' }));
+    const avisar = avisos();
+
+    await llamar('cerrar');
+
+    assert.deepEqual(avisar.mock.calls[0].arguments, [VIAJE_ID, { votacion_id: VOTACION_ID, motivo: 'cerrada', destino: 'Praga' }]);
+  });
+
+  it('si la acción falla no se avisa', async () => {
+    simular('votar', async () => ({ estado: 'votacion_cerrada' }));
+    simular('cerrar', async () => ({ estado: 'faltan_votos' }));
+    const avisar = avisos();
+
+    await llamar('votar', { body: { opcion_id: LISBOA } });
+    await llamar('cerrar');
+
+    assert.equal(avisar.mock.callCount(), 0);
   });
 });

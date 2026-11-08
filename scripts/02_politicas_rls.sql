@@ -34,6 +34,19 @@ AS $$
   );
 $$;
 
+-- Viaje al que pertenece un archivo del bucket «documentos», sacado de la primera carpeta de su ruta.
+-- Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage)
+CREATE OR REPLACE FUNCTION public.viaje_de_ruta(p_ruta text)
+RETURNS uuid
+LANGUAGE sql IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT CASE
+    WHEN split_part(p_ruta, '/', 1) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN split_part(p_ruta, '/', 1)::uuid
+  END;
+$$;
+
 -- Viaje al que pertenece una votación (lo usan las políticas de opciones y votos)
 CREATE OR REPLACE FUNCTION public.viaje_de_votacion(p_votacion_id uuid)
 RETURNS uuid
@@ -58,6 +71,29 @@ AS $$
   );
 $$;
 
+-- Nombre por defecto de un viaje: su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de
+-- año). Sin destino, uno temporal («Viaje sin destino 2027»). Como mucho 100 caracteres
+CREATE OR REPLACE FUNCTION public.nombre_por_defecto(p_destino text, p_inicio date, p_fin date)
+RETURNS text
+LANGUAGE sql IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT CASE
+    WHEN anio IS NULL THEN left(lugar, 100)
+    ELSE rtrim(left(lugar, 100 - length(anio) - 1)) || ' ' || anio
+  END
+  FROM (
+    SELECT
+      COALESCE(nullif(btrim(p_destino), ''), 'Viaje sin destino') AS lugar,
+      CASE
+        WHEN p_inicio IS NOT NULL AND p_fin IS NOT NULL AND p_fin >= p_inicio
+             AND extract(year FROM p_fin) <> extract(year FROM p_inicio)
+          THEN extract(year FROM p_inicio)::int || '-' || extract(year FROM p_fin)::int
+        ELSE COALESCE(extract(year FROM p_inicio), extract(year FROM p_fin))::int::text
+      END AS anio
+  ) datos;
+$$;
+
 -- 2. ACTIVAR RLS
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.viajes ENABLE ROW LEVEL SECURITY;
@@ -66,6 +102,9 @@ ALTER TABLE public.votaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.opciones_votacion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.votos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -185,6 +224,96 @@ DROP POLICY IF EXISTS actividades_delete ON public.actividades;
 CREATE POLICY actividades_delete ON public.actividades FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
+-- POLÍTICAS GASTOS
+-- Los miembros ven todos los gastos de su viaje (historial, detalle, balance y liquidación)
+DROP POLICY IF EXISTS gastos_select ON public.gastos;
+CREATE POLICY gastos_select ON public.gastos FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro registra gastos mientras el viaje está activo; queda como autor del registro
+DROP POLICY IF EXISTS gastos_insert ON public.gastos;
+CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
+  WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Cualquier miembro corrige o borra gastos mientras el viaje está activo (como con las actividades).
+-- En un viaje finalizado o archivado los gastos quedan de solo lectura
+DROP POLICY IF EXISTS gastos_update ON public.gastos;
+CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS gastos_delete ON public.gastos;
+CREATE POLICY gastos_delete ON public.gastos FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS REPARTOS_GASTO
+-- Las partes de cada gasto siguen las mismas reglas que el gasto: las ven los miembros y
+-- solo se escriben mientras el viaje está activo. La clave ajena a gastos garantiza que la parte es de ese viaje
+DROP POLICY IF EXISTS repartos_gasto_select ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_select ON public.repartos_gasto FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+DROP POLICY IF EXISTS repartos_gasto_insert ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_insert ON public.repartos_gasto FOR INSERT TO authenticated
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS repartos_gasto_update ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_update ON public.repartos_gasto FOR UPDATE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS repartos_gasto_delete ON public.repartos_gasto;
+CREATE POLICY repartos_gasto_delete ON public.repartos_gasto FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS DOCUMENTOS
+-- Los miembros ven todos los documentos de la cartera de su viaje, también en viajes finalizados o archivados
+DROP POLICY IF EXISTS documentos_select ON public.documentos;
+CREATE POLICY documentos_select ON public.documentos FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro sube documentos mientras el viaje está activo; queda como quien lo ha subido
+DROP POLICY IF EXISTS documentos_insert ON public.documentos;
+CREATE POLICY documentos_insert ON public.documentos FOR INSERT TO authenticated
+  WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada)
+-- y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('documentos', 'documentos', false, 8000000, ARRAY['application/pdf', 'image/jpeg', 'image/png'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- POLÍTICAS STORAGE DOCUMENTOS
+
+-- Los archivos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlos
+-- (para abrirlos o generar URLs firmadas), también en viajes finalizados o archivados
+DROP POLICY IF EXISTS documentos_storage_select ON storage.objects;
+CREATE POLICY documentos_storage_select ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)));
+
+-- Los miembros suben archivos a la carpeta de su viaje mientras está activo
+DROP POLICY IF EXISTS documentos_storage_insert ON storage.objects;
+CREATE POLICY documentos_storage_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'documentos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+  );
+
+-- Solo para deshacer una subida cuando falla el registro del documento: se puede borrar un archivo
+-- de la carpeta de un viaje activo que todavía no tiene fila en documentos
+DROP POLICY IF EXISTS documentos_storage_delete_huerfano ON storage.objects;
+CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'documentos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+    AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)
+  );
+
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)
 RETURNS jsonb
@@ -252,6 +381,7 @@ GRANT EXECUTE ON FUNCTION public.unirse_con_invitacion(text) TO authenticated;
 -- Crea un viaje y añade a quien lo crea como miembro con rol creador, en una sola operación.
 -- Es SECURITY DEFINER para poder crear el perfil si falta (el login por email no lo crea).
 -- Un viaje sin destino (destino null) queda pendiente y se abre su votación de destino.
+-- Sin nombre (p_nombre null), el trigger viajes_nombre_automatico le pone el nombre por defecto.
 -- Devuelve { estado }: sin_sesion | ok (con viaje)
 CREATE OR REPLACE FUNCTION public.crear_viaje(
   p_nombre text,
@@ -359,9 +489,9 @@ GRANT EXECUTE ON FUNCTION public.crear_votacion(uuid, text, text, public.tipo_vo
 -- 12. FUNCIÓN CERRAR VOTACIÓN
 -- Cierra una votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas al azar.
 -- En la votación de destino fija además el destino del viaje, todo en una sola operación.
--- Solo la cierra el creador del viaje, con el viaje activo. Es SECURITY INVOKER (se aplican las políticas RLS).
--- Una votación sin votos se cierra sin ganadora, salvo la de destino, que necesita al menos un voto.
--- Devuelve { estado }: no_existe | no_creador | no_activo | ya_cerrada | sin_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
+-- Solo la cierra el creador del viaje, con el viaje activo y cuando han votado todos sus miembros (RF9).
+-- Es SECURITY INVOKER (se aplican las políticas RLS).
+-- Devuelve { estado }: no_existe | no_creador | no_activo | ya_cerrada | faltan_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
 CREATE OR REPLACE FUNCTION public.cerrar_votacion(p_viaje_id uuid, p_votacion_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
@@ -389,6 +519,16 @@ BEGIN
     RETURN jsonb_build_object('estado', 'ya_cerrada');
   END IF;
 
+  -- RF9: solo se cierra cuando han votado todos los miembros activos del viaje
+  IF EXISTS (
+    SELECT 1 FROM public.miembros_viaje m
+    WHERE m.viaje_id = p_viaje_id
+      AND m.abandonado_en IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.votos v WHERE v.votacion_id = p_votacion_id AND v.usuario_id = m.usuario_id)
+  ) THEN
+    RETURN jsonb_build_object('estado', 'faltan_votos');
+  END IF;
+
   -- Opciones con más votos (al menos uno) y, entre ellas, una al azar
   WITH recuento AS (
     SELECT o.id, count(v.id) AS votos
@@ -402,10 +542,6 @@ BEGIN
   )
   SELECT (SELECT count(*) FROM empatadas), (SELECT id FROM empatadas ORDER BY random() LIMIT 1)
   INTO v_empatadas, v_ganadora_id;
-
-  IF v_ganadora_id IS NULL AND v_votacion.tipo = 'destino' THEN
-    RETURN jsonb_build_object('estado', 'sin_votos');
-  END IF;
 
   UPDATE public.votaciones
   SET estado = 'cerrada', cerrada_en = now(), opcion_ganadora_id = v_ganadora_id
@@ -428,7 +564,94 @@ $$;
 REVOKE ALL ON FUNCTION public.cerrar_votacion(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cerrar_votacion(uuid, uuid) TO authenticated;
 
--- 13. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
+-- 13. FUNCIÓN CREAR GASTO
+-- Registra un gasto y lo reparte a partes iguales entre los participantes en una sola operación:
+-- si falla una parte, no se guarda nada. Las partes se calculan en céntimos y los céntimos que sobran
+-- se reparten uno a uno entre los primeros participantes, así que siempre suman el importe del gasto.
+-- Es SECURITY INVOKER: se aplican las mismas políticas RLS que a un insert directo en las tablas.
+-- Devuelve { estado }: no_existe | no_activo | no_miembro | ok (con gasto_id)
+CREATE OR REPLACE FUNCTION public.crear_gasto(
+  p_viaje_id uuid,
+  p_concepto text,
+  p_importe numeric,
+  p_categoria public.categoria_gasto,
+  p_pagado_por uuid,
+  p_fecha date,
+  p_participantes uuid[]
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_gasto_id uuid;
+  v_centimos bigint := round(p_importe * 100);
+  v_total int := cardinality(p_participantes);
+BEGIN
+  IF NOT public.es_miembro(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_existe');
+  END IF;
+  IF NOT public.es_editable(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
+  END IF;
+
+  -- Quien paga y todos los participantes tienen que ser miembros actuales del viaje
+  IF EXISTS (
+    SELECT 1 FROM unnest(p_participantes || p_pagado_por) AS u (usuario_id)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.miembros_viaje m
+      WHERE m.viaje_id = p_viaje_id AND m.usuario_id = u.usuario_id AND m.abandonado_en IS NULL
+    )
+  ) THEN
+    RETURN jsonb_build_object('estado', 'no_miembro');
+  END IF;
+
+  INSERT INTO public.gastos (viaje_id, concepto, importe, categoria, pagado_por, fecha, creado_por)
+  VALUES (p_viaje_id, btrim(p_concepto), p_importe, COALESCE(p_categoria, 'otros'), p_pagado_por,
+          COALESCE(p_fecha, current_date), auth.uid())
+  RETURNING id INTO v_gasto_id;
+
+  INSERT INTO public.repartos_gasto (gasto_id, viaje_id, usuario_id, importe)
+  SELECT v_gasto_id, p_viaje_id, p.usuario_id,
+         (v_centimos / v_total + CASE WHEN p.posicion <= v_centimos % v_total THEN 1 ELSE 0 END) / 100.0
+  FROM unnest(p_participantes) WITH ORDINALITY AS p (usuario_id, posicion);
+
+  RETURN jsonb_build_object('estado', 'ok', 'gasto_id', v_gasto_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
+
+-- 14. NOMBRE AUTOMÁTICO DEL VIAJE
+-- Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo
+-- sea, se vuelve a generar cada vez que cambian el destino o las fechas: así, al fijar el destino por votación
+-- (o al editarlo), el nombre temporal pasa a ser el del destino. En cuanto alguien escribe un nombre, se respeta
+CREATE OR REPLACE FUNCTION public.viajes_nombre_automatico()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.nombre_automatico := NEW.nombre IS NULL OR btrim(NEW.nombre) = '';
+  ELSIF NEW.nombre IS DISTINCT FROM OLD.nombre THEN
+    NEW.nombre_automatico := false;
+  END IF;
+
+  IF NEW.nombre_automatico THEN
+    NEW.nombre := public.nombre_por_defecto(NEW.destino, NEW.fecha_inicio, NEW.fecha_fin);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS viajes_nombre_automatico ON public.viajes;
+CREATE TRIGGER viajes_nombre_automatico
+  BEFORE INSERT OR UPDATE ON public.viajes
+  FOR EACH ROW EXECUTE FUNCTION public.viajes_nombre_automatico();
+
+-- 15. VIAJES PENDIENTES CREADOS ANTES DE LAS VOTACIONES
 -- Abre la votación de destino de los viajes activos sin destino que todavía no la tienen.
 -- Se puede ejecutar varias veces: solo crea las que faltan
 INSERT INTO public.votaciones (viaje_id, titulo, tipo, creado_por)

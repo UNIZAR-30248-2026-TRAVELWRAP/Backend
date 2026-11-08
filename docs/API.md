@@ -26,7 +26,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}`](#get-viajesviajeid) | Obtiene el detalle de un viaje | Token de sesión |
 | PATCH | [`/viajes/{viajeId}`](#patch-viajesviajeid) | Edita los datos de un viaje | Token de sesión |
 | DELETE | [`/viajes/{viajeId}`](#delete-viajesviajeid) | Elimina un viaje archivado | Token de sesión |
-| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Cierra y archiva un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Finaliza y archiva un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 | GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
@@ -41,6 +41,11 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
+| POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
 
 ## General
@@ -415,7 +420,7 @@ Si no se indica destino (`null`, ausente o cadena vacía) el viaje queda **pendi
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
-| `nombre` | string | Sí |  | `Verano 2027` |
+| `nombre` | string \| null | No | Opcional. Sin nombre (ausente, null o vacío), el viaje se llama como su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino lleva uno temporal («Viaje sin destino 2027») que pasa a ser el del destino cuando se fija por votación. Mientras nadie escriba otro nombre, se vuelve a generar al cambiar el destino o las fechas | `Verano 2027` |
 | `presupuesto` | number | Sí | Presupuesto estimado del viaje en su moneda (EUR). Se puede cambiar después | `850` |
 | `destino` | string \| null | No | Si es null, está ausente o es una cadena vacía, el viaje queda pendiente de decidir el destino por votación | `Roma` |
 | `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
@@ -445,7 +450,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `datos_invalidos` | El nombre es obligatorio y tiene un máximo de 100 caracteres |
+| `datos_invalidos` | El nombre debe ser un texto de 100 caracteres como máximo |
 | `datos_invalidos` | El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999 |
 | `datos_invalidos` | La fecha de fin no puede ser anterior a la de inicio |
 
@@ -613,11 +618,11 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está cerrado o archivado y ya no se puede modificar
+**409** — El viaje está finalizado o archivado y ya no se puede modificar
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -631,8 +636,9 @@ Cuerpo (`application/json`):
 
 **Elimina un viaje archivado**
 
-Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros y, en el futuro, gastos,
-tareas, documentos...), que se elimina en cascada (PB-13). No se puede deshacer.
+Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros, votaciones, actividades,
+gastos y los datos de sus documentos), que se elimina en cascada (PB-13). No se puede deshacer.
+Los archivos de la cartera siguen en el bucket `documentos` de Supabase Storage.
 Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -688,7 +694,7 @@ Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece de
 
 ### POST /viajes/{viajeId}/archivar
 
-**Cierra y archiva un viaje**
+**Finaliza y archiva un viaje**
 
 Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
 no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
@@ -921,7 +927,7 @@ Cuerpo (`application/json`):
 | `votaciones[].descripcion` | string \| null | No |  | `null` |
 | `votaciones[].tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `votaciones[].estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `votaciones[].opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `votaciones[].opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `votaciones[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `votaciones[].creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `votaciones[].cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -934,6 +940,7 @@ Cuerpo (`application/json`):
 | `votaciones[].opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `votaciones[].total_votos` | integer | No |  | `3` |
 | `votaciones[].total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `votaciones[].todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `votaciones[].mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador no es un UUID o un filtro no es válido
@@ -971,8 +978,9 @@ Cuerpo (`application/json`):
 
 **Crea una votación**
 
-Crea una votación del viaje con sus opciones iniciales (entre 2 y 20, sin repetir), en una sola operación.
-La puede crear cualquier miembro mientras el viaje está activo. Después, cualquier miembro puede proponer más opciones.
+Crea una votación del viaje y, si se envían, sus opciones iniciales (hasta 20, sin repetir), en una sola operación.
+Las opciones son opcionales: se puede crear sin ninguna y que los miembros las propongan después.
+La puede crear cualquier miembro mientras el viaje está activo.
 No se pueden crear votaciones de destino: la del destino se abre sola al crear un viaje sin destino.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -990,7 +998,7 @@ No se pueden crear votaciones de destino: la del destino se abre sola al crear u
 | `titulo` | string | Sí |  | `¿Qué fin de semana salimos?` |
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, presupuesto, actividad, otro) | No | Las de destino no se crean a mano | `fecha` |
-| `opciones` | array<NuevaOpcionRequest> | Sí | Opciones iniciales, en el orden en que se mostrarán. No se pueden repetir |  |
+| `opciones` | array<NuevaOpcionRequest> | No | Opciones iniciales (opcionales), en el orden en que se mostrarán. No se pueden repetir |  |
 | `opciones[].texto` | string | Sí | Se guarda sin espacios a los lados | `Viernes 14` |
 | `opciones[].valor_fecha` | string (date) \| null | No | Fecha que representa la opción, en las votaciones de fechas (opcional) | `2027-05-14` |
 
@@ -1007,7 +1015,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1020,13 +1028,14 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — Faltan datos, no son válidos o hay opciones repetidas
 
 | Código de error | Mensaje |
 | --- | --- |
-| `datos_invalidos` | La votación necesita entre 2 y 20 opciones |
+| `datos_invalidos` | Las opciones no se pueden repetir |
 
 **401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
 
@@ -1045,7 +1054,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1087,7 +1096,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1100,6 +1109,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1171,7 +1181,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1184,6 +1194,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1260,7 +1271,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1273,6 +1284,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — Identificadores mal formados, falta la opción o la opción no es de esta votación
@@ -1300,7 +1312,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 | `votacion_cerrada` | La votación ya está cerrada |
 
 **500** — Error interno del servidor
@@ -1343,7 +1355,7 @@ Cuerpo (`application/json`):
 | `descripcion` | string \| null | No |  | `null` |
 | `tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1356,6 +1368,7 @@ Cuerpo (`application/json`):
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
 | `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1382,7 +1395,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 | `votacion_cerrada` | La votación ya está cerrada |
 
 **500** — Error interno del servidor
@@ -1404,7 +1417,8 @@ Cuerpo (`application/json`):
 Cierra la votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas elegida al azar
 (la PWA avisa del empate antes de confirmar). Ya no se puede votar ni proponer opciones.
 En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
-pendiente de destino. La de destino necesita al menos un voto; las demás, sin votos, se cierran sin ganadora.
+pendiente de destino.
+Solo se puede cerrar cuando han votado todos los miembros activos del viaje (RF9): `todos_han_votado` lo indica.
 Solo lo puede hacer el creador del viaje, con el viaje activo.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -1430,7 +1444,7 @@ Cuerpo (`application/json`):
 | `votacion.descripcion` | string \| null | No |  | `null` |
 | `votacion.tipo` | enum (fecha, destino, presupuesto, actividad, otro) | No |  | `fecha` |
 | `votacion.estado` | enum (abierta, cerrada) | No |  | `abierta` |
-| `votacion.opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, al cerrar la votación (null mientras está abierta o si se cerró sin votos) | `null` |
+| `votacion.opcion_ganadora_id` | string (uuid) \| null | No | Opción ganadora, que se guarda al cerrar la votación (null mientras está abierta) | `null` |
 | `votacion.creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `votacion.creado_en` | string (date-time) | No |  | `2026-10-20T10:00:00Z` |
 | `votacion.cerrada_en` | string (date-time) \| null | No |  | `null` |
@@ -1443,6 +1457,7 @@ Cuerpo (`application/json`):
 | `votacion.opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `votacion.total_votos` | integer | No |  | `3` |
 | `votacion.total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
+| `votacion.todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
 | `votacion.mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 | `hubo_empate` | boolean | No | true si varias opciones empataron con más votos y la ganadora se eligió al azar | `false` |
 | `destino` | string \| null | No | Destino guardado en el viaje (solo al cerrar la votación de destino) | `null` |
@@ -1473,12 +1488,12 @@ Cuerpo (`application/json`):
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 | `votacion_no_encontrada` | La votación no existe en este viaje |
 
-**409** — La votación ya está cerrada, el viaje no está activo o la de destino no tiene votos
+**409** — La votación ya está cerrada, el viaje no está activo o todavía no han votado todos los miembros
 
 | Código de error | Mensaje |
 | --- | --- |
 | `votacion_cerrada` | La votación ya está cerrada |
-| `sin_votos` | La votación de destino necesita al menos un voto para cerrarse |
+| `faltan_votos` | La votación solo se puede cerrar cuando hayan votado todos los miembros |
 
 **500** — Error interno del servidor
 
@@ -1722,7 +1737,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1819,7 +1834,7 @@ Cuerpo (`application/json`):
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1877,7 +1892,7 @@ está activo. Responde 204 sin cuerpo.
 
 | Código de error | Mensaje |
 | --- | --- |
-| `viaje_no_activo` | El viaje está cerrado y ya no se puede modificar |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
 
 **500** — Error interno del servidor
 
@@ -1890,6 +1905,388 @@ está activo. Responde 204 sin cuerpo.
 | Código de error | Mensaje |
 | --- | --- |
 | `error_actividad` | No se ha podido eliminar la actividad |
+
+## Gastos
+
+### GET /viajes/{viajeId}/gastos
+
+**Lista el historial de gastos del viaje con el total**
+
+Devuelve los gastos del viaje del más reciente al más antiguo (por fecha y, en el mismo día, por la hora a
+la que se registraron), cada uno con la parte de cada participante, y el total gastado, sumado en céntimos.
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Historial de gastos y total (lista vacía y total 0 si el viaje aún no tiene gastos)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `gastos` | array<Gasto> | No | Gastos del viaje, del más reciente al más antiguo |  |
+| `gastos[].id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+| `gastos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `gastos[].concepto` | string | No |  | `Cena en el Trastevere` |
+| `gastos[].importe` | number | No |  | `60.5` |
+| `gastos[].categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) | No |  | `comida` |
+| `gastos[].pagado_por` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `gastos[].fecha` | string (date) | No |  | `2027-05-12` |
+| `gastos[].creado_por` | string (uuid) \| null | No | Quién registró el gasto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `gastos[].creado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `gastos[].actualizado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `gastos[].repartos` | array<RepartoGasto> | No | Parte de cada participante; suman el importe del gasto | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","importe":30.25},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","importe":30.25}]` |
+| `gastos[].repartos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `gastos[].repartos[].importe` | number | No | Parte del gasto que le corresponde a este miembro | `30.25` |
+| `total` | number | No | Suma de los importes de todos los gastos del viaje | `107.84` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se han podido obtener los gastos |
+
+### POST /viajes/{viajeId}/gastos
+
+**Registra un gasto compartido**
+
+Registra un gasto del viaje y lo reparte entre los participantes indicados a partes iguales en una única
+operación (función SQL `crear_gasto`): si falla una parte, no se guarda nada. Se calcula en céntimos y los que
+sobran se asignan a los primeros participantes para que el total siempre sume el importe introducido.
+
+Cualquier miembro puede registrar un gasto mientras el viaje esté activo. El pagador y los participantes deben
+ser miembros; quien hace la petición queda marcado como `creado_por`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `concepto` | string | Sí | Qué se ha pagado. Se guardan sin los espacios del principio y del final | `Cena en el Trastevere` |
+| `importe` | number | Sí | Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) \| null | No | Tipo de gasto. Opcional; si no se envía se guarda «otros» | `comida` |
+| `pagado_por` | string (uuid) | Sí | Miembro del viaje que ha pagado | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) \| null | No | Día del gasto (AAAA-MM-DD). Opcional; si no se envía se guarda la fecha de hoy | `2027-05-12` |
+| `participantes` | array<string (uuid)> | Sí | Miembros del viaje entre los que se divide el gasto a partes iguales, sin repetir ninguno | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc","5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f"]` |
+
+**Respuestas**
+
+**201** — Gasto registrado, con la parte de cada participante
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `concepto` | string | No |  | `Cena en el Trastevere` |
+| `importe` | number | No |  | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) | No |  | `comida` |
+| `pagado_por` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) | No |  | `2027-05-12` |
+| `creado_por` | string (uuid) \| null | No | Quién registró el gasto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `actualizado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `repartos` | array<RepartoGasto> | No | Parte de cada participante; suman el importe del gasto | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","importe":30.25},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","importe":30.25}]` |
+| `repartos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `repartos[].importe` | number | No | Parte del gasto que le corresponde a este miembro | `30.25` |
+
+**400** — Faltan datos o no son válidos, el identificador del viaje no es un UUID, o quien paga o algún
+participante no es miembro del viaje
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El importe debe ser un número mayor que 0 con dos decimales como máximo |
+| `datos_invalidos` | Quien paga y los participantes tienen que ser miembros del viaje |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido registrar el gasto |
+
+### GET /viajes/{viajeId}/gastos/balance
+
+**Saldo de cada miembro del viaje**
+
+Devuelve, para cada miembro, lo que ha pagado, su parte de los gastos y su saldo (lo pagado menos su parte):
+positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
+siempre está al día y la suma de todos los saldos es 0.
+Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
+sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Saldo de cada miembro (todos a 0 si el viaje aún no tiene gastos)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `saldos` | array<SaldoMiembro> | No | Un saldo por miembro; entre todos suman 0 | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","nombre":"Adriana","pagado":10,"parte":6.34,"saldo":3.66},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","nombre":"Berta","pagado":6,"parte":6.33,"saldo":-0.33},{"usuario_id":"8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f","nombre":"Daniel","pagado":0,"parte":3.33,"saldo":-3.33}]` |
+| `saldos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `saldos[].nombre` | string \| null | No | Nombre del miembro (null si ya abandonó el viaje) | `Adriana` |
+| `saldos[].pagado` | number | No | Suma de los gastos que ha pagado | `10` |
+| `saldos[].parte` | number | No | Suma de sus partes en los repartos de los gastos | `6.34` |
+| `saldos[].saldo` | number | No | Lo pagado menos su parte. Positivo, le deben; negativo, debe | `3.66` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido calcular el balance |
+
+## Documentos
+
+### GET /viajes/{viajeId}/documentos
+
+**Lista los documentos de la cartera del viaje**
+
+Devuelve los datos de los documentos de la cartera compartida del viaje (billetes, reservas, seguros...),
+del más reciente al más antiguo. No incluye el contenido de los archivos.
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Documentos del viaje (lista vacía si aún no tiene ninguno)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `documentos` | array<Documento> | No | Documentos del viaje, del más reciente al más antiguo |  |
+| `documentos[].id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `documentos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `documentos[].nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `documentos[].tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
+| `documentos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `documentos[].subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `documentos[].creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se han podido obtener los documentos |
+
+### POST /viajes/{viajeId}/documentos
+
+**Sube un documento a la cartera del viaje**
+
+Sube un PDF o una imagen JPEG o PNG de 8 MB como máximo a la cartera compartida del viaje. El archivo se
+guarda en el bucket privado `documentos` de Supabase Storage, en la carpeta del viaje y con un nombre
+aleatorio, y sus datos quedan registrados en la tabla `documentos`. Si el registro falla, el archivo se
+borra del bucket.
+
+El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+navegador. Cualquier miembro puede subir documentos mientras el viaje esté activo; quien hace la petición
+queda como `subido_por`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `archivo` | string (binary) | Sí | PDF, JPEG o PNG de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición |  |
+| `nombre` | string | No | Nombre que verán los miembros. Si no se indica, se usa el del archivo (recortado a 150 caracteres) | `Billete de tren Madrid-Roma` |
+
+**Respuestas**
+
+**201** — Documento subido y registrado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
+| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+
+**400** — Falta el archivo o llega más de uno, el archivo no es un PDF, JPEG o PNG, ocupa más de 8 MB, el nombre
+no es válido o el identificador del viaje no es un UUID
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta el archivo del documento en el campo «archivo» |
+| `tipo_no_permitido` | Solo se pueden subir documentos PDF o imágenes JPEG o PNG |
+| `archivo_demasiado_grande` | El documento no puede ocupar más de 8 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido subir el documento |
 
 ## Rutas
 
