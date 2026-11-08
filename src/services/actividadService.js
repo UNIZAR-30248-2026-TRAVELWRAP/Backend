@@ -1,4 +1,5 @@
 const viajeService = require('./viajeService');
+const { ordenarAgenda, valoresDeOrden, horasEnOrden, siguienteOrden } = require('../utils/ordenActividades');
 
 const CAMPOS_ACTIVIDAD =
   'id, viaje_id, titulo, descripcion, fecha, hora_inicio, hora_fin, orden, ubicacion_nombre, latitud, longitud, ' +
@@ -19,7 +20,7 @@ const listar = async (cliente, usuarioId, viajeId, fecha) => {
     .order('creado_en', { ascending: true });
   if (error) return { error };
 
-  return { estado: 'ok', actividades: data ?? [] };
+  return { estado: 'ok', actividades: ordenarAgenda(data ?? []) };
 };
 
 const crear = async (cliente, usuarioId, viajeId, datos) => {
@@ -51,7 +52,7 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
       latitud: datos.latitud,
       longitud: datos.longitud,
       lugar_externo_id: datos.lugar_externo_id,
-      orden: ultima.data ? ultima.data.orden + 1 : 0,
+      orden: ultima.data ? siguienteOrden(ultima.data.orden) : 0,
       creado_por: usuarioId,
     })
     .select(CAMPOS_ACTIVIDAD)
@@ -112,7 +113,7 @@ const editar = async (cliente, usuarioId, viajeId, actividadId, cambios) => {
   if (cambios.fecha !== undefined && cambios.fecha !== actual.actividad.fecha) {
     const ultima = await ultimoOrdenDelDia(cliente, viajeId, cambios.fecha);
     if (ultima.error) return { error: ultima.error };
-    cambiosAplicados.orden = ultima.orden + 1;
+    cambiosAplicados.orden = siguienteOrden(ultima.orden);
   }
 
   const { data, error } = await cliente
@@ -146,4 +147,46 @@ const eliminar = async (cliente, usuarioId, viajeId, actividadId) => {
   return { estado: 'ok' };
 };
 
-module.exports = { listar, crear, editar, eliminar };
+const reordenar = async (cliente, usuarioId, viajeId, fecha, ids) => {
+  const viaje = await viajeEditable(cliente, usuarioId, viajeId);
+  if (viaje.error || viaje.estado !== 'ok') return viaje;
+
+  const { data, error } = await cliente
+    .from('actividades')
+    .select(CAMPOS_ACTIVIDAD)
+    .eq('viaje_id', viajeId)
+    .eq('fecha', fecha);
+  if (error) return { error };
+
+  const delDia = data ?? [];
+  const porId = new Map(delDia.map((actividad) => [actividad.id, actividad]));
+  if (ids.length !== delDia.length || ids.some((id) => !porId.has(id))) return { estado: 'agenda_cambiada' };
+
+  const nuevoOrden = ids.map((id) => porId.get(id));
+  if (!horasEnOrden(nuevoOrden)) return { estado: 'orden_no_valido' };
+
+  const valores = valoresDeOrden(nuevoOrden);
+  const cambiadas = nuevoOrden.filter((actividad) => actividad.orden !== valores.get(actividad.id));
+  const resultados = await Promise.all(
+    cambiadas.map((actividad) =>
+      cliente
+        .from('actividades')
+        .update({ orden: valores.get(actividad.id) })
+        .eq('id', actividad.id)
+        .eq('viaje_id', viajeId)
+        .select('id'),
+    ),
+  );
+  const fallo = resultados.find((resultado) => resultado.error);
+  if (fallo) return { error: fallo.error };
+  if (resultados.some((resultado) => !resultado.data || resultado.data.length === 0)) {
+    return { error: { code: 'sin_filas' } };
+  }
+
+  return {
+    estado: 'ok',
+    actividades: nuevoOrden.map((actividad) => ({ ...actividad, orden: valores.get(actividad.id) })),
+  };
+};
+
+module.exports = { listar, crear, editar, eliminar, reordenar };
