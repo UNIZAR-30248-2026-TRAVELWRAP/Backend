@@ -1507,8 +1507,10 @@ paths:
         - Actividades
       summary: Lista las actividades del itinerario de un viaje
       description: |
-        Devuelve las actividades del viaje ordenadas por día, después por hora de inicio (las que no tienen hora van al
-        final de su día) y por último por su posición dentro del día (`orden`). Con `fecha` solo devuelve las de ese día.
+        Devuelve las actividades del viaje ordenadas por día. Dentro de cada día van primero las que tienen hora, por su
+        hora de inicio (las que empiezan a la misma hora, por su posición `orden`). Las que no tienen hora van al final
+        del día, por su posición, salvo las que el usuario ha colocado entre las demás con PUT /viajes/{viajeId}/actividades/orden,
+        que aparecen en el lugar donde las puso. Con `fecha` solo devuelve las de ese día.
         Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
 
         Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
@@ -1640,6 +1642,104 @@ paths:
                 error:
                   codigo: error_actividad
                   mensaje: No se ha podido crear la actividad
+
+  /viajes/{viajeId}/actividades/orden:
+    put:
+      tags:
+        - Actividades
+      summary: Guarda el orden de las actividades de un día
+      description: |
+        Recibe todas las actividades de un día en el orden que ha elegido el usuario y guarda las posiciones. Permite
+        colocar las actividades sin hora donde se quiera (también entre las que tienen hora) y reordenar entre sí las que
+        empiezan a la misma hora. Las actividades con hora siguen ordenadas por su hora: si el nuevo orden las desordena,
+        se rechaza con 400.
+
+        La lista tiene que contener exactamente las actividades que tiene ahora el día, sin repetir ninguna. Si otro
+        miembro ha añadido o eliminado alguna mientras tanto, responde 409 y hay que volver a pedir el listado.
+
+        Solo la pueden usar los miembros del viaje mientras está activo. Devuelve las actividades del día en su nuevo
+        orden, con la posición (`orden`) que ha guardado el servidor para cada una.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrdenActividades'
+            example:
+              fecha: '2027-05-12'
+              actividades:
+                - 6f0f3b1e-6a41-4c8e-9a39-0d7e8d4f1a01
+                - 0b0e8f5a-2f43-4b5e-8f0c-5a1d2b9c7e02
+                - 3c2d1e0f-9b8a-4c7d-8e6f-1a2b3c4d5e03
+      responses:
+        '200':
+          description: Orden guardado; actividades del día en su nuevo orden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaActividades'
+        '400':
+          description: El identificador del viaje no es un UUID, la fecha o la lista de actividades no son válidas, o las actividades con hora no quedan ordenadas por su hora
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                datosInvalidos:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: La fecha es obligatoria y debe tener el formato AAAA-MM-DD
+                ordenNoValido:
+                  value:
+                    error:
+                      codigo: orden_no_valido
+                      mensaje: Las actividades con hora deben seguir ordenadas por su hora; solo se pueden mover las que no tienen hora o empiezan a la misma hora
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está finalizado, o la agenda de ese día ha cambiado desde que se pidió el listado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viajeFinalizado:
+                  value:
+                    error:
+                      codigo: viaje_no_activo
+                      mensaje: El viaje está finalizado y ya no se puede modificar
+                agendaCambiada:
+                  value:
+                    error:
+                      codigo: agenda_cambiada
+                      mensaje: La agenda de ese día ha cambiado. Recárgala para ver las actividades actuales
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_actividad
+                  mensaje: No se ha podido guardar el orden de las actividades
 
   /viajes/{viajeId}/actividades/{actividadId}:
     patch:
@@ -3027,7 +3127,10 @@ components:
           example: null
         orden:
           type: integer
-          description: Posición dentro del día; la nueva actividad va al final
+          description: |
+            Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,
+            -2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo
+            asigna al reordenar y no hace falta enviarlo al crear o modificar.
           example: 0
         ubicacion_nombre:
           type: string
@@ -3108,6 +3211,26 @@ components:
           maxItems: 5
           items:
             $ref: '#/components/schemas/Direccion'
+
+    OrdenActividades:
+      type: object
+      required:
+        - fecha
+        - actividades
+      properties:
+        fecha:
+          type: string
+          format: date
+          description: Día cuyas actividades se reordenan (AAAA-MM-DD)
+          example: '2027-05-12'
+        actividades:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: Identificadores de todas las actividades de ese día, en el nuevo orden y sin repetir
+          items:
+            type: string
+            format: uuid
 
     ListaActividades:
       type: object

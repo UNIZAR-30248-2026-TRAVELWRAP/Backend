@@ -39,6 +39,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/direcciones`](#get-direcciones) | Busca una dirección y devuelve sus coordenadas | Token de sesión |
 | GET | [`/viajes/{viajeId}/actividades`](#get-viajesviajeidactividades) | Lista las actividades del itinerario de un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
+| PUT | [`/viajes/{viajeId}/actividades/orden`](#put-viajesviajeidactividadesorden) | Guarda el orden de las actividades de un día | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
@@ -1581,8 +1582,10 @@ Cuerpo (`application/json`):
 
 **Lista las actividades del itinerario de un viaje**
 
-Devuelve las actividades del viaje ordenadas por día, después por hora de inicio (las que no tienen hora van al
-final de su día) y por último por su posición dentro del día (`orden`). Con `fecha` solo devuelve las de ese día.
+Devuelve las actividades del viaje ordenadas por día. Dentro de cada día van primero las que tienen hora, por su
+hora de inicio (las que empiezan a la misma hora, por su posición `orden`). Las que no tienen hora van al final
+del día, por su posición, salvo las que el usuario ha colocado entre las demás con PUT /viajes/{viajeId}/actividades/orden,
+que aparecen en el lugar donde las puso. Con `fecha` solo devuelve las de ese día.
 Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
 
 Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
@@ -1617,7 +1620,7 @@ Cuerpo (`application/json`):
 | `actividades[].fecha` | string (date) | No |  | `2027-05-12` |
 | `actividades[].hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
 | `actividades[].hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
-| `actividades[].orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `actividades[].orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
 | `actividades[].ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
 | `actividades[].latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
 | `actividades[].longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
@@ -1704,7 +1707,7 @@ Cuerpo (`application/json`):
 | `fecha` | string (date) | No |  | `2027-05-12` |
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
-| `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
 | `latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
 | `longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
@@ -1750,6 +1753,101 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_actividad` | No se ha podido crear la actividad |
+
+### PUT /viajes/{viajeId}/actividades/orden
+
+**Guarda el orden de las actividades de un día**
+
+Recibe todas las actividades de un día en el orden que ha elegido el usuario y guarda las posiciones. Permite
+colocar las actividades sin hora donde se quiera (también entre las que tienen hora) y reordenar entre sí las que
+empiezan a la misma hora. Las actividades con hora siguen ordenadas por su hora: si el nuevo orden las desordena,
+se rechaza con 400.
+
+La lista tiene que contener exactamente las actividades que tiene ahora el día, sin repetir ninguna. Si otro
+miembro ha añadido o eliminado alguna mientras tanto, responde 409 y hay que volver a pedir el listado.
+
+Solo la pueden usar los miembros del viaje mientras está activo. Devuelve las actividades del día en su nuevo
+orden, con la posición (`orden`) que ha guardado el servidor para cada una.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `fecha` | string (date) | Sí | Día cuyas actividades se reordenan (AAAA-MM-DD) | `2027-05-12` |
+| `actividades` | array<string (uuid)> | Sí | Identificadores de todas las actividades de ese día, en el nuevo orden y sin repetir |  |
+
+**Respuestas**
+
+**200** — Orden guardado; actividades del día en su nuevo orden
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `actividades` | array<Actividad> | No |  |  |
+| `actividades[].id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
+| `actividades[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `actividades[].titulo` | string | No |  | `Visita al Coliseo` |
+| `actividades[].descripcion` | string \| null | No |  | `null` |
+| `actividades[].fecha` | string (date) | No |  | `2027-05-12` |
+| `actividades[].hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
+| `actividades[].hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
+| `actividades[].orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
+| `actividades[].ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `actividades[].latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
+| `actividades[].longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
+| `actividades[].lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap | `way/24146600` |
+| `actividades[].categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+| `actividades[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `actividades[].creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+| `actividades[].actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID, la fecha o la lista de actividades no son válidas, o las actividades con hora no quedan ordenadas por su hora
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha es obligatoria y debe tener el formato AAAA-MM-DD |
+| `orden_no_valido` | Las actividades con hora deben seguir ordenadas por su hora; solo se pueden mover las que no tienen hora o empiezan a la misma hora |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado, o la agenda de ese día ha cambiado desde que se pidió el listado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+| `agenda_cambiada` | La agenda de ese día ha cambiado. Recárgala para ver las actividades actuales |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_actividad` | No se ha podido guardar el orden de las actividades |
 
 ### PATCH /viajes/{viajeId}/actividades/{actividadId}
 
@@ -1800,7 +1898,7 @@ Cuerpo (`application/json`):
 | `fecha` | string (date) | No |  | `2027-05-12` |
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
-| `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
 | `latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
 | `longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |

@@ -4731,6 +4731,721 @@
           ]
         },
         {
+          "name": "Orden · crear la actividad con hora de la mañana",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Desayuno\",\n  \"fecha\": \"2027-05-15\",\n  \"hora_inicio\": \"08:30\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ordenIdA', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · crear la actividad con hora de la tarde",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Comida\",\n  \"fecha\": \"2027-05-15\",\n  \"hora_inicio\": \"14:00\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ordenIdD', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · crear una actividad sin hora",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Paseo\",\n  \"fecha\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ordenIdB', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · crear otra actividad sin hora",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Compras\",\n  \"fecha\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('ordenIdC', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar dos actividades sin hora las deja con posiciones normales al final del día",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\",\n    \"{{ordenIdD}}\",\n    \"{{ordenIdC}}\",\n    \"{{ordenIdB}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividades = pm.response.json().actividades;",
+                  "const ids = actividades.map((a) => a.id);",
+                  "const variables = [pm.collectionVariables.get('ordenIdA'), pm.collectionVariables.get('ordenIdD'), pm.collectionVariables.get('ordenIdC'), pm.collectionVariables.get('ordenIdB')];",
+                  "pm.test('Devuelve las actividades del día en el orden pedido', () => pm.expect(ids).to.eql(variables));",
+                  "pm.test('Las del final guardan su posición, no una negativa', () => {",
+                  "  actividades.forEach((a) => pm.expect(a.orden).to.be.at.least(0));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar el día tras reordenar las del final",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades?fecha=2027-05-15"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividades = pm.response.json().actividades;",
+                  "const variables = [pm.collectionVariables.get('ordenIdA'), pm.collectionVariables.get('ordenIdD'), pm.collectionVariables.get('ordenIdC'), pm.collectionVariables.get('ordenIdB')];",
+                  "pm.test('El listado sigue el orden guardado', () => pm.expect(actividades.map((a) => a.id)).to.eql(variables));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Colocar una actividad sin hora entre las que tienen hora",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\",\n    \"{{ordenIdB}}\",\n    \"{{ordenIdD}}\",\n    \"{{ordenIdC}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividades = pm.response.json().actividades;",
+                  "const ids = actividades.map((a) => a.id);",
+                  "const variables = [pm.collectionVariables.get('ordenIdA'), pm.collectionVariables.get('ordenIdB'), pm.collectionVariables.get('ordenIdD'), pm.collectionVariables.get('ordenIdC')];",
+                  "pm.test('Devuelve las actividades del día en el orden pedido', () => pm.expect(ids).to.eql(variables));",
+                  "const colocada = actividades.find((a) => a.id === pm.collectionVariables.get('ordenIdB'));",
+                  "pm.test('La colocada entre las de hora guarda una posición negativa', () => pm.expect(colocada.orden).to.eql(-2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar el día con la actividad sin hora colocada entre las que tienen hora",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades?fecha=2027-05-15"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividades = pm.response.json().actividades;",
+                  "const variables = [pm.collectionVariables.get('ordenIdA'), pm.collectionVariables.get('ordenIdB'), pm.collectionVariables.get('ordenIdD'), pm.collectionVariables.get('ordenIdC')];",
+                  "pm.test('El listado sigue el orden guardado', () => pm.expect(actividades.map((a) => a.id)).to.eql(variables));",
+                  "const colocada = actividades.find((a) => a.id === pm.collectionVariables.get('ordenIdB'));",
+                  "pm.test('La actividad sigue sin hora y con posición negativa', () => {",
+                  "  pm.expect(colocada.hora_inicio).to.eql(null);",
+                  "  pm.expect(colocada.orden).to.be.below(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Una actividad nueva sin hora va al final del día aunque haya colocadas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Nueva al final\",\n  \"fecha\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Tiene una posición normal', () => pm.expect(body.orden).to.be.at.least(0));",
+                  "pm.collectionVariables.set('ordenIdE', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar el día con la actividad nueva al final",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades?fecha=2027-05-15"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const actividades = pm.response.json().actividades;",
+                  "const variables = [pm.collectionVariables.get('ordenIdA'), pm.collectionVariables.get('ordenIdB'), pm.collectionVariables.get('ordenIdD'), pm.collectionVariables.get('ordenIdC'), pm.collectionVariables.get('ordenIdE')];",
+                  "pm.test('El listado sigue el orden guardado', () => pm.expect(actividades.map((a) => a.id)).to.eql(variables));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar con una actividad con hora delante de otra anterior",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdD}}\",\n    \"{{ordenIdA}}\",\n    \"{{ordenIdB}}\",\n    \"{{ordenIdC}}\",\n    \"{{ordenIdE}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código orden_no_valido', () => pm.expect(pm.response.json().error.codigo).to.eql('orden_no_valido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar sin incluir todas las actividades del día",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\",\n    \"{{ordenIdB}}\",\n    \"{{ordenIdD}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código agenda_cambiada', () => pm.expect(pm.response.json().error.codigo).to.eql('agenda_cambiada'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar con una fecha no válida",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"hoy\",\n  \"actividades\": [\n    \"{{ordenIdA}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql('La fecha es obligatoria y debe tener el formato AAAA-MM-DD'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar con un identificador repetido",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\",\n    \"{{ordenIdA}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql('La lista de actividades no puede repetir identificadores'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar con una lista vacía",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql('Las actividades deben ser una lista de identificadores de actividad no vacía'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar con un identificador de viaje que no es un UUID",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql('El identificador del viaje no es válido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar sin sesión",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar en un viaje que no existe",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/123e4567-e89b-12d3-a456-426614174000/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql('El viaje no existe o no perteneces a él'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · eliminar la actividad de la mañana",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{ordenIdA}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · eliminar la actividad de la tarde",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{ordenIdD}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · eliminar la primera actividad sin hora",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{ordenIdB}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · eliminar la segunda actividad sin hora",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{ordenIdC}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Orden · eliminar la actividad nueva",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/{{ordenIdE}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Archivar el viaje",
           "request": {
             "method": "POST",
@@ -4846,6 +5561,39 @@
                   "pm.test('Código viaje_no_activo', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reordenar las actividades de un viaje archivado",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/actividades/orden",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fecha\": \"2027-05-15\",\n  \"actividades\": [\n    \"{{ordenIdA}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
                 ]
               }
             }
