@@ -34,7 +34,7 @@ AS $$
   );
 $$;
 
--- Viaje al que pertenece un archivo del bucket «documentos», sacado de la primera carpeta de su ruta.
+-- Viaje al que pertenece un archivo de los buckets «documentos» y «fotos», sacado de la primera carpeta de su ruta.
 -- Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage)
 CREATE OR REPLACE FUNCTION public.viaje_de_ruta(p_ruta text)
 RETURNS uuid
@@ -105,6 +105,7 @@ ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -315,6 +316,54 @@ CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE T
     AND public.es_miembro(public.viaje_de_ruta(name))
     AND public.es_editable(public.viaje_de_ruta(name))
     AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)
+  );
+
+-- POLÍTICAS FOTOS
+-- Los miembros ven todas las fotos de la galería de su viaje, también en viajes finalizados o archivados
+DROP POLICY IF EXISTS fotos_select ON public.fotos;
+CREATE POLICY fotos_select ON public.fotos FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro sube fotos mientras el viaje está activo; queda como quien la ha subido
+DROP POLICY IF EXISTS fotos_insert ON public.fotos;
+CREATE POLICY fotos_insert ON public.fotos FOR INSERT TO authenticated
+  WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada)
+-- y Storage rechaza por sí mismo las de más de 8 MB o de otro tipo
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('fotos', 'fotos', false, 8000000, ARRAY['image/jpeg', 'image/png', 'image/webp'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- POLÍTICAS STORAGE FOTOS
+
+-- Las fotos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlas
+-- (para verlas o generar URLs firmadas), también en viajes finalizados o archivados
+DROP POLICY IF EXISTS fotos_storage_select ON storage.objects;
+CREATE POLICY fotos_storage_select ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'fotos' AND public.es_miembro(public.viaje_de_ruta(name)));
+
+-- Los miembros suben fotos a la carpeta de su viaje mientras está activo
+DROP POLICY IF EXISTS fotos_storage_insert ON storage.objects;
+CREATE POLICY fotos_storage_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'fotos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+  );
+
+-- Solo para deshacer una subida cuando falla el registro de la foto: se puede borrar un archivo
+-- de la carpeta de un viaje activo que todavía no tiene fila en fotos
+DROP POLICY IF EXISTS fotos_storage_delete_huerfano ON storage.objects;
+CREATE POLICY fotos_storage_delete_huerfano ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'fotos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+    AND NOT EXISTS (SELECT 1 FROM public.fotos f WHERE f.ruta = objects.name)
   );
 
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN

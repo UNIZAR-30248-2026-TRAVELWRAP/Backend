@@ -240,6 +240,25 @@ ALTER TABLE public.documentos
   DROP CONSTRAINT IF EXISTS documentos_tamano_bytes_check,
   ADD CONSTRAINT documentos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000);
 
+-- Fotos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase
+-- Storage y esta fila guarda sus datos y dónde está
+CREATE TABLE IF NOT EXISTS public.fotos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Al eliminar el viaje se borran sus filas, pero no los archivos del bucket
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  -- Nombre que ve el usuario (el del archivo original)
+  nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 150),
+  -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
+  ruta text NOT NULL UNIQUE,
+  tipo_mime text NOT NULL CHECK (tipo_mime IN ('image/jpeg', 'image/png', 'image/webp')),
+  -- Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000),
+  subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+  CONSTRAINT fotos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
+);
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -254,3 +273,5 @@ CREATE INDEX IF NOT EXISTS gastos_viaje_fecha_idx ON public.gastos (viaje_id, fe
 CREATE INDEX IF NOT EXISTS repartos_gasto_miembro_idx ON public.repartos_gasto (viaje_id, usuario_id);
 -- Cartera del viaje, del documento más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);
+-- Galería del viaje, de la foto más reciente a la más antigua
+CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);
