@@ -40,7 +40,7 @@ const ordenarAgenda = (actividades) => {
     if (porDia.has(actividad.fecha)) porDia.get(actividad.fecha).push(actividad);
     else porDia.set(actividad.fecha, [actividad]);
   }
-  return [...porDia.keys()].sort().flatMap((fecha) => ordenarDia(porDia.get(fecha)));
+  return [...porDia.keys()].sort((a, b) => a.localeCompare(b)).flatMap((fecha) => ordenarDia(porDia.get(fecha)));
 };
 
 const valoresDeOrden = (lista) => {

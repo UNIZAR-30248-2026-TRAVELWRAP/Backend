@@ -25,7 +25,7 @@ const vecinoMasCercano = (puntos) => {
   const orden = [0];
   const pendientes = new Set(puntos.map((_, indice) => indice).slice(1));
   while (pendientes.size > 0) {
-    const actual = puntos[orden[orden.length - 1]];
+    const actual = puntos[orden.at(-1)];
     let mejor = null;
     let mejorDistancia = Number.POSITIVE_INFINITY;
     for (const candidato of pendientes) {
@@ -66,9 +66,12 @@ const ordenMasCorto = (puntos) => {
   const agenda = puntos.map((_, indice) => indice);
   if (puntos.length < 3) return agenda;
   const candidatos = [mejorarConDosOpt(puntos, agenda), mejorarConDosOpt(puntos, vecinoMasCercano(puntos))];
-  return candidatos.reduce((mejor, actual) =>
-    longitudDelRecorrido(puntos, actual) < longitudDelRecorrido(puntos, mejor) - 1 ? actual : mejor,
-  );
+  return candidatos
+    .slice(1)
+    .reduce(
+      (mejor, actual) => (longitudDelRecorrido(puntos, actual) < longitudDelRecorrido(puntos, mejor) - 1 ? actual : mejor),
+      candidatos[0],
+    );
 };
 
 const aPunto = (actividad) => ({

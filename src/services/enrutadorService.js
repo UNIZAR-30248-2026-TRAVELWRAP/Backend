@@ -50,8 +50,8 @@ const aRuta = (respuesta) => {
   const geometria = [];
   for (const [longitud, latitud] of reducirGeometria(coordenadas)) {
     const punto = [redondear(latitud, 5), redondear(longitud, 5)];
-    const anterior = geometria[geometria.length - 1];
-    if (!anterior || anterior[0] !== punto[0] || anterior[1] !== punto[1]) geometria.push(punto);
+    const anterior = geometria.at(-1);
+    if (anterior?.[0] !== punto[0] || anterior?.[1] !== punto[1]) geometria.push(punto);
   }
   return {
     distancia_m: Math.round(trayecto.distance),
