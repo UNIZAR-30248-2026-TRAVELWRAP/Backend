@@ -2285,6 +2285,150 @@ paths:
                   codigo: error_documento
                   mensaje: No se ha podido subir el documento
 
+  /viajes/{viajeId}/fotos:
+    get:
+      tags:
+        - Fotos
+      summary: Lista las fotos de la galería del viaje
+      description: |
+        Devuelve las fotos de la galería compartida del viaje, de la más reciente a la más antigua. Cada foto incluye
+        `url`, una URL firmada de Supabase Storage para verla que caduca a la hora de generarla (1 hora): pasado ese
+        tiempo hay que volver a pedir el listado.
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Fotos del viaje (lista vacía si aún no tiene ninguna)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaFotos'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_foto
+                  mensaje: No se han podido obtener las fotos
+    post:
+      tags:
+        - Fotos
+      summary: Sube una foto a la galería del viaje
+      description: |
+        Sube una imagen JPEG, PNG o WebP de 8 MB como máximo a la galería compartida del viaje. El archivo se guarda
+        en el bucket privado `fotos` de Supabase Storage, en la carpeta del viaje y con un nombre aleatorio, y sus
+        datos quedan registrados en la tabla `fotos`. Si el registro falla, el archivo se borra del bucket.
+
+        El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+        navegador. El nombre de la foto es el del archivo (recortado a 150 caracteres). Cualquier miembro puede subir
+        fotos mientras el viaje esté activo; quien hace la petición queda como `subido_por`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaFotoRequest'
+      responses:
+        '201':
+          description: Foto subida y registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Foto'
+        '400':
+          description: |
+            Falta el archivo o llega más de uno, el archivo no es una imagen JPEG, PNG o WebP, ocupa más de 8 MB o el
+            identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta la foto en el campo «archivo»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: Solo se pueden subir fotos JPEG, PNG o WebP
+                demasiadoGrande:
+                  value:
+                    error:
+                      codigo: archivo_demasiado_grande
+                      mensaje: La foto no puede ocupar más de 8 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_foto
+                  mensaje: No se ha podido subir la foto
+
   /viajes/{viajeId}/ruta:
     get:
       tags:
@@ -3691,6 +3835,66 @@ components:
           type: string
           enum: [application/pdf, image/jpeg, image/png]
           example: application/pdf
+
+    SubidaFotoRequest:
+      type: object
+      required:
+        - archivo
+      properties:
+        archivo:
+          type: string
+          format: binary
+          description: Imagen JPEG, PNG o WebP de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición
+
+    Foto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        nombre:
+          type: string
+          description: Nombre del archivo original
+          example: coliseo.jpg
+        tipo_mime:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+          description: Tipo reconocido a partir del contenido del archivo
+          example: image/jpeg
+        tamano_bytes:
+          type: integer
+          description: Tamaño del archivo en bytes (8.000.000 como máximo)
+          example: 248731
+        subido_por:
+          type: string
+          format: uuid
+          nullable: true
+          description: Quién subió la foto (null si su cuenta se ha eliminado)
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-11-08T10:00:00Z'
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL firmada de Supabase Storage para ver la foto; caduca a la hora (null si no se ha podido generar)
+          example: https://proyecto.supabase.co/storage/v1/object/sign/fotos/123e4567-e89b-12d3-a456-426614174000/0b0e8f5a.jpg?token=eyJ...
+
+    ListaFotos:
+      type: object
+      properties:
+        fotos:
+          type: array
+          description: Fotos del viaje, de la más reciente a la más antigua
+          items:
+            $ref: '#/components/schemas/Foto'
 
     PuntoDeRuta:
       type: object

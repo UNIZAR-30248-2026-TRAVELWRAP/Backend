@@ -48,6 +48,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/gastos/liquidacion`](#get-viajesviajeidgastosliquidacion) | Transferencias para saldar las cuentas del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/fotos`](#get-viajesviajeidfotos) | Lista las fotos de la galería del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto a la galería del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
 
@@ -2522,6 +2524,159 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_documento` | No se ha podido obtener el enlace del documento |
+
+## Fotos
+
+### GET /viajes/{viajeId}/fotos
+
+**Lista las fotos de la galería del viaje**
+
+Devuelve las fotos de la galería compartida del viaje, de la más reciente a la más antigua. Cada foto incluye
+`url`, una URL firmada de Supabase Storage para verla que caduca a la hora de generarla (1 hora): pasado ese
+tiempo hay que volver a pedir el listado.
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Fotos del viaje (lista vacía si aún no tiene ninguna)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `fotos` | array<Foto> | No | Fotos del viaje, de la más reciente a la más antigua |  |
+| `fotos[].id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `fotos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `fotos[].nombre` | string | No | Nombre del archivo original | `coliseo.jpg` |
+| `fotos[].tipo_mime` | enum (image/jpeg, image/png, image/webp) | No | Tipo reconocido a partir del contenido del archivo | `image/jpeg` |
+| `fotos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `fotos[].subido_por` | string (uuid) \| null | No | Quién subió la foto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fotos[].creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+| `fotos[].url` | string (uri) \| null | No | URL firmada de Supabase Storage para ver la foto; caduca a la hora (null si no se ha podido generar) | `https://proyecto.supabase.co/storage/v1/object/sign/fotos/123e4567-e89b-12d3-a456-426614174000/0b0e8f5a.jpg?token=eyJ...` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_foto` | No se han podido obtener las fotos |
+
+### POST /viajes/{viajeId}/fotos
+
+**Sube una foto a la galería del viaje**
+
+Sube una imagen JPEG, PNG o WebP de 8 MB como máximo a la galería compartida del viaje. El archivo se guarda
+en el bucket privado `fotos` de Supabase Storage, en la carpeta del viaje y con un nombre aleatorio, y sus
+datos quedan registrados en la tabla `fotos`. Si el registro falla, el archivo se borra del bucket.
+
+El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+navegador. El nombre de la foto es el del archivo (recortado a 150 caracteres). Cualquier miembro puede subir
+fotos mientras el viaje esté activo; quien hace la petición queda como `subido_por`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `archivo` | string (binary) | Sí | Imagen JPEG, PNG o WebP de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición |  |
+
+**Respuestas**
+
+**201** — Foto subida y registrada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No | Nombre del archivo original | `coliseo.jpg` |
+| `tipo_mime` | enum (image/jpeg, image/png, image/webp) | No | Tipo reconocido a partir del contenido del archivo | `image/jpeg` |
+| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `subido_por` | string (uuid) \| null | No | Quién subió la foto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+| `url` | string (uri) \| null | No | URL firmada de Supabase Storage para ver la foto; caduca a la hora (null si no se ha podido generar) | `https://proyecto.supabase.co/storage/v1/object/sign/fotos/123e4567-e89b-12d3-a456-426614174000/0b0e8f5a.jpg?token=eyJ...` |
+
+**400** — Falta el archivo o llega más de uno, el archivo no es una imagen JPEG, PNG o WebP, ocupa más de 8 MB o el
+identificador del viaje no es un UUID
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta la foto en el campo «archivo» |
+| `tipo_no_permitido` | Solo se pueden subir fotos JPEG, PNG o WebP |
+| `archivo_demasiado_grande` | La foto no puede ocupar más de 8 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_foto` | No se ha podido subir la foto |
 
 ## Rutas
 
