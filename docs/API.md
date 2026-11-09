@@ -46,6 +46,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
 
 ## General
 
@@ -2279,3 +2280,73 @@ no es válido o el identificador del viaje no es un UUID
 | Código de error | Mensaje |
 | --- | --- |
 | `error_documento` | No se ha podido subir el documento |
+
+### GET /viajes/{viajeId}/documentos/{documentoId}/url
+
+**Obtiene un enlace temporal para abrir o descargar un documento**
+
+Devuelve una URL firmada de Supabase Storage para abrir (previsualizar) un documento de la cartera del
+viaje. El bucket es privado, así que el archivo solo se puede ver con este enlace, que **dura 5 minutos**
+(`expira_en`). Un documento se puede abrir siempre mientras no se elimine: cada vez que se abre se pide un
+enlace nuevo. El archivo no pasa por el servidor.
+
+Con `descargar=true` el enlace hace que el navegador guarde el archivo con el nombre del documento.
+No devuelve la ruta interna del archivo en el bucket.
+
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `documentoId` | path | Sí | string (uuid) | Identificador del documento | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `descargar` | query | No | boolean | Si es `true`, el enlace descarga el archivo con el nombre del documento en lugar de abrirlo | `false` |
+
+**Respuestas**
+
+**200** — Enlace temporal del documento
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `url` | string (uri) | No | Enlace firmado de Supabase Storage para abrir o descargar el archivo | `https://proyecto.supabase.co/storage/v1/object/sign/documentos/123e4567-e89b-12d3-a456-426614174000/0b9c0d1e-2f3a-4b5c-8d6e-7f8a9b0c1d2e.pdf?token=eyJ...` |
+| `expira_en` | string (date-time) | No | Cuándo caduca el enlace (5 minutos después de pedirlo) | `2026-11-09T16:51:45Z` |
+| `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No |  | `application/pdf` |
+
+**400** — El identificador del viaje o del documento no es un UUID, o `descargar` no es `true` ni `false`
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del documento no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje o su archivo ya no está (`documento_no_encontrado`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `documento_no_encontrado` | El documento no existe en este viaje |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido obtener el enlace del documento |

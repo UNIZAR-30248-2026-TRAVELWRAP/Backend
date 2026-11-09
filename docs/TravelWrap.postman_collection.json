@@ -108,6 +108,14 @@
     {
       "key": "viajeIdDocumento",
       "value": ""
+    },
+    {
+      "key": "documentoIdPdf",
+      "value": ""
+    },
+    {
+      "key": "documentoIdImagen",
+      "value": ""
     }
   ],
   "item": [
@@ -5718,7 +5726,8 @@
                   "  pm.expect(body.viaje_id).to.eql(pm.collectionVariables.get('viajeIdDocumento'));",
                   "  pm.expect(body.subido_por).to.be.a('string');",
                   "});",
-                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));"
+                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));",
+                  "pm.collectionVariables.set('documentoIdPdf', body.id);"
                 ]
               }
             }
@@ -5760,7 +5769,8 @@
                   "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
                   "pm.test('Usa el nombre indicado sin espacios de más', () => pm.expect(body.nombre).to.eql('Foto del pasaporte'));",
-                  "pm.test('Tipo image/png', () => pm.expect(body.tipo_mime).to.eql('image/png'));"
+                  "pm.test('Tipo image/png', () => pm.expect(body.tipo_mime).to.eql('image/png'));",
+                  "pm.collectionVariables.set('documentoIdImagen', body.id);"
                 ]
               }
             }
@@ -5788,6 +5798,230 @@
                   "const { documentos } = pm.response.json();",
                   "pm.test('Están los dos documentos, primero el último subido', () => {",
                   "  pm.expect(documentos.map((d) => d.nombre)).to.eql(['Foto del pasaporte', 'billete.pdf']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un PDF: devuelve un enlace temporal que funciona",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/{{documentoIdPdf}}/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Devuelve el enlace, su caducidad, el nombre y el tipo', () => {",
+                  "  pm.expect(body.url).to.match(/^https?:\\/\\//);",
+                  "  pm.expect(body.nombre).to.eql('billete.pdf');",
+                  "  pm.expect(body.tipo_mime).to.eql('application/pdf');",
+                  "  pm.expect(new Date(body.expira_en).getTime()).to.be.above(Date.now());",
+                  "});",
+                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));",
+                  "pm.sendRequest(body.url, (error, respuesta) => {",
+                  "  pm.test('El enlace abre el archivo', () => {",
+                  "    pm.expect(error).to.be.null;",
+                  "    pm.expect(respuesta.code).to.eql(200);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir una imagen PNG",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/{{documentoIdImagen}}/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Nombre y tipo de la imagen', () => {",
+                  "  pm.expect(body.nombre).to.eql('Foto del pasaporte');",
+                  "  pm.expect(body.tipo_mime).to.eql('image/png');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Descargar un PDF: el enlace lleva el nombre del documento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/{{documentoIdPdf}}/url?descargar=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El enlace descarga el archivo con su nombre', () => {",
+                  "  pm.expect(pm.response.json().url).to.include('download=billete.pdf');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un documento sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/{{documentoIdPdf}}/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un documento con un identificador no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/no-es-un-uuid/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un documento con descargar no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/{{documentoIdPdf}}/url?descargar=quizas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un documento que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/00000000-0000-4000-8000-000000000000/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código documento_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('documento_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un documento de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/documentos/{{documentoIdPdf}}/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
                   "});"
                 ]
               }
@@ -6176,6 +6410,31 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Siguen los dos documentos', () => pm.expect(pm.response.json().documentos).to.have.length(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Abrir un documento de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/{{documentoIdPdf}}/url"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve el enlace', () => pm.expect(pm.response.json().url).to.match(/^https?:\\/\\//));"
                 ]
               }
             }

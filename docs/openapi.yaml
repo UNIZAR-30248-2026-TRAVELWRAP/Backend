@@ -2120,6 +2120,84 @@ paths:
                   codigo: error_documento
                   mensaje: No se ha podido subir el documento
 
+  /viajes/{viajeId}/documentos/{documentoId}/url:
+    get:
+      tags:
+        - Documentos
+      summary: Obtiene un enlace temporal para abrir o descargar un documento
+      description: |
+        Devuelve una URL firmada de Supabase Storage para abrir (previsualizar) un documento de la cartera del
+        viaje. El bucket es privado, así que el archivo solo se puede ver con este enlace, que **dura 5 minutos**
+        (`expira_en`). Un documento se puede abrir siempre mientras no se elimine: cada vez que se abre se pide un
+        enlace nuevo. El archivo no pasa por el servidor.
+
+        Con `descargar=true` el enlace hace que el navegador guarde el archivo con el nombre del documento.
+        No devuelve la ruta interna del archivo en el bucket.
+
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/DocumentoId'
+        - name: descargar
+          in: query
+          required: false
+          description: Si es `true`, el enlace descarga el archivo con el nombre del documento en lugar de abrirlo
+          schema:
+            type: boolean
+            default: false
+          example: false
+      responses:
+        '200':
+          description: Enlace temporal del documento
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UrlDocumento'
+        '400':
+          description: El identificador del viaje o del documento no es un UUID, o `descargar` no es `true` ni `false`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del documento no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje o su archivo ya no está (`documento_no_encontrado`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viaje:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                documento:
+                  value:
+                    error:
+                      codigo: documento_no_encontrado
+                      mensaje: El documento no existe en este viaje
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_documento
+                  mensaje: No se ha podido obtener el enlace del documento
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2159,6 +2237,15 @@ components:
         type: string
         format: uuid
       example: 6f1c2d3e-0000-4000-8000-000000000010
+    DocumentoId:
+      name: documentoId
+      in: path
+      required: true
+      description: Identificador del documento
+      schema:
+        type: string
+        format: uuid
+      example: 4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d
   responses:
     SinSesion:
       description: Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
@@ -3207,6 +3294,27 @@ components:
           description: Documentos del viaje, del más reciente al más antiguo
           items:
             $ref: '#/components/schemas/Documento'
+
+    UrlDocumento:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Enlace firmado de Supabase Storage para abrir o descargar el archivo
+          example: https://proyecto.supabase.co/storage/v1/object/sign/documentos/123e4567-e89b-12d3-a456-426614174000/0b9c0d1e-2f3a-4b5c-8d6e-7f8a9b0c1d2e.pdf?token=eyJ...
+        expira_en:
+          type: string
+          format: date-time
+          description: Cuándo caduca el enlace (5 minutos después de pedirlo)
+          example: '2026-11-09T16:51:45Z'
+        nombre:
+          type: string
+          example: Billete de tren Madrid-Roma
+        tipo_mime:
+          type: string
+          enum: [application/pdf, image/jpeg, image/png]
+          example: application/pdf
 
     Error:
       type: object
