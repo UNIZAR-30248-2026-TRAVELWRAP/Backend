@@ -34,6 +34,7 @@ const recibirArchivo = (req, res, next) => {
 // Rutas de la cartera de documentos del viaje
 router.get('/', requiereSesion, documentoController.listar);
 router.post('/', requiereSesion, recibirArchivo, documentoController.subir);
+router.get('/:documentoId/url', requiereSesion, documentoController.obtenerUrl);
 
 module.exports = router;
 module.exports.recibirArchivo = recibirArchivo;
