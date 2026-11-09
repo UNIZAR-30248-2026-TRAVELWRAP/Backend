@@ -158,6 +158,25 @@ describe('actividadService.listar', () => {
     );
   });
 
+  it('pide y devuelve la latitud, la longitud y el identificador del lugar de cada actividad', async () => {
+    const filas = [
+      { id: 'a1', latitud: 41.890214, longitud: 12.492231, lugar_externo_id: 'way/24146600' },
+      { id: 'a2', latitud: null, longitud: null, lugar_externo_id: null },
+    ];
+    const cliente = clienteFalso([
+      { data: viaje(), error: null },
+      { data: filas, error: null },
+    ]);
+
+    const resultado = await actividadService.listar(cliente, USUARIO, VIAJE_ID);
+
+    assert.deepEqual(resultado.actividades, filas);
+    const [, campos] = operacion(cliente.consultas[1], 'select');
+    for (const campo of ['latitud', 'longitud', 'lugar_externo_id']) {
+      assert.match(campos, new RegExp(`\\b${campo}\\b`));
+    }
+  });
+
   it('filtra por la fecha cuando se pide un solo día', async () => {
     const cliente = clienteFalso([
       { data: viaje(), error: null },
