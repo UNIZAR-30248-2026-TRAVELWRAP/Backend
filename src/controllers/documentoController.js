@@ -33,6 +33,7 @@ const validarNombre = (nombre, nombreArchivo) => {
 // Motivos de fallo que pueden devolver los servicios de documentos
 const ERRORES = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
+  documento_no_existe: [404, 'documento_no_encontrado', 'El documento no existe en este viaje'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
 };
 
@@ -97,4 +98,31 @@ const subir = async (req, res) => {
   }
 };
 
-module.exports = { listar, subir, detectarTipo };
+// Enlace temporal para abrir el documento o, con ?descargar=true, para descargarlo con su nombre
+const obtenerUrl = async (req, res) => {
+  const { viajeId, documentoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(documentoId)) {
+    return responderError(res, 400, 'datos_invalidos', 'El identificador del documento no es válido');
+  }
+
+  const { descargar } = req.query;
+  if (descargar !== undefined && descargar !== 'true' && descargar !== 'false') {
+    return responderError(res, 400, 'datos_invalidos', 'El parámetro descargar debe ser true o false');
+  }
+
+  try {
+    const resultado = await documentoService.obtenerUrl(req.supabase, req.usuario.id, viajeId, documentoId, {
+      descargar: descargar === 'true',
+    });
+
+    if (resultado.error) return responderError(res, 502, 'error_documento', 'No se ha podido obtener el enlace del documento');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido obtener el enlace del documento');
+    const { url, expira_en, nombre, tipo_mime } = resultado;
+    return res.status(200).json({ url, expira_en, nombre, tipo_mime });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, subir, obtenerUrl, detectarTipo };

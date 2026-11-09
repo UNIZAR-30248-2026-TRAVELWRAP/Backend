@@ -68,4 +68,45 @@ const subir = async (cliente, usuarioId, viajeId, { nombre, buffer, tipoMime }) 
   return { estado: 'ok', documento: data };
 };
 
-module.exports = { listar, subir, BUCKET };
+// Segundos que dura el enlace de un documento. Se pide uno nuevo cada vez que se abre o se descarga,
+// así que un documento se puede abrir siempre mientras no se elimine
+const SEGUNDOS_DE_ENLACE = 300;
+
+const archivoNoEncontrado = (error) => error.statusCode === '404' || /not found/i.test(error.message ?? '');
+
+// Enlace temporal de Supabase Storage para abrir un documento del viaje, o para descargarlo con su nombre.
+// Sirve también en viajes finalizados o archivados: solo lee. La ruta del archivo no sale del servidor
+// Devuelve { error } | { estado: no_existe | documento_no_existe | ok (con url, expira_en, nombre y tipo_mime) }
+const obtenerUrl = async (cliente, usuarioId, viajeId, documentoId, { descargar = false } = {}) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  // El documento tiene que ser de este viaje: con otro id de viaje no se encuentra
+  const { data: documento, error } = await cliente
+    .from('documentos')
+    .select('ruta, nombre, tipo_mime')
+    .eq('id', documentoId)
+    .eq('viaje_id', viajeId)
+    .maybeSingle();
+  if (error) return { error };
+  if (!documento) return { estado: 'documento_no_existe' };
+
+  const expira = new Date(Date.now() + SEGUNDOS_DE_ENLACE * 1000);
+  const { data, error: errorEnlace } = await cliente.storage
+    .from(BUCKET)
+    .createSignedUrl(documento.ruta, SEGUNDOS_DE_ENLACE, descargar ? { download: documento.nombre } : undefined);
+  if (errorEnlace) {
+    return archivoNoEncontrado(errorEnlace) ? { estado: 'documento_no_existe' } : { error: errorEnlace };
+  }
+
+  return {
+    estado: 'ok',
+    url: data.signedUrl,
+    expira_en: expira.toISOString(),
+    nombre: documento.nombre,
+    tipo_mime: documento.tipo_mime,
+  };
+};
+
+module.exports = { listar, subir, obtenerUrl, BUCKET, SEGUNDOS_DE_ENLACE };

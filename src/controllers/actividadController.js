@@ -163,6 +163,12 @@ const ERRORES = {
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   hora_fin_sin_inicio: [400, 'datos_invalidos', 'La hora de fin necesita una hora de inicio'],
   horas_invertidas: [400, 'datos_invalidos', 'La hora de fin no puede ser anterior a la de inicio'],
+  agenda_cambiada: [409, 'agenda_cambiada', 'La agenda de ese día ha cambiado. Recárgala para ver las actividades actuales'],
+  orden_no_valido: [
+    400,
+    'orden_no_valido',
+    'Las actividades con hora deben seguir ordenadas por su hora; solo se pueden mover las que no tienen hora o empiezan a la misma hora',
+  ],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -257,4 +263,49 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, crear, editar, eliminar };
+const MAX_ACTIVIDADES_POR_DIA = 200;
+
+const validarOrden = (datos) => {
+  if (typeof datos?.fecha !== 'string' || !fechaValida(datos.fecha)) {
+    return { error: 'La fecha es obligatoria y debe tener el formato AAAA-MM-DD' };
+  }
+  const ids = datos.actividades;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > MAX_ACTIVIDADES_POR_DIA ||
+    ids.some((id) => typeof id !== 'string' || !UUID_REGEX.test(id))
+  ) {
+    return { error: 'Las actividades deben ser una lista de identificadores de actividad no vacía' };
+  }
+  if (new Set(ids.map((id) => id.toLowerCase())).size !== ids.length) {
+    return { error: 'La lista de actividades no puede repetir identificadores' };
+  }
+  return { fecha: datos.fecha, ids: ids.map((id) => id.toLowerCase()) };
+};
+
+const reordenar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  const validacion = validarOrden(req.body);
+  if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
+
+  try {
+    const resultado = await actividadService.reordenar(
+      req.supabase,
+      req.usuario.id,
+      viajeId,
+      validacion.fecha,
+      validacion.ids,
+    );
+
+    if (resultado.error) return responderError(res, 502, 'error_actividad', 'No se ha podido guardar el orden de las actividades');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido guardar el orden de las actividades');
+    return res.status(200).json({ actividades: resultado.actividades });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, crear, editar, eliminar, reordenar };

@@ -39,6 +39,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/direcciones`](#get-direcciones) | Busca una dirección y devuelve sus coordenadas | Token de sesión |
 | GET | [`/viajes/{viajeId}/actividades`](#get-viajesviajeidactividades) | Lista las actividades del itinerario de un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
+| PUT | [`/viajes/{viajeId}/actividades/orden`](#put-viajesviajeidactividadesorden) | Guarda el orden de las actividades de un día | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
@@ -46,6 +47,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
+| GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
 
 ## General
 
@@ -1580,9 +1583,18 @@ Cuerpo (`application/json`):
 
 **Lista las actividades del itinerario de un viaje**
 
-Devuelve las actividades del viaje ordenadas por día, después por hora de inicio (las que no tienen hora van al
-final de su día) y por último por su posición dentro del día (`orden`). Con `fecha` solo devuelve las de ese día.
+Devuelve las actividades del viaje ordenadas por día. Dentro de cada día van primero las que tienen hora, por su
+hora de inicio (las que empiezan a la misma hora, por su posición `orden`). Las que no tienen hora van al final
+del día, por su posición, salvo las que el usuario ha colocado entre las demás con PUT /viajes/{viajeId}/actividades/orden,
+que aparecen en el lugar donde las puso. Con `fecha` solo devuelve las de ese día.
 Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+
+Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
+dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
+actividad en el mapa del día; las actividades sin coordenadas no tienen marcador.
+
+No hay notificaciones en tiempo real (WebSocket): para recargar la agenda y el mapa basta con volver a pedir
+este listado después de crear, modificar o eliminar una actividad. Siempre refleja el estado actual.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -1609,7 +1621,7 @@ Cuerpo (`application/json`):
 | `actividades[].fecha` | string (date) | No |  | `2027-05-12` |
 | `actividades[].hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
 | `actividades[].hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
-| `actividades[].orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `actividades[].orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
 | `actividades[].ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
 | `actividades[].latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
 | `actividades[].longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
@@ -1696,7 +1708,7 @@ Cuerpo (`application/json`):
 | `fecha` | string (date) | No |  | `2027-05-12` |
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
-| `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
 | `latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
 | `longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
@@ -1742,6 +1754,101 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_actividad` | No se ha podido crear la actividad |
+
+### PUT /viajes/{viajeId}/actividades/orden
+
+**Guarda el orden de las actividades de un día**
+
+Recibe todas las actividades de un día en el orden que ha elegido el usuario y guarda las posiciones. Permite
+colocar las actividades sin hora donde se quiera (también entre las que tienen hora) y reordenar entre sí las que
+empiezan a la misma hora. Las actividades con hora siguen ordenadas por su hora: si el nuevo orden las desordena,
+se rechaza con 400.
+
+La lista tiene que contener exactamente las actividades que tiene ahora el día, sin repetir ninguna. Si otro
+miembro ha añadido o eliminado alguna mientras tanto, responde 409 y hay que volver a pedir el listado.
+
+Solo la pueden usar los miembros del viaje mientras está activo. Devuelve las actividades del día en su nuevo
+orden, con la posición (`orden`) que ha guardado el servidor para cada una.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `fecha` | string (date) | Sí | Día cuyas actividades se reordenan (AAAA-MM-DD) | `2027-05-12` |
+| `actividades` | array<string (uuid)> | Sí | Identificadores de todas las actividades de ese día, en el nuevo orden y sin repetir |  |
+
+**Respuestas**
+
+**200** — Orden guardado; actividades del día en su nuevo orden
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `actividades` | array<Actividad> | No |  |  |
+| `actividades[].id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
+| `actividades[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `actividades[].titulo` | string | No |  | `Visita al Coliseo` |
+| `actividades[].descripcion` | string \| null | No |  | `null` |
+| `actividades[].fecha` | string (date) | No |  | `2027-05-12` |
+| `actividades[].hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
+| `actividades[].hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
+| `actividades[].orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
+| `actividades[].ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
+| `actividades[].latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
+| `actividades[].longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
+| `actividades[].lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap | `way/24146600` |
+| `actividades[].categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+| `actividades[].creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `actividades[].creado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+| `actividades[].actualizado_en` | string (date-time) | No |  | `2026-10-24T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID, la fecha o la lista de actividades no son válidas, o las actividades con hora no quedan ordenadas por su hora
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha es obligatoria y debe tener el formato AAAA-MM-DD |
+| `orden_no_valido` | Las actividades con hora deben seguir ordenadas por su hora; solo se pueden mover las que no tienen hora o empiezan a la misma hora |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado, o la agenda de ese día ha cambiado desde que se pidió el listado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+| `agenda_cambiada` | La agenda de ese día ha cambiado. Recárgala para ver las actividades actuales |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_actividad` | No se ha podido guardar el orden de las actividades |
 
 ### PATCH /viajes/{viajeId}/actividades/{actividadId}
 
@@ -1792,7 +1899,7 @@ Cuerpo (`application/json`):
 | `fecha` | string (date) | No |  | `2027-05-12` |
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM:SS) | `10:00:00` |
 | `hora_fin` | string \| null | No | Hora de fin (HH:MM:SS) | `null` |
-| `orden` | integer | No | Posición dentro del día; la nueva actividad va al final | `0` |
+| `orden` | integer | No | Posición dentro del día. La actividad nueva va al final. Un valor negativo (-1 es la primera posición del día,<br>-2 la segunda, etc.) indica una actividad sin hora que el usuario ha colocado entre las demás; el servidor lo<br>asigna al reordenar y no hace falta enviarlo al crear o modificar. | `0` |
 | `ubicacion_nombre` | string \| null | No |  | `Piazza del Colosseo` |
 | `latitud` | number \| null | No | Latitud del lugar (null si no se eligió una dirección del buscador) | `41.890214` |
 | `longitud` | number \| null | No | Longitud del lugar (null si no se eligió una dirección del buscador) | `12.492231` |
@@ -2279,3 +2386,166 @@ no es válido o el identificador del viaje no es un UUID
 | Código de error | Mensaje |
 | --- | --- |
 | `error_documento` | No se ha podido subir el documento |
+
+### GET /viajes/{viajeId}/documentos/{documentoId}/url
+
+**Obtiene un enlace temporal para abrir o descargar un documento**
+
+Devuelve una URL firmada de Supabase Storage para abrir (previsualizar) un documento de la cartera del
+viaje. El bucket es privado, así que el archivo solo se puede ver con este enlace, que **dura 5 minutos**
+(`expira_en`). Un documento se puede abrir siempre mientras no se elimine: cada vez que se abre se pide un
+enlace nuevo. El archivo no pasa por el servidor.
+
+Con `descargar=true` el enlace hace que el navegador guarde el archivo con el nombre del documento.
+No devuelve la ruta interna del archivo en el bucket.
+
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `documentoId` | path | Sí | string (uuid) | Identificador del documento | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `descargar` | query | No | boolean | Si es `true`, el enlace descarga el archivo con el nombre del documento en lugar de abrirlo | `false` |
+
+**Respuestas**
+
+**200** — Enlace temporal del documento
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `url` | string (uri) | No | Enlace firmado de Supabase Storage para abrir o descargar el archivo | `https://proyecto.supabase.co/storage/v1/object/sign/documentos/123e4567-e89b-12d3-a456-426614174000/0b9c0d1e-2f3a-4b5c-8d6e-7f8a9b0c1d2e.pdf?token=eyJ...` |
+| `expira_en` | string (date-time) | No | Cuándo caduca el enlace (5 minutos después de pedirlo) | `2026-11-09T16:51:45Z` |
+| `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No |  | `application/pdf` |
+
+**400** — El identificador del viaje o del documento no es un UUID, o `descargar` no es `true` ni `false`
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del documento no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje o su archivo ya no está (`documento_no_encontrado`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `documento_no_encontrado` | El documento no existe en este viaje |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido obtener el enlace del documento |
+
+## Rutas
+
+### GET /viajes/{viajeId}/ruta
+
+**Calcula la ruta a pie del día entre las actividades con ubicación**
+
+Toma las actividades del día indicado que tienen coordenadas, en el orden de la agenda, y devuelve la ruta a
+pie por calles que las une junto con distancia, duración y un orden más corto para visitarlas. Solo lo pueden
+pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+
+La ruta la calcula un servicio externo basado en OSRM con datos de OpenStreetMap (por defecto el servidor de rutas
+a pie de OpenStreetMap Alemania; se cambia con la variable de entorno `RUTAS_URL`). Para respetar su política de
+uso las llamadas salen de una en una, a razón de una por segundo; un mismo usuario no puede pedir dos rutas en
+menos de un segundo, el tiempo máximo de espera es de 8 segundos y las rutas repetidas se sirven de una caché de
+10 minutos.
+
+La ruta sigue el orden de la agenda. El orden más corto (`orden_sugerido`) siempre empieza por la primera
+actividad y se calcula con distancias en línea recta, por lo que `ahorro_m` es una estimación: la diferencia en
+línea recta entre el recorrido de la agenda y el sugerido.
+
+Con menos de dos actividades con ubicación no se llama al servicio externo y `ruta` vale `null`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `fecha` | query | Sí | string (date) | Día del que se quiere la ruta (AAAA-MM-DD) | `2027-05-12` |
+
+**Respuestas**
+
+**200** — Actividades con ubicación del día, orden más corto y ruta (null si hay menos de dos actividades con ubicación)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `puntos` | array<PuntoDeRuta> | No | Actividades del día con ubicación, en el orden de la agenda |  |
+| `puntos[].id` | string (uuid) | No | Identificador de la actividad |  |
+| `puntos[].titulo` | string | No |  | `Visita al Coliseo` |
+| `puntos[].latitud` | number | No |  | `41.890214` |
+| `puntos[].longitud` | number | No |  | `12.492231` |
+| `orden_sugerido` | array<string (uuid)> | No | Identificadores de esas actividades en un orden más corto, empezando siempre por la primera |  |
+| `ahorro_m` | integer | No | Metros que se ahorran en línea recta con el orden sugerido respecto al de la agenda (0 si la agenda ya es el más corto) | `1240` |
+| `ruta` | object \| null | No | Ruta a pie por calles siguiendo el orden de la agenda; null con menos de dos actividades con ubicación |  |
+
+**400** — El identificador del viaje no es un UUID, la fecha falta o no es válida, o hay más de 25 actividades con ubicación
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha es obligatoria y debe tener el formato AAAA-MM-DD |
+| `datos_invalidos` | Hay demasiadas actividades con ubicación para trazar la ruta (máximo 25) |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**422** — El servicio de rutas no encuentra un camino a pie entre las actividades
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_ruta` | No se ha encontrado un camino entre las actividades de ese día |
+
+**429** — El usuario pide rutas demasiado rápido o hay demasiados cálculos en cola
+
+| Código de error | Mensaje |
+| --- | --- |
+| `demasiadas_rutas` | Espera un segundo entre un cálculo de ruta y otro |
+| `servicio_ocupado` | Hay muchos cálculos de ruta en este momento. Inténtalo de nuevo en unos segundos |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — El servicio de rutas no responde, tarda demasiado o devuelve un error, o falla la consulta de las actividades
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_ruta` | No se ha podido calcular la ruta |
