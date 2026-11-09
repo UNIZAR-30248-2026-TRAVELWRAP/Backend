@@ -86,6 +86,52 @@ const balance = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok', saldos };
 };
 
+// Transferencias para dejar todos los saldos a 0, en céntimos. Primero se emparejan los saldos iguales de signo
+// contrario (una sola transferencia salda a los dos) y después se va emparejando la mayor deuda con el mayor saldo
+// a favor: en cada paso queda saldado al menos uno de los dos, así que salen como mucho n - 1 transferencias.
+// A igualdad de importe se respeta el orden del balance, para que el resultado sea siempre el mismo
+const planDeTransferencias = (saldos) => {
+  const pendientes = saldos
+    .map(({ usuario_id, nombre, saldo }, orden) => ({ usuario_id, nombre, centimos: aCentimos(saldo), orden }))
+    .filter((p) => p.centimos !== 0);
+  const transferencias = [];
+  const transferir = (deudor, acreedor, centimos) => {
+    transferencias.push({
+      de: deudor.usuario_id,
+      de_nombre: deudor.nombre,
+      a: acreedor.usuario_id,
+      a_nombre: acreedor.nombre,
+      importe: centimos / 100,
+    });
+    deudor.centimos += centimos;
+    acreedor.centimos -= centimos;
+  };
+
+  const deudores = pendientes.filter((p) => p.centimos < 0);
+  const acreedores = pendientes.filter((p) => p.centimos > 0);
+  for (const deudor of deudores) {
+    const igual = acreedores.find((a) => a.centimos === -deudor.centimos);
+    if (igual) transferir(deudor, igual, igual.centimos);
+  }
+
+  const porImporte = (a, b) => Math.abs(b.centimos) - Math.abs(a.centimos) || a.orden - b.orden;
+  for (;;) {
+    const deudor = deudores.filter((d) => d.centimos < 0).sort(porImporte)[0];
+    const acreedor = acreedores.filter((a) => a.centimos > 0).sort(porImporte)[0];
+    if (!deudor || !acreedor) break;
+    transferir(deudor, acreedor, Math.min(-deudor.centimos, acreedor.centimos));
+  }
+  return transferencias;
+};
+
+// Plan mínimo de transferencias para saldar las cuentas del viaje, a partir del balance
+// Devuelve { error } | { estado: no_existe | ok (con transferencias) }
+const liquidacion = async (cliente, usuarioId, viajeId) => {
+  const resultado = await balance(cliente, usuarioId, viajeId);
+  if (resultado.error || resultado.estado !== 'ok') return resultado;
+  return { estado: 'ok', transferencias: planDeTransferencias(resultado.saldos) };
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -106,4 +152,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, balance, crear };
+module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, crear };

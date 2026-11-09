@@ -130,6 +130,23 @@ const balance = async (req, res) => {
   }
 };
 
+const liquidacion = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  try {
+    const resultado = await gastoService.liquidacion(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido calcular la liquidación');
+    if (resultado.estado !== 'ok') {
+      return responderMotivo(res, resultado.estado, 'No se ha podido calcular la liquidación');
+    }
+    return res.status(200).json({ transferencias: resultado.transferencias });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const crear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
@@ -153,4 +170,4 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { listar, balance, crear };
+module.exports = { listar, balance, liquidacion, crear };
