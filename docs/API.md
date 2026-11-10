@@ -45,6 +45,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos/liquidacion`](#get-viajesviajeidgastosliquidacion) | Transferencias para saldar las cuentas del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
@@ -2234,6 +2235,71 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_gasto` | No se ha podido calcular el balance |
+
+### GET /viajes/{viajeId}/gastos/liquidacion
+
+**Transferencias para saldar las cuentas del viaje**
+
+Propone el plan mínimo de transferencias para dejar todos los saldos del viaje a 0. Se calcula en céntimos
+a partir del balance: primero empareja los saldos iguales de signo contrario y después la mayor deuda con el
+mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
+Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
+viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
+Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados, porque solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Transferencias para saldar el viaje (lista vacía si todo está saldado)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `transferencias` | array<Transferencia> | No | Transferencias para dejar todos los saldos a 0; vacía si el viaje ya está saldado | `[{"de":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","de_nombre":"Berta","a":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","a_nombre":"Adriana","importe":0.33},{"de":"8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f","de_nombre":"Daniel","a":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","a_nombre":"Adriana","importe":3.33}]` |
+| `transferencias[].de` | string (uuid) | No | Miembro que paga | `5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f` |
+| `transferencias[].de_nombre` | string \| null | No | Nombre de quien paga (null si ya abandonó el viaje) | `Berta` |
+| `transferencias[].a` | string (uuid) | No | Miembro que recibe | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `transferencias[].a_nombre` | string \| null | No | Nombre de quien recibe (null si ya abandonó el viaje) | `Adriana` |
+| `transferencias[].importe` | number | No | Cuánto paga, en euros con dos decimales | `6.34` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido calcular la liquidación |
 
 ## Documentos
 

@@ -2083,6 +2083,64 @@ paths:
                   codigo: error_gasto
                   mensaje: No se ha podido calcular el balance
 
+  /viajes/{viajeId}/gastos/liquidacion:
+    get:
+      tags:
+        - Gastos
+      summary: Transferencias para saldar las cuentas del viaje
+      description: |
+        Propone el plan mínimo de transferencias para dejar todos los saldos del viaje a 0. Se calcula en céntimos
+        a partir del balance: primero empareja los saldos iguales de signo contrario y después la mayor deuda con el
+        mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
+        Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
+        viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
+        Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados, porque solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Transferencias para saldar el viaje (lista vacía si todo está saldado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Liquidacion'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido calcular la liquidación
+
   /viajes/{viajeId}/documentos:
     get:
       tags:
@@ -3506,6 +3564,54 @@ components:
               pagado: 0
               parte: 3.33
               saldo: -3.33
+
+    Transferencia:
+      type: object
+      properties:
+        de:
+          type: string
+          format: uuid
+          description: Miembro que paga
+          example: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+        de_nombre:
+          type: string
+          nullable: true
+          description: Nombre de quien paga (null si ya abandonó el viaje)
+          example: Berta
+        a:
+          type: string
+          format: uuid
+          description: Miembro que recibe
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        a_nombre:
+          type: string
+          nullable: true
+          description: Nombre de quien recibe (null si ya abandonó el viaje)
+          example: Adriana
+        importe:
+          type: number
+          description: Cuánto paga, en euros con dos decimales
+          example: 6.34
+
+    Liquidacion:
+      type: object
+      properties:
+        transferencias:
+          type: array
+          description: Transferencias para dejar todos los saldos a 0; vacía si el viaje ya está saldado
+          items:
+            $ref: '#/components/schemas/Transferencia'
+          example:
+            - de: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+              de_nombre: Berta
+              a: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+              a_nombre: Adriana
+              importe: 0.33
+            - de: 8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f
+              de_nombre: Daniel
+              a: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+              a_nombre: Adriana
+              importe: 3.33
 
     SubidaDocumentoRequest:
       type: object

@@ -6625,6 +6625,109 @@
               }
             }
           ]
+        },
+        {
+          "name": "Ver la liquidación de un viaje saldado (también archivado)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/liquidacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin transferencias: todo está saldado', () => {",
+                  "  pm.expect(pm.response.json().transferencias).to.eql([]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver la liquidación con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/roma-2027/gastos/liquidacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver la liquidación sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/liquidacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver la liquidación de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos/liquidacion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
