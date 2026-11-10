@@ -408,3 +408,175 @@ describe('gastoService.balance', () => {
     assert.deepEqual(await gastoService.balance(cliente, ADRIANA, VIAJE_ID), { error });
   });
 });
+
+// Liquidación: plan de transferencias para saldar el viaje. Primero se prueba el cálculo con saldos sueltos y
+// después la función completa, que parte del balance del viaje (con el cliente falso)
+describe('gastoService.planDeTransferencias', () => {
+  const ELENA = 'e1a2b3c4-d5e6-4f70-8192-a3b4c5d6e7f8';
+  const DANIEL = '8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f';
+  // Miembro que ya ha abandonado el viaje: aparece sin nombre
+  const ANTIGUO_ID = 'a7b8c9d0-e1f2-4a3b-8c4d-5e6f7a8b9c0d';
+  const saldo = (usuarioId, nombre, importe) => ({ usuario_id: usuarioId, nombre, saldo: importe });
+
+  // Aplica las transferencias sobre los saldos (en céntimos) y devuelve lo que queda en cada cuenta
+  const aplicar = (saldos, transferencias) => {
+    const cuentas = new Map(saldos.map((s) => [s.usuario_id, Math.round(s.saldo * 100)]));
+    for (const { de, a, importe } of transferencias) {
+      const centimos = Math.round(importe * 100);
+      cuentas.set(de, cuentas.get(de) + centimos);
+      cuentas.set(a, cuentas.get(a) - centimos);
+    }
+    return [...cuentas.values()];
+  };
+
+  it('sin saldos pendientes no hay transferencias', () => {
+    const saldos = [saldo(ADRIANA, 'Adriana', 0), saldo(BERTA, 'Berta', 0)];
+
+    assert.deepEqual(gastoService.planDeTransferencias(saldos), []);
+  });
+
+  it('con dos miembros, el que debe paga al que le deben', () => {
+    const saldos = [saldo(ADRIANA, 'Adriana', 10), saldo(BERTA, 'Berta', -10)];
+
+    assert.deepEqual(gastoService.planDeTransferencias(saldos), [
+      { de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 10 },
+    ]);
+  });
+
+  it('con tres miembros y un solo acreedor, cada deudor paga al acreedor', () => {
+    const saldos = [saldo(ADRIANA, 'Adriana', 40), saldo(BERTA, 'Berta', -25), saldo(ELENA, 'Elena', -15)];
+
+    const transferencias = gastoService.planDeTransferencias(saldos);
+
+    assert.deepEqual(transferencias, [
+      { de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 25 },
+      { de: ELENA, de_nombre: 'Elena', a: ADRIANA, a_nombre: 'Adriana', importe: 15 },
+    ]);
+  });
+
+  it('empareja los saldos iguales de signo contrario en una sola transferencia', () => {
+    const saldos = [
+      saldo(ADRIANA, 'Adriana', 10),
+      saldo(BERTA, 'Berta', -10),
+      saldo(ELENA, 'Elena', 20),
+      saldo(DANIEL, 'Daniel', -20),
+    ];
+
+    assert.deepEqual(gastoService.planDeTransferencias(saldos), [
+      { de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 10 },
+      { de: DANIEL, de_nombre: 'Daniel', a: ELENA, a_nombre: 'Elena', importe: 20 },
+    ]);
+  });
+
+  it('no pierde céntimos aunque los saldos no cuadren al céntimo con la división', () => {
+    const saldos = [saldo(ADRIANA, 'Adriana', 3.34), saldo(BERTA, 'Berta', -3.33), saldo(ELENA, 'Elena', -0.01)];
+
+    const transferencias = gastoService.planDeTransferencias(saldos);
+
+    assert.deepEqual(transferencias.map((t) => t.importe), [3.33, 0.01]);
+    assert.deepEqual(aplicar(saldos, transferencias), [0, 0, 0]);
+  });
+
+  it('nunca propone más de n − 1 transferencias', () => {
+    const saldos = [
+      saldo(ADRIANA, 'Adriana', 12.34),
+      saldo(BERTA, 'Berta', 0.66),
+      saldo(ELENA, 'Elena', -5.5),
+      saldo(DANIEL, 'Daniel', -3.5),
+      saldo(ANTIGUO_ID, null, -4),
+    ];
+
+    const transferencias = gastoService.planDeTransferencias(saldos);
+
+    assert.ok(transferencias.length <= saldos.length - 1);
+    assert.deepEqual(aplicar(saldos, transferencias), [0, 0, 0, 0, 0]);
+  });
+
+  it('al aplicar las transferencias todos los saldos quedan a 0', () => {
+    const casos = [
+      [saldo(ADRIANA, 'Adriana', 7.77), saldo(BERTA, 'Berta', -2.22), saldo(ELENA, 'Elena', -5.55)],
+      [saldo(ADRIANA, 'Adriana', -1), saldo(BERTA, 'Berta', -2), saldo(ELENA, 'Elena', 1.5), saldo(DANIEL, 'Daniel', 1.5)],
+      [saldo(ADRIANA, 'Adriana', 0.01), saldo(BERTA, 'Berta', -0.01), saldo(ELENA, 'Elena', 0.02), saldo(DANIEL, 'Daniel', -0.02)],
+    ];
+
+    for (const saldos of casos) {
+      const transferencias = gastoService.planDeTransferencias(saldos);
+      assert.deepEqual(aplicar(saldos, transferencias), saldos.map(() => 0));
+    }
+  });
+
+  it('un antiguo miembro con saldo aparece en la transferencia sin nombre', () => {
+    const saldos = [saldo(ADRIANA, 'Adriana', 10), saldo(ANTIGUO_ID, null, -10)];
+
+    assert.deepEqual(gastoService.planDeTransferencias(saldos), [
+      { de: ANTIGUO_ID, de_nombre: null, a: ADRIANA, a_nombre: 'Adriana', importe: 10 },
+    ]);
+  });
+});
+
+// Función completa, a partir del balance del viaje (con el cliente falso y el viaje simulado)
+describe('gastoService.liquidacion', () => {
+  afterEach(() => mock.restoreAll());
+
+  const MIEMBROS = [
+    { usuario_id: ADRIANA, nombre: 'Adriana' },
+    { usuario_id: BERTA, nombre: 'Berta' },
+  ];
+  const conMiembros = (miembros = MIEMBROS) =>
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, miembros } }));
+  const gastoDe = (pagadoPor, importe, repartos) => ({
+    importe,
+    pagado_por: pagadoPor,
+    repartos: repartos.map(([usuarioId, parte]) => ({ usuario_id: usuarioId, importe: parte })),
+  });
+
+  it('a partir de los gastos del viaje devuelve las transferencias para saldar las cuentas', async () => {
+    conMiembros();
+    const cliente = clienteFalso({
+      respuestas: [{ data: [gastoDe(ADRIANA, '10.00', [[ADRIANA, '5.00'], [BERTA, '5.00']])], error: null }],
+    });
+
+    const resultado = await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(resultado, {
+      estado: 'ok',
+      transferencias: [{ de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 5 }],
+    });
+  });
+
+  it('sin gastos devuelve una lista vacía', async () => {
+    conMiembros();
+    const cliente = clienteFalso({ respuestas: [{ data: [], error: null }] });
+
+    assert.deepEqual(await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID), { estado: 'ok', transferencias: [] });
+  });
+
+  it('incluye al antiguo miembro sin nombre', async () => {
+    conMiembros([MIEMBROS[0]]);
+    const cliente = clienteFalso({
+      respuestas: [{ data: [gastoDe(ADRIANA, '4.00', [[BERTA, '4.00']])], error: null }],
+    });
+
+    const { transferencias } = await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(transferencias, [
+      { de: BERTA, de_nombre: null, a: ADRIANA, a_nombre: 'Adriana', importe: 4 },
+    ]);
+  });
+
+  it('devuelve no_existe si el viaje no existe o no se es miembro', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID), { estado: 'no_existe' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve el error si falla la lectura de los gastos', async () => {
+    conMiembros();
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [{ data: null, error }] });
+
+    assert.deepEqual(await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID), { error });
+  });
+});

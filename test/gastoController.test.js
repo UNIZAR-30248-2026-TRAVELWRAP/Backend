@@ -349,3 +349,82 @@ describe('GET /viajes/:viajeId/gastos/balance (balance)', () => {
     esperarError(res, 500, 'error_interno');
   });
 });
+
+// Liquidación
+
+// Llama a GET /viajes/:viajeId/gastos/liquidacion como lo haría Express tras pasar por requiereSesion
+const llamarLiquidacion = async ({ viajeId = VIAJE_ID } = {}) => {
+  const req = { params: { viajeId }, usuario: USUARIO, supabase: {} };
+  const res = crearRes();
+  await gastoController.liquidacion(req, res);
+  return res;
+};
+
+const simularLiquidacion = (implementacion) => mock.method(gastoService, 'liquidacion', implementacion);
+
+describe('GET /viajes/:viajeId/gastos/liquidacion (liquidacion)', () => {
+  it('devuelve las transferencias para saldar el viaje con 200', async () => {
+    const transferencias = [{ de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 30 }];
+    const liquidacion = simularLiquidacion(async () => ({ estado: 'ok', transferencias }));
+
+    const res = await llamarLiquidacion();
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { transferencias });
+    const [, usuarioId, viajeId] = liquidacion.mock.calls[0].arguments;
+    assert.equal(usuarioId, ADRIANA);
+    assert.equal(viajeId, VIAJE_ID);
+  });
+
+  it('devuelve una lista vacía con 200 si todo está saldado', async () => {
+    simularLiquidacion(async () => ({ estado: 'ok', transferencias: [] }));
+
+    const res = await llamarLiquidacion();
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { transferencias: [] });
+  });
+
+  it('rechaza un identificador de viaje que no es un UUID sin llamar al servicio', async () => {
+    const liquidacion = simularLiquidacion(async () => ({ estado: 'ok', transferencias: [] }));
+
+    const res = await llamarLiquidacion({ viajeId: 'roma-2027' });
+
+    esperarError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
+    assert.equal(liquidacion.mock.callCount(), 0);
+  });
+
+  it('responde 404 si el viaje no existe o no se es miembro', async () => {
+    simularLiquidacion(async () => ({ estado: 'no_existe' }));
+
+    const res = await llamarLiquidacion();
+
+    esperarError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
+  });
+
+  it('responde 502 si falla la base de datos', async () => {
+    simularLiquidacion(async () => ({ error: { code: 'PGRST301' } }));
+
+    const res = await llamarLiquidacion();
+
+    esperarError(res, 502, 'error_gasto', 'No se ha podido calcular la liquidación');
+  });
+
+  it('responde 502 ante un estado desconocido del servicio', async () => {
+    simularLiquidacion(async () => ({ estado: 'desconocido' }));
+
+    const res = await llamarLiquidacion();
+
+    esperarError(res, 502, 'error_gasto', 'No se ha podido calcular la liquidación');
+  });
+
+  it('responde 500 si el servicio lanza una excepción', async () => {
+    simularLiquidacion(async () => {
+      throw new Error('sin red');
+    });
+
+    const res = await llamarLiquidacion();
+
+    esperarError(res, 500, 'error_interno');
+  });
+});
