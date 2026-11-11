@@ -175,6 +175,26 @@ const editar = async (cliente, viajeId, gastoId, datos) => {
   return editado;
 };
 
+// Borra el gasto y, en cascada, sus repartos. Quien no puede borrarlo (no lo registró ni es el creador) no
+// ve el gasto para la política de borrado, así que la respuesta es la misma que si no existiera
+// Devuelve { error } | { estado: no_existe | no_activo | no_encontrado | ok }
+const eliminar = async (cliente, usuarioId, viajeId, gastoId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+
+  const { data, error } = await cliente
+    .from('gastos')
+    .delete()
+    .eq('id', gastoId)
+    .eq('viaje_id', viajeId)
+    .select('id');
+  if (error) return { error };
+  if (!data || data.length === 0) return { estado: 'no_encontrado' };
+  return { estado: 'ok' };
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -195,4 +215,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear, editar };
+module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear, editar, eliminar };

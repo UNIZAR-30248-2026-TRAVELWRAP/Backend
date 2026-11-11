@@ -380,7 +380,7 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 | `gastos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `gastos_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `gastos_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
-| `gastos_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+| `gastos_delete` | DELETE | authenticated | `(creado_por = auth.uid() OR public.es_creador(viaje_id)) AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 #### repartos_gasto
 

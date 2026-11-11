@@ -11,5 +11,6 @@ router.get('/liquidacion', requiereSesion, gastoController.liquidacion);
 router.get('/:gastoId', requiereSesion, gastoController.detalle);
 router.post('/', requiereSesion, gastoController.crear);
 router.patch('/:gastoId', requiereSesion, gastoController.editar);
+router.delete('/:gastoId', requiereSesion, gastoController.eliminar);
 
 module.exports = router;

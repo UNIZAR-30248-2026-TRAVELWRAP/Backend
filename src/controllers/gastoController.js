@@ -195,6 +195,24 @@ const editar = async (req, res) => {
   }
 };
 
+const eliminar = async (req, res) => {
+  const { viajeId, gastoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(gastoId)) {
+    return responderError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
+  }
+
+  try {
+    const resultado = await gastoService.eliminar(req.supabase, req.usuario.id, viajeId, gastoId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido eliminar el gasto');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido eliminar el gasto');
+    return res.status(204).end();
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const crear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
@@ -218,4 +236,4 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { listar, balance, liquidacion, detalle, crear, editar };
+module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar };

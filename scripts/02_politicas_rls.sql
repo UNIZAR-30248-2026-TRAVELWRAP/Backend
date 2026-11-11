@@ -235,16 +235,19 @@ DROP POLICY IF EXISTS gastos_insert ON public.gastos;
 CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
   WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
--- Cualquier miembro corrige o borra gastos mientras el viaje está activo (como con las actividades).
--- En un viaje finalizado o archivado los gastos quedan de solo lectura
+-- Cualquier miembro corrige gastos mientras el viaje está activo. Solo quien registró el gasto o el creador del
+-- viaje pueden editarlo: esa regla la aplica la función editar_gasto. En un viaje finalizado o archivado los gastos
+-- quedan de solo lectura
 DROP POLICY IF EXISTS gastos_update ON public.gastos;
 CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
   WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
+-- Borrar un gasto está reservado a quien lo registró y al creador del viaje, y solo mientras el viaje está activo.
+-- Al borrarlo se borran sus repartos en cascada
 DROP POLICY IF EXISTS gastos_delete ON public.gastos;
 CREATE POLICY gastos_delete ON public.gastos FOR DELETE TO authenticated
-  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+  USING ((creado_por = auth.uid() OR public.es_creador(viaje_id)) AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- POLÍTICAS REPARTOS_GASTO
 -- Las partes de cada gasto siguen las mismas reglas que el gasto: las ven los miembros y
