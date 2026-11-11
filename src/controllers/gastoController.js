@@ -90,6 +90,8 @@ const ERRORES = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   no_miembro: [400, 'datos_invalidos', 'Quien paga y los participantes tienen que ser miembros del viaje'],
+  no_encontrado: [404, 'gasto_no_encontrado', 'El gasto no existe o no pertenece a este viaje'],
+  sin_permiso: [403, 'sin_permiso', 'Solo puede editar el gasto quien lo registró o el creador del viaje'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -147,6 +149,70 @@ const liquidacion = async (req, res) => {
   }
 };
 
+const detalle = async (req, res) => {
+  const { viajeId, gastoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(gastoId)) {
+    return responderError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
+  }
+
+  try {
+    const resultado = await gastoService.detalle(req.supabase, req.usuario.id, viajeId, gastoId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido obtener el gasto');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido obtener el gasto');
+    return res.status(200).json(resultado.gasto);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+const editar = async (req, res) => {
+  const { viajeId, gastoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(gastoId)) {
+    return responderError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
+  }
+
+  const validacion = validarNuevoGasto(req.body);
+  if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
+
+  try {
+    const resultado = await gastoService.editar(req.supabase, viajeId, gastoId, validacion.datos);
+
+    if (resultado.error) {
+      if (resultado.error.code === CHECK_VIOLATION) {
+        return responderError(res, 400, 'datos_invalidos', 'Los datos del gasto no son válidos');
+      }
+      return responderError(res, 502, 'error_gasto', 'No se han podido guardar los cambios del gasto');
+    }
+    if (resultado.estado !== 'ok') {
+      return responderMotivo(res, resultado.estado, 'No se han podido guardar los cambios del gasto');
+    }
+    return res.status(200).json(resultado.gasto);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+const eliminar = async (req, res) => {
+  const { viajeId, gastoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(gastoId)) {
+    return responderError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
+  }
+
+  try {
+    const resultado = await gastoService.eliminar(req.supabase, req.usuario.id, viajeId, gastoId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido eliminar el gasto');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido eliminar el gasto');
+    return res.status(204).end();
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const crear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
@@ -170,4 +236,4 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { listar, balance, liquidacion, crear };
+module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar };

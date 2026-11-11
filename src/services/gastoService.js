@@ -132,6 +132,69 @@ const liquidacion = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok', transferencias: planDeTransferencias(resultado.saldos) };
 };
 
+// Detalle de un gasto del viaje: cada reparto con el nombre de su miembro. Quien ya abandonó el viaje sale sin
+// nombre y con abandonado: true
+// Devuelve { error } | { estado: no_existe | no_encontrado | ok (con gasto) }
+const detalle = async (cliente, usuarioId, viajeId, gastoId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  const encontrado = await obtener(cliente, viajeId, gastoId);
+  if (encontrado.error) return { error: encontrado.error };
+  if (encontrado.estado !== 'ok') return { estado: 'no_encontrado' };
+
+  const nombres = new Map(previo.viaje.miembros.map((m) => [m.usuario_id, m.nombre]));
+  const repartos = encontrado.gasto.repartos.map((reparto) => ({
+    usuario_id: reparto.usuario_id,
+    nombre: nombres.get(reparto.usuario_id) ?? null,
+    abandonado: !nombres.has(reparto.usuario_id),
+    importe: reparto.importe,
+  }));
+  return { estado: 'ok', gasto: { ...encontrado.gasto, repartos } };
+};
+
+// Corrige un gasto y reparte de nuevo sus partes (función editar_gasto). Igual que crear, después lee el gasto
+// Devuelve { error } | { estado: no_existe | no_activo | no_encontrado | sin_permiso | no_miembro | ok (con gasto) }
+const editar = async (cliente, viajeId, gastoId, datos) => {
+  const { data, error } = await cliente.rpc('editar_gasto', {
+    p_gasto_id: gastoId,
+    p_viaje_id: viajeId,
+    p_concepto: datos.concepto,
+    p_importe: datos.importe,
+    p_categoria: datos.categoria,
+    p_pagado_por: datos.pagado_por,
+    p_fecha: datos.fecha,
+    p_participantes: datos.participantes,
+  });
+  if (error || !data) return { error: error ?? { code: 'respuesta_vacia' } };
+  if (data.estado !== 'ok') return { estado: data.estado };
+
+  const editado = await obtener(cliente, viajeId, gastoId);
+  if (!editado.error && editado.estado !== 'ok') return { error: { code: 'sin_filas' } };
+  return editado;
+};
+
+// Borra el gasto y, en cascada, sus repartos. Quien no puede borrarlo (no lo registró ni es el creador) no
+// ve el gasto para la política de borrado, así que la respuesta es la misma que si no existiera
+// Devuelve { error } | { estado: no_existe | no_activo | no_encontrado | ok }
+const eliminar = async (cliente, usuarioId, viajeId, gastoId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+
+  const { data, error } = await cliente
+    .from('gastos')
+    .delete()
+    .eq('id', gastoId)
+    .eq('viaje_id', viajeId)
+    .select('id');
+  if (error) return { error };
+  if (!data || data.length === 0) return { estado: 'no_encontrado' };
+  return { estado: 'ok' };
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -152,4 +215,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, crear };
+module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear, editar, eliminar };

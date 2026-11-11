@@ -34,7 +34,7 @@ AS $$
   );
 $$;
 
--- Viaje al que pertenece un archivo del bucket «documentos», sacado de la primera carpeta de su ruta.
+-- Viaje al que pertenece un archivo de los buckets «documentos» y «fotos», sacado de la primera carpeta de su ruta.
 -- Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage)
 CREATE OR REPLACE FUNCTION public.viaje_de_ruta(p_ruta text)
 RETURNS uuid
@@ -105,6 +105,7 @@ ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -235,16 +236,19 @@ DROP POLICY IF EXISTS gastos_insert ON public.gastos;
 CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
   WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
--- Cualquier miembro corrige o borra gastos mientras el viaje está activo (como con las actividades).
--- En un viaje finalizado o archivado los gastos quedan de solo lectura
+-- Cualquier miembro corrige gastos mientras el viaje está activo. Solo quien registró el gasto o el creador del
+-- viaje pueden editarlo: esa regla la aplica la función editar_gasto. En un viaje finalizado o archivado los gastos
+-- quedan de solo lectura
 DROP POLICY IF EXISTS gastos_update ON public.gastos;
 CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
   WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
+-- Borrar un gasto está reservado a quien lo registró y al creador del viaje, y solo mientras el viaje está activo.
+-- Al borrarlo se borran sus repartos en cascada
 DROP POLICY IF EXISTS gastos_delete ON public.gastos;
 CREATE POLICY gastos_delete ON public.gastos FOR DELETE TO authenticated
-  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+  USING ((creado_por = auth.uid() OR public.es_creador(viaje_id)) AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- POLÍTICAS REPARTOS_GASTO
 -- Las partes de cada gasto siguen las mismas reglas que el gasto: las ven los miembros y
@@ -340,6 +344,54 @@ CREATE POLICY avatares_storage_insert ON storage.objects FOR INSERT TO authentic
 DROP POLICY IF EXISTS avatares_storage_delete ON storage.objects;
 CREATE POLICY avatares_storage_delete ON storage.objects FOR DELETE TO authenticated
   USING (bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+-- POLÍTICAS FOTOS
+-- Los miembros ven todas las fotos de la galería de su viaje, también en viajes finalizados o archivados
+DROP POLICY IF EXISTS fotos_select ON public.fotos;
+CREATE POLICY fotos_select ON public.fotos FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro sube fotos mientras el viaje está activo; queda como quien la ha subido
+DROP POLICY IF EXISTS fotos_insert ON public.fotos;
+CREATE POLICY fotos_insert ON public.fotos FOR INSERT TO authenticated
+  WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada)
+-- y Storage rechaza por sí mismo las de más de 8 MB o de otro tipo
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('fotos', 'fotos', false, 8000000, ARRAY['image/jpeg', 'image/png', 'image/webp'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- POLÍTICAS STORAGE FOTOS
+
+-- Las fotos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlas
+-- (para verlas o generar URLs firmadas), también en viajes finalizados o archivados
+DROP POLICY IF EXISTS fotos_storage_select ON storage.objects;
+CREATE POLICY fotos_storage_select ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'fotos' AND public.es_miembro(public.viaje_de_ruta(name)));
+
+-- Los miembros suben fotos a la carpeta de su viaje mientras está activo
+DROP POLICY IF EXISTS fotos_storage_insert ON storage.objects;
+CREATE POLICY fotos_storage_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'fotos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+  );
+
+-- Solo para deshacer una subida cuando falla el registro de la foto: se puede borrar un archivo
+-- de la carpeta de un viaje activo que todavía no tiene fila en fotos
+DROP POLICY IF EXISTS fotos_storage_delete_huerfano ON storage.objects;
+CREATE POLICY fotos_storage_delete_huerfano ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'fotos'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+    AND NOT EXISTS (SELECT 1 FROM public.fotos f WHERE f.ruta = objects.name)
+  );
 
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)
@@ -649,6 +701,80 @@ $$;
 
 REVOKE ALL ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
+
+-- 13b. FUNCIÓN EDITAR GASTO
+-- Corrige un gasto y vuelve a repartirlo a partes iguales, igual que crear_gasto, en una sola operación.
+-- Solo pueden editarlo quien lo registró y el creador del viaje, y solo mientras el viaje está activo.
+-- Es SECURITY INVOKER: las políticas RLS de gastos y repartos_gasto siguen aplicando.
+-- Devuelve { estado }: no_existe | no_activo | no_encontrado | sin_permiso | no_miembro | ok (con gasto_id)
+CREATE OR REPLACE FUNCTION public.editar_gasto(
+  p_gasto_id uuid,
+  p_viaje_id uuid,
+  p_concepto text,
+  p_importe numeric,
+  p_categoria public.categoria_gasto,
+  p_pagado_por uuid,
+  p_fecha date,
+  p_participantes uuid[]
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_gasto public.gastos%ROWTYPE;
+  v_centimos bigint := round(p_importe * 100);
+  v_total int := cardinality(p_participantes);
+BEGIN
+  IF NOT public.es_miembro(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_existe');
+  END IF;
+  IF NOT public.es_editable(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
+  END IF;
+
+  SELECT * INTO v_gasto FROM public.gastos WHERE id = p_gasto_id AND viaje_id = p_viaje_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('estado', 'no_encontrado');
+  END IF;
+
+  -- Solo quien registró el gasto o el creador del viaje pueden editarlo
+  IF v_gasto.creado_por IS DISTINCT FROM auth.uid() AND NOT public.es_creador(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'sin_permiso');
+  END IF;
+
+  -- Quien paga y todos los participantes tienen que ser miembros actuales del viaje
+  IF EXISTS (
+    SELECT 1 FROM unnest(p_participantes || p_pagado_por) AS u (usuario_id)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.miembros_viaje m
+      WHERE m.viaje_id = p_viaje_id AND m.usuario_id = u.usuario_id AND m.abandonado_en IS NULL
+    )
+  ) THEN
+    RETURN jsonb_build_object('estado', 'no_miembro');
+  END IF;
+
+  UPDATE public.gastos
+  SET concepto = btrim(p_concepto),
+      importe = p_importe,
+      categoria = COALESCE(p_categoria, 'otros'),
+      pagado_por = p_pagado_por,
+      fecha = COALESCE(p_fecha, current_date)
+  WHERE id = p_gasto_id;
+
+  -- Se reescriben las partes: las antiguas se borran y las nuevas suman el importe, céntimos incluidos
+  DELETE FROM public.repartos_gasto WHERE gasto_id = p_gasto_id;
+  INSERT INTO public.repartos_gasto (gasto_id, viaje_id, usuario_id, importe)
+  SELECT p_gasto_id, p_viaje_id, p.usuario_id,
+         (v_centimos / v_total + CASE WHEN p.posicion <= v_centimos % v_total THEN 1 ELSE 0 END) / 100.0
+  FROM unnest(p_participantes) WITH ORDINALITY AS p (usuario_id, posicion);
+
+  RETURN jsonb_build_object('estado', 'ok', 'gasto_id', p_gasto_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.editar_gasto(uuid, uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.editar_gasto(uuid, uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
 
 -- 14. NOMBRE AUTOMÁTICO DEL VIAJE
 -- Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo

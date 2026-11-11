@@ -10,6 +10,8 @@ const votacionRoutes = require('./routes/votacionRoutes');
 const actividadRoutes = require('./routes/actividadRoutes');
 const direccionRoutes = require('./routes/direccionRoutes');
 const rutaRoutes = require('./routes/rutaRoutes');
+const fotoRoutes = require('./routes/fotoRoutes');
+const resumenRoutes = require('./routes/resumenRoutes');
 const votacionesSocket = require('./sockets/votacionesSocket');
 const { comprobarToken } = require('./middleware/authMiddleware');
 const viajeService = require('./services/viajeService');
@@ -90,6 +92,8 @@ app.use('/api/viajes/:viajeId/ruta', rutaRoutes);
 app.use('/api/viajes/:viajeId/gastos', gastoRoutes);
 app.use('/api/viajes/:viajeId/documentos', documentoRoutes);
 app.use('/api/perfil', perfilRoutes);
+app.use('/api/viajes/:viajeId/fotos', fotoRoutes);
+app.use('/api/viajes/:viajeId/resumen', resumenRoutes);
 app.use('/api/direcciones', direccionRoutes);
 app.use('/api', invitationRoutes); // /api/viajes/:viajeId/invitacion y /api/invitaciones/:token/unirse
 
