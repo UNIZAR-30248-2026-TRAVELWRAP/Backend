@@ -10,9 +10,14 @@ const USUARIO_ID = 'df77cba6-4be5-4cbc-814b-1e228dd73dcc';
 const DATOS = { nombre: 'Billete de tren.pdf', buffer: Buffer.from('%PDF-1.4'), tipoMime: 'application/pdf' };
 
 // Cliente falso: la consulta encadenada de la tabla devuelve la respuesta indicada y Storage guarda sus llamadas
-const clienteFalso = ({ respuesta = { data: null, error: null }, subida = { error: null }, remove } = {}) => {
+const clienteFalso = ({
+  respuesta = { data: null, error: null },
+  subida = { error: null },
+  remove,
+  enlace = { data: { signedUrl: 'https://storage.test/firmada?token=abc' }, error: null },
+} = {}) => {
   const consultas = [];
-  const storage = { subidas: [], borrados: [] };
+  const storage = { subidas: [], borrados: [], enlaces: [] };
   const from = (tabla) => {
     const consulta = { tabla, operaciones: [] };
     consultas.push(consulta);
@@ -37,6 +42,10 @@ const clienteFalso = ({ respuesta = { data: null, error: null }, subida = { erro
         upload: async (ruta, contenido, opciones) => {
           storage.subidas.push({ bucket, ruta, contenido, opciones });
           return subida;
+        },
+        createSignedUrl: async (ruta, segundos, opciones) => {
+          storage.enlaces.push({ bucket, ruta, segundos, opciones });
+          return enlace;
         },
         remove:
           remove ??
@@ -206,5 +215,102 @@ describe('documentoService.listar', () => {
     mock.method(viajeService, 'obtener', async () => ({ error }));
     const { cliente } = clienteFalso();
     assert.deepEqual(await documentoService.listar(cliente, USUARIO_ID, VIAJE_ID), { error });
+  });
+});
+
+describe('documentoService.obtenerUrl', () => {
+  const DOCUMENTO_ID = '0b9c0d1e-2f3a-4b5c-8d6e-7f8a9b0c1d2e';
+  const RUTA = `${VIAJE_ID}/${DOCUMENTO_ID}.pdf`;
+  const fila = { ruta: RUTA, nombre: 'Billete de tren.pdf', tipo_mime: 'application/pdf' };
+
+  it('firma la ruta del documento durante 300 s y devuelve el enlace, el nombre y el tipo', async () => {
+    viajeActivo();
+    const { cliente, storage } = clienteFalso({ respuesta: { data: fila, error: null } });
+
+    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.url, 'https://storage.test/firmada?token=abc');
+    assert.equal(resultado.nombre, fila.nombre);
+    assert.equal(resultado.tipo_mime, 'application/pdf');
+    assert.deepEqual(storage.enlaces, [{ bucket: 'documentos', ruta: RUTA, segundos: 300, opciones: undefined }]);
+    const faltan = new Date(resultado.expira_en).getTime() - Date.now();
+    assert.ok(faltan > 295_000 && faltan <= 300_000);
+  });
+
+  it('con descargar pide el enlace con download igual al nombre del documento', async () => {
+    viajeActivo();
+    const { cliente, storage } = clienteFalso({ respuesta: { data: fila, error: null } });
+    await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID, { descargar: true });
+    assert.deepEqual(storage.enlaces[0].opciones, { download: 'Billete de tren.pdf' });
+  });
+
+  it('busca el documento por id y por viaje, y pide solo ruta, nombre y tipo', async () => {
+    viajeActivo();
+    const { cliente, consultas } = clienteFalso({ respuesta: { data: fila, error: null } });
+    await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
+    const { operaciones } = consultas[0];
+    assert.deepEqual(operaciones.find(([metodo]) => metodo === 'select'), ['select', 'ruta, nombre, tipo_mime']);
+    assert.ok(operaciones.some(([metodo, columna, valor]) => metodo === 'eq' && columna === 'id' && valor === DOCUMENTO_ID));
+    assert.ok(operaciones.some(([metodo, columna, valor]) => metodo === 'eq' && columna === 'viaje_id' && valor === VIAJE_ID));
+  });
+
+  it('la respuesta no incluye la ruta del archivo', async () => {
+    viajeActivo();
+    const { cliente } = clienteFalso({ respuesta: { data: fila, error: null } });
+    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
+    assert.ok(!('ruta' in resultado));
+  });
+
+  it('devuelve documento_no_existe si el documento es de otro viaje (no hay fila), sin firmar nada', async () => {
+    viajeActivo();
+    const { cliente, storage } = clienteFalso({ respuesta: { data: null, error: null } });
+    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
+    assert.deepEqual(resultado, { estado: 'documento_no_existe' });
+    assert.equal(storage.enlaces.length, 0);
+  });
+
+  it('funciona con el viaje archivado o finalizado, porque solo lee', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'archivado' } }));
+    const { cliente } = clienteFalso({ respuesta: { data: fila, error: null } });
+    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
+    assert.equal(resultado.estado, 'ok');
+  });
+
+  it('devuelve no_existe si el viaje no existe o no es del usuario', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    const { cliente, consultas } = clienteFalso();
+    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { estado: 'no_existe' });
+    assert.equal(consultas.length, 0);
+  });
+
+  it('propaga el error de la consulta previa del viaje', async () => {
+    const error = { code: 'XX000' };
+    mock.method(viajeService, 'obtener', async () => ({ error }));
+    const { cliente } = clienteFalso();
+    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
+  });
+
+  it('devuelve el error de Supabase si falla la búsqueda del documento', async () => {
+    viajeActivo();
+    const error = { code: 'XX000' };
+    const { cliente } = clienteFalso({ respuesta: { data: null, error } });
+    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
+  });
+
+  it('devuelve documento_no_existe si el archivo ya no está en Storage', async () => {
+    viajeActivo();
+    const enlace = { data: null, error: { message: 'Object not found', statusCode: '404' } };
+    const { cliente } = clienteFalso({ respuesta: { data: fila, error: null }, enlace });
+    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), {
+      estado: 'documento_no_existe',
+    });
+  });
+
+  it('devuelve el error de Storage si falla la firma por otro motivo', async () => {
+    viajeActivo();
+    const error = { message: 'fallo interno', statusCode: '500' };
+    const { cliente } = clienteFalso({ respuesta: { data: fila, error: null }, enlace: { data: null, error } });
+    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
   });
 });

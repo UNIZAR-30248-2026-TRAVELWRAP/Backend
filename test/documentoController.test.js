@@ -1,4 +1,4 @@
-// Pruebas del controlador de documentos (GET y POST /api/viajes/:viajeId/documentos).
+// Pruebas del controlador de documentos (GET y POST /api/viajes/:viajeId/documentos y GET .../:documentoId/url).
 // El servicio se sustituye por un mock: aquí se comprueba la validación del archivo y la traducción
 // de cada resultado del servicio a su código HTTP. El límite de tamaño lo aplica el middleware de subida,
 // que se prueba con un servidor real.
@@ -176,6 +176,90 @@ describe('GET /viajes/:viajeId/documentos (listar)', () => {
       throw new Error('fallo');
     });
     esperarError(await llamarListar(), 500, 'error_interno');
+  });
+});
+
+const DOCUMENTO_ID = '0b9c0d1e-2f3a-4b5c-8d6e-7f8a9b0c1d2e';
+
+const llamarObtenerUrl = async ({ viajeId = VIAJE_ID, documentoId = DOCUMENTO_ID, query = {} } = {}) => {
+  const res = crearRes();
+  await documentoController.obtenerUrl({ params: { viajeId, documentoId }, query, usuario: USUARIO, supabase: {} }, res);
+  return res;
+};
+
+describe('GET /viajes/:viajeId/documentos/:documentoId/url (obtenerUrl)', () => {
+  const enlace = {
+    estado: 'ok',
+    url: 'https://storage.test/firmada?token=abc',
+    expira_en: '2026-11-09T16:51:45.000Z',
+    nombre: 'Billete.pdf',
+    tipo_mime: 'application/pdf',
+  };
+
+  it('devuelve 200 con url, expira_en, nombre y tipo_mime, y sin descargar por defecto', async () => {
+    const servicio = mock.method(documentoService, 'obtenerUrl', async () => enlace);
+    const res = await llamarObtenerUrl();
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, {
+      url: enlace.url,
+      expira_en: enlace.expira_en,
+      nombre: enlace.nombre,
+      tipo_mime: enlace.tipo_mime,
+    });
+    assert.deepEqual(servicio.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID, DOCUMENTO_ID, { descargar: false }]);
+  });
+
+  it('con descargar=true lo pasa al servicio', async () => {
+    const servicio = mock.method(documentoService, 'obtenerUrl', async () => enlace);
+    const res = await llamarObtenerUrl({ query: { descargar: 'true' } });
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(servicio.mock.calls[0].arguments[4], { descargar: true });
+  });
+
+  it('con descargar=false no descarga', async () => {
+    const servicio = mock.method(documentoService, 'obtenerUrl', async () => enlace);
+    await llamarObtenerUrl({ query: { descargar: 'false' } });
+    assert.deepEqual(servicio.mock.calls[0].arguments[4], { descargar: false });
+  });
+
+  it('no devuelve campos que no sean del contrato (por ejemplo, la ruta)', async () => {
+    mock.method(documentoService, 'obtenerUrl', async () => ({ ...enlace, ruta: 'secreto/ruta.pdf' }));
+    const res = await llamarObtenerUrl();
+    assert.ok(!('ruta' in res.cuerpo));
+  });
+
+  it('devuelve 400 si el identificador del viaje no es un UUID', async () => {
+    esperarError(await llamarObtenerUrl({ viajeId: 'x' }), 400, 'datos_invalidos');
+  });
+
+  it('devuelve 400 si el identificador del documento no es un UUID', async () => {
+    esperarError(await llamarObtenerUrl({ documentoId: 'x' }), 400, 'datos_invalidos');
+  });
+
+  it('devuelve 400 si descargar no es true ni false', async () => {
+    esperarError(await llamarObtenerUrl({ query: { descargar: 'si' } }), 400, 'datos_invalidos');
+  });
+
+  it('devuelve 404 viaje_no_encontrado si el viaje no existe o es ajeno', async () => {
+    mock.method(documentoService, 'obtenerUrl', async () => ({ estado: 'no_existe' }));
+    esperarError(await llamarObtenerUrl(), 404, 'viaje_no_encontrado');
+  });
+
+  it('devuelve 404 documento_no_encontrado si el documento no existe en el viaje', async () => {
+    mock.method(documentoService, 'obtenerUrl', async () => ({ estado: 'documento_no_existe' }));
+    esperarError(await llamarObtenerUrl(), 404, 'documento_no_encontrado');
+  });
+
+  it('devuelve 502 si Supabase o Storage fallan', async () => {
+    mock.method(documentoService, 'obtenerUrl', async () => ({ error: { code: 'XX000' } }));
+    esperarError(await llamarObtenerUrl(), 502, 'error_documento');
+  });
+
+  it('devuelve 500 si el servicio lanza una excepción', async () => {
+    mock.method(documentoService, 'obtenerUrl', async () => {
+      throw new Error('fallo');
+    });
+    esperarError(await llamarObtenerUrl(), 500, 'error_interno');
   });
 });
 
