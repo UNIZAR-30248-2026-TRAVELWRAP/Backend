@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { contarDias, resumirGastos, actividadMasVotada } = require('../src/utils/resumenViaje');
+const { contarDias, resumirGastos, actividadMasVotada, almaDelGrupo } = require('../src/utils/resumenViaje');
 
 describe('contarDias', () => {
   it('cuenta los días del viaje contando el primero y el último', () => {
@@ -45,6 +45,68 @@ describe('resumirGastos', () => {
 
   it('sin gastos el total es 0 y no hay gasto mayor', () => {
     assert.deepEqual(resumirGastos([]), { gasto_total: 0, gasto_mayor: null });
+  });
+});
+
+describe('almaDelGrupo', () => {
+  const miembros = [
+    { usuario_id: 'u1', nombre: 'Daniel' },
+    { usuario_id: 'u2', nombre: 'Berta' },
+    { usuario_id: 'u3', nombre: 'Adriana' },
+  ];
+
+  it('elige a quien pagó más veces y cuenta sus pagos, planes y fotos', () => {
+    const gastos = [
+      { pagado_por: 'u2', importe: 10 },
+      { pagado_por: 'u2', importe: 5 },
+      { pagado_por: 'u1', importe: 100 },
+    ];
+    const actividades = [{ creado_por: 'u2' }, { creado_por: 'u2' }, { creado_por: 'u2' }, { creado_por: 'u1' }, { creado_por: null }];
+    const fotos = [{ subido_por: 'u2' }, { subido_por: 'u3' }];
+
+    assert.deepEqual(almaDelGrupo(miembros, gastos, actividades, fotos), {
+      usuario_id: 'u2',
+      nombre: 'Berta',
+      pagos: 2,
+      planes_propuestos: 3,
+      fotos_subidas: 1,
+    });
+  });
+
+  it('con los mismos pagos gana quien ha pagado más dinero', () => {
+    const gastos = [
+      { pagado_por: 'u1', importe: 10 },
+      { pagado_por: 'u3', importe: 40.5 },
+    ];
+    assert.equal(almaDelGrupo(miembros, gastos, [], []).usuario_id, 'u3');
+  });
+
+  it('con todo igual gana el primero de la lista', () => {
+    const gastos = [
+      { pagado_por: 'u3', importe: 10 },
+      { pagado_por: 'u1', importe: 10 },
+    ];
+    assert.equal(almaDelGrupo(miembros, gastos, [], []).usuario_id, 'u1');
+  });
+
+  it('ignora a quien ya no es miembro del viaje', () => {
+    const gastos = [
+      { pagado_por: 'antiguo', importe: 100 },
+      { pagado_por: 'antiguo', importe: 100 },
+      { pagado_por: 'u2', importe: 1 },
+    ];
+    assert.equal(almaDelGrupo(miembros, gastos, [], []).usuario_id, 'u2');
+  });
+
+  it('sin gastos no hay alma del grupo', () => {
+    assert.equal(almaDelGrupo(miembros, [], [{ creado_por: 'u1' }], []), null);
+    assert.equal(almaDelGrupo([], [{ pagado_por: 'u1', importe: 1 }], [], []), null);
+  });
+
+  it('quien no ha propuesto planes ni subido fotos tiene 0', () => {
+    const resultado = almaDelGrupo(miembros, [{ pagado_por: 'u1', importe: 1 }], [], []);
+    assert.equal(resultado.planes_propuestos, 0);
+    assert.equal(resultado.fotos_subidas, 0);
   });
 });
 
