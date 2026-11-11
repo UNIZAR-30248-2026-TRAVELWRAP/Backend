@@ -124,6 +124,22 @@
     {
       "key": "urlFoto",
       "value": ""
+    },
+    {
+      "key": "viajeIdResumen",
+      "value": ""
+    },
+    {
+      "key": "usuarioIdResumen",
+      "value": ""
+    },
+    {
+      "key": "votacionIdResumen",
+      "value": ""
+    },
+    {
+      "key": "opcionIdResumen",
+      "value": ""
     }
   ],
   "item": [
@@ -8179,6 +8195,445 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Resumen",
+      "item": [
+        {
+          "name": "Crear viaje para el resumen",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Resumen de Roma\",\n  \"presupuesto\": 600,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('viajeIdResumen', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener el viaje para saber el id de quien paga",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const yo = pm.response.json().miembros.find((m) => m.rol === 'creador');",
+                  "pm.collectionVariables.set('usuarioIdResumen', yo.usuario_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen de un viaje sin gastos ni votos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Cuenta los días y no hay gastos, actividad más votada ni alma del grupo', () => {",
+                  "  pm.expect(body.dias).to.eql(4);",
+                  "  pm.expect(body.gasto_total).to.eql(0);",
+                  "  pm.expect(body.gasto_mayor).to.eql(null);",
+                  "  pm.expect(body.actividad_mas_votada).to.eql(null);",
+                  "  pm.expect(body.alma_del_grupo).to.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un gasto para el resumen",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Cena Trastevere\",\n  \"importe\": 120.5,\n  \"pagado_por\": \"{{usuarioIdResumen}}\",\n  \"participantes\": [\n    \"{{usuarioIdResumen}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar otro gasto con céntimos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Entradas\",\n  \"importe\": 45.1,\n  \"pagado_por\": \"{{usuarioIdResumen}}\",\n  \"participantes\": [\n    \"{{usuarioIdResumen}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registrar un tercer gasto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/gastos",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concepto\": \"Taxi\",\n  \"importe\": 12.4,\n  \"pagado_por\": \"{{usuarioIdResumen}}\",\n  \"participantes\": [\n    \"{{usuarioIdResumen}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear una votación de actividades",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/votaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"¿Qué visitamos?\",\n  \"tipo\": \"actividad\",\n  \"opciones\": [\n    {\n      \"texto\": \"Vaticano\"\n    },\n    {\n      \"texto\": \"Coliseo\"\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('votacionIdResumen', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver las opciones de la votación",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/votaciones/{{votacionIdResumen}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const coliseo = pm.response.json().opciones.find((o) => o.texto === 'Coliseo');",
+                  "pm.collectionVariables.set('opcionIdResumen', coliseo.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Votar el Coliseo",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/votaciones/{{votacionIdResumen}}/voto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcion_id\": \"{{opcionIdResumen}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen con gastos y una actividad votada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('El gasto total es la suma exacta de los gastos', () => pm.expect(body.gasto_total).to.eql(178));",
+                  "pm.test('El gasto más alto es la cena', () => pm.expect(body.gasto_mayor).to.eql({ concepto: 'Cena Trastevere', importe: 120.5 }));",
+                  "pm.test('La actividad más votada es el Coliseo', () => pm.expect(body.actividad_mas_votada).to.eql({ titulo: 'Coliseo', votos: 1 }));",
+                  "pm.test('El alma del grupo es quien pagó los tres gastos', () => {",
+                  "  pm.expect(body.alma_del_grupo.usuario_id).to.eql(pm.collectionVariables.get('usuarioIdResumen'));",
+                  "  pm.expect(body.alma_del_grupo.pagos).to.eql(3);",
+                  "  pm.expect(body.alma_del_grupo.planes_propuestos).to.eql(0);",
+                  "  pm.expect(body.alma_del_grupo.fotos_subidas).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar el viaje del resumen",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resumen de un viaje archivado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/resumen"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Mantiene los datos', () => {",
+                  "  pm.expect(pm.response.json().gasto_total).to.eql(178);",
+                  "  pm.expect(pm.response.json().dias).to.eql(4);",
+                  "});"
                 ]
               }
             }

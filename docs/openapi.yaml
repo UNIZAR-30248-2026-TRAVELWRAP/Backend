@@ -2429,6 +2429,73 @@ paths:
                   codigo: error_foto
                   mensaje: No se ha podido subir la foto
 
+  /viajes/{viajeId}/resumen:
+    get:
+      tags:
+        - Resumen
+      summary: Resumen «Fin de viaje» (Wrap) del viaje
+      description: |
+        Calcula los datos que muestra el resumen de fin de viaje: los días del viaje, lo gastado, el gasto más alto, la
+        actividad más votada y el «alma del grupo». Los datos se calculan al pedirlos, así que siempre están al día.
+        Solo lo pueden pedir los miembros del viaje, y funciona con el viaje activo, finalizado o archivado porque solo
+        lee. Las fotos y el balance que también aparecen en la pantalla se piden con `GET /viajes/{viajeId}/fotos` y
+        `GET /viajes/{viajeId}/gastos/balance`.
+
+        - `dias`: días desde el primero hasta el último del viaje, ambos incluidos. Si el viaje no tiene las dos
+          fechas, los días distintos que tienen actividades.
+        - `gasto_total`: suma de todos los gastos, calculada en céntimos para no arrastrar errores de coma flotante.
+        - `gasto_mayor`: el gasto de mayor importe (con un empate, el primero), o `null` si no hay gastos.
+        - `actividad_mas_votada`: la opción con más votos entre las votaciones de tipo `actividad` (con un empate, la
+          que va antes en la lista), o `null` si nadie ha votado.
+        - `alma_del_grupo`: el miembro actual que ha pagado más gastos (con el mismo número, el que ha pagado más
+          dinero y después el primero de la lista) con sus pagos, planes propuestos (actividades creadas) y fotos
+          subidas, o `null` si no hay gastos.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Resumen del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenViaje'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_resumen
+                  mensaje: No se ha podido calcular el resumen del viaje
+
   /viajes/{viajeId}/ruta:
     get:
       tags:
@@ -3895,6 +3962,66 @@ components:
           description: Fotos del viaje, de la más reciente a la más antigua
           items:
             $ref: '#/components/schemas/Foto'
+
+    ResumenViaje:
+      type: object
+      properties:
+        dias:
+          type: integer
+          minimum: 0
+          description: Días del viaje
+          example: 4
+        gasto_total:
+          type: number
+          description: Suma de los gastos del viaje
+          example: 850
+        gasto_mayor:
+          type: object
+          nullable: true
+          description: Gasto de mayor importe (null si no hay gastos)
+          properties:
+            concepto:
+              type: string
+              example: Cena Trastevere
+            importe:
+              type: number
+              example: 120.5
+        actividad_mas_votada:
+          type: object
+          nullable: true
+          description: Opción con más votos de las votaciones de tipo actividad (null si nadie ha votado)
+          properties:
+            titulo:
+              type: string
+              example: Coliseo Romano
+            votos:
+              type: integer
+              example: 3
+        alma_del_grupo:
+          type: object
+          nullable: true
+          description: Miembro que ha pagado más gastos (null si no hay gastos)
+          properties:
+            usuario_id:
+              type: string
+              format: uuid
+              example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+            nombre:
+              type: string
+              nullable: true
+              example: Berta
+            pagos:
+              type: integer
+              description: Gastos que ha pagado
+              example: 2
+            planes_propuestos:
+              type: integer
+              description: Actividades que ha creado
+              example: 4
+            fotos_subidas:
+              type: integer
+              description: Fotos que ha subido a la galería
+              example: 3
 
     PuntoDeRuta:
       type: object
