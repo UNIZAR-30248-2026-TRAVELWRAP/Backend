@@ -132,6 +132,28 @@ const liquidacion = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok', transferencias: planDeTransferencias(resultado.saldos) };
 };
 
+// Detalle de un gasto del viaje: cada reparto con el nombre de su miembro. Quien ya abandonó el viaje sale sin
+// nombre y con abandonado: true
+// Devuelve { error } | { estado: no_existe | no_encontrado | ok (con gasto) }
+const detalle = async (cliente, usuarioId, viajeId, gastoId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  const encontrado = await obtener(cliente, viajeId, gastoId);
+  if (encontrado.error) return { error: encontrado.error };
+  if (encontrado.estado !== 'ok') return { estado: 'no_encontrado' };
+
+  const nombres = new Map(previo.viaje.miembros.map((m) => [m.usuario_id, m.nombre]));
+  const repartos = encontrado.gasto.repartos.map((reparto) => ({
+    usuario_id: reparto.usuario_id,
+    nombre: nombres.get(reparto.usuario_id) ?? null,
+    abandonado: !nombres.has(reparto.usuario_id),
+    importe: reparto.importe,
+  }));
+  return { estado: 'ok', gasto: { ...encontrado.gasto, repartos } };
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -152,4 +174,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, crear };
+module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear };
