@@ -623,6 +623,80 @@ $$;
 REVOKE ALL ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
 
+-- 13b. FUNCIÓN EDITAR GASTO
+-- Corrige un gasto y vuelve a repartirlo a partes iguales, igual que crear_gasto, en una sola operación.
+-- Solo pueden editarlo quien lo registró y el creador del viaje, y solo mientras el viaje está activo.
+-- Es SECURITY INVOKER: las políticas RLS de gastos y repartos_gasto siguen aplicando.
+-- Devuelve { estado }: no_existe | no_activo | no_encontrado | sin_permiso | no_miembro | ok (con gasto_id)
+CREATE OR REPLACE FUNCTION public.editar_gasto(
+  p_gasto_id uuid,
+  p_viaje_id uuid,
+  p_concepto text,
+  p_importe numeric,
+  p_categoria public.categoria_gasto,
+  p_pagado_por uuid,
+  p_fecha date,
+  p_participantes uuid[]
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  v_gasto public.gastos%ROWTYPE;
+  v_centimos bigint := round(p_importe * 100);
+  v_total int := cardinality(p_participantes);
+BEGIN
+  IF NOT public.es_miembro(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_existe');
+  END IF;
+  IF NOT public.es_editable(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
+  END IF;
+
+  SELECT * INTO v_gasto FROM public.gastos WHERE id = p_gasto_id AND viaje_id = p_viaje_id;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('estado', 'no_encontrado');
+  END IF;
+
+  -- Solo quien registró el gasto o el creador del viaje pueden editarlo
+  IF v_gasto.creado_por IS DISTINCT FROM auth.uid() AND NOT public.es_creador(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'sin_permiso');
+  END IF;
+
+  -- Quien paga y todos los participantes tienen que ser miembros actuales del viaje
+  IF EXISTS (
+    SELECT 1 FROM unnest(p_participantes || p_pagado_por) AS u (usuario_id)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.miembros_viaje m
+      WHERE m.viaje_id = p_viaje_id AND m.usuario_id = u.usuario_id AND m.abandonado_en IS NULL
+    )
+  ) THEN
+    RETURN jsonb_build_object('estado', 'no_miembro');
+  END IF;
+
+  UPDATE public.gastos
+  SET concepto = btrim(p_concepto),
+      importe = p_importe,
+      categoria = COALESCE(p_categoria, 'otros'),
+      pagado_por = p_pagado_por,
+      fecha = COALESCE(p_fecha, current_date)
+  WHERE id = p_gasto_id;
+
+  -- Se reescriben las partes: las antiguas se borran y las nuevas suman el importe, céntimos incluidos
+  DELETE FROM public.repartos_gasto WHERE gasto_id = p_gasto_id;
+  INSERT INTO public.repartos_gasto (gasto_id, viaje_id, usuario_id, importe)
+  SELECT p_gasto_id, p_viaje_id, p.usuario_id,
+         (v_centimos / v_total + CASE WHEN p.posicion <= v_centimos % v_total THEN 1 ELSE 0 END) / 100.0
+  FROM unnest(p_participantes) WITH ORDINALITY AS p (usuario_id, posicion);
+
+  RETURN jsonb_build_object('estado', 'ok', 'gasto_id', p_gasto_id);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.editar_gasto(uuid, uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.editar_gasto(uuid, uuid, text, numeric, public.categoria_gasto, uuid, date, uuid[]) TO authenticated;
+
 -- 14. NOMBRE AUTOMÁTICO DEL VIAJE
 -- Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo
 -- sea, se vuelve a generar cada vez que cambian el destino o las fechas: así, al fijar el destino por votación

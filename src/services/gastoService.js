@@ -154,6 +154,27 @@ const detalle = async (cliente, usuarioId, viajeId, gastoId) => {
   return { estado: 'ok', gasto: { ...encontrado.gasto, repartos } };
 };
 
+// Corrige un gasto y reparte de nuevo sus partes (función editar_gasto). Igual que crear, después lee el gasto
+// Devuelve { error } | { estado: no_existe | no_activo | no_encontrado | sin_permiso | no_miembro | ok (con gasto) }
+const editar = async (cliente, viajeId, gastoId, datos) => {
+  const { data, error } = await cliente.rpc('editar_gasto', {
+    p_gasto_id: gastoId,
+    p_viaje_id: viajeId,
+    p_concepto: datos.concepto,
+    p_importe: datos.importe,
+    p_categoria: datos.categoria,
+    p_pagado_por: datos.pagado_por,
+    p_fecha: datos.fecha,
+    p_participantes: datos.participantes,
+  });
+  if (error || !data) return { error: error ?? { code: 'respuesta_vacia' } };
+  if (data.estado !== 'ok') return { estado: data.estado };
+
+  const editado = await obtener(cliente, viajeId, gastoId);
+  if (!editado.error && editado.estado !== 'ok') return { error: { code: 'sin_filas' } };
+  return editado;
+};
+
 // Registra el gasto y su reparto a partes iguales en una sola operación (función crear_gasto)
 // Devuelve { error } | { estado: no_existe | no_activo | no_miembro | ok (con gasto) }
 const crear = async (cliente, viajeId, datos) => {
@@ -174,4 +195,4 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear };
+module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear, editar };

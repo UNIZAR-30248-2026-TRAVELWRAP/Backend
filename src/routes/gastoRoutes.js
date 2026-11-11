@@ -10,5 +10,6 @@ router.get('/liquidacion', requiereSesion, gastoController.liquidacion);
 // Detalle de un gasto: va después de /balance y /liquidacion, o Express las tomaría por un gastoId
 router.get('/:gastoId', requiereSesion, gastoController.detalle);
 router.post('/', requiereSesion, gastoController.crear);
+router.patch('/:gastoId', requiereSesion, gastoController.editar);
 
 module.exports = router;
