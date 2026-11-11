@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS public.perfiles (
   creado_en timestamptz NOT NULL DEFAULT now()
 );
 
+-- El nombre del perfil tiene entre 1 y 100 caracteres sin contar los espacios de los extremos (como en el registro)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'perfiles_nombre_valido') THEN
+    ALTER TABLE public.perfiles
+      ADD CONSTRAINT perfiles_nombre_valido CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 100);
+  END IF;
+END
+$$;
+
 CREATE TABLE IF NOT EXISTS public.viajes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   creador_id uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,

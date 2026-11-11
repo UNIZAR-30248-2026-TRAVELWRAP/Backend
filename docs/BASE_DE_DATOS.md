@@ -404,6 +404,7 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 | Bucket | Acceso | Tamaño máximo | Tipos permitidos | Descripción |
 | --- | --- | --- | --- | --- |
 | `documentos` | Privado | 8 MB (8.000.000 bytes) | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo |
+| `avatares` | Público | 2 MB (2.000.000 bytes) | `image/jpeg`, `image/png` | BUCKET AVATARES Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto, pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo |
 
 ### Políticas de `storage.objects`
 
@@ -412,3 +413,6 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 | `documentos_storage_select` | SELECT | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name))` |  | Los archivos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlos (para abrirlos o generar URLs firmadas), también en viajes finalizados o archivados |
 | `documentos_storage_insert` | INSERT | authenticated |  | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Los miembros suben archivos a la carpeta de su viaje mientras está activo |
 | `documentos_storage_delete_huerfano` | DELETE | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name)) AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)` |  | Solo para deshacer una subida cuando falla el registro del documento: se puede borrar un archivo de la carpeta de un viaje activo que todavía no tiene fila en documentos |
+| `avatares_storage_select` | SELECT | authenticated | `bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text` |  | Lectura con la sesión de la carpeta propia (Supabase la necesita para borrar) |
+| `avatares_storage_insert` | INSERT | authenticated |  | `bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text` |  |
+| `avatares_storage_delete` | DELETE | authenticated | `bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text` |  |  |

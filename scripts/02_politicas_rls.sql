@@ -314,6 +314,32 @@ CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE T
     AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)
   );
 
+-- BUCKET AVATARES
+-- Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto,
+-- pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('avatares', 'avatares', true, 2000000, ARRAY['image/jpeg', 'image/png'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- POLÍTICAS STORAGE AVATARES
+-- Cada usuario solo escribe en su carpeta <usuario_id>/. No hay política de UPDATE: cada foto se sube con un nombre nuevo
+
+-- Lectura con la sesión de la carpeta propia (Supabase la necesita para borrar)
+DROP POLICY IF EXISTS avatares_storage_select ON storage.objects;
+CREATE POLICY avatares_storage_select ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS avatares_storage_insert ON storage.objects;
+CREATE POLICY avatares_storage_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS avatares_storage_delete ON storage.objects;
+CREATE POLICY avatares_storage_delete ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text);
+
 -- 9. FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)
 RETURNS jsonb
