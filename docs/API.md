@@ -50,6 +50,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
+| PATCH | [`/perfil`](#patch-perfil) | Cambia el nombre del perfil | Token de sesión |
+| PUT | [`/perfil/avatar`](#put-perfilavatar) | Cambia la foto del perfil | Token de sesión |
+| DELETE | [`/perfil/avatar`](#delete-perfilavatar) | Quita la foto del perfil | Token de sesión |
 
 ## General
 
@@ -2615,3 +2618,181 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_ruta` | No se ha podido calcular la ruta |
+
+## Perfil
+
+### PATCH /perfil
+
+**Cambia el nombre del perfil**
+
+Cambia el nombre del perfil de quien hace la petición. La ruta no lleva ningún identificador: el servidor
+usa siempre el usuario del token, así que solo se puede editar el perfil propio. El nombre se guarda sin
+los espacios del principio y del final y tiene que quedar entre 1 y 100 caracteres, el mismo límite que el
+registro. Devuelve el usuario con la misma forma que en la sesión, para que el cliente lo pueda guardar tal cual.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `nombre` | string | Sí | Nuevo nombre. Se guarda sin los espacios del principio y del final, y tiene que quedar entre 1 y 100 caracteres | `Berta` |
+
+**Respuestas**
+
+**200** — Nombre cambiado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `usuario` | Usuario | No |  |  |
+| `usuario.id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `usuario.nombre` | string \| null | No | perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil | `Daniel` |
+| `usuario.email` | string (email) | No | perfiles.email, o el email de Supabase Auth si no hay perfil | `daniel@travelwrap.app` |
+| `usuario.avatar_url` | string \| null | No | perfiles.avatar_url. Con Google, la foto de la cuenta | `null` |
+| `usuario.creado_en` | string (date-time) | No | perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil | `2026-10-07T18:00:00Z` |
+
+**400** — El nombre no es un texto o, sin contar los espacios de los extremos, tiene menos de 1 o más de 100 caracteres
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El nombre debe tener entre 1 y 100 caracteres |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `perfil_no_encontrado` | El perfil no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+### PUT /perfil/avatar
+
+**Cambia la foto del perfil**
+
+Sube una imagen JPEG o PNG de 2 MB como máximo como foto del perfil de quien hace la petición. La ruta no
+lleva ningún identificador: el servidor usa siempre el usuario del token. La foto se guarda en el bucket
+público `avatares` de Supabase Storage, en la carpeta del usuario y con un nombre aleatorio, así que la URL
+cambia con cada subida y los navegadores no siguen mostrando la foto anterior desde la caché.
+
+El tipo se reconoce por el contenido del archivo (JPEG empieza por `FF D8 FF` y PNG por `89 50 4E 47`),
+además de por el tipo que indica el cliente, que se puede falsear. Si no se puede guardar la URL en el perfil,
+la foto subida se borra y el perfil queda igual. Una vez cambiada, se borra la foto anterior si era de este
+bucket; las fotos de Google no se tocan.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `avatar` | string (binary) | Sí | JPEG o PNG de 2 MB (2.000.000 bytes) como máximo. Un solo archivo por petición |  |
+
+**Respuestas**
+
+**200** — Foto cambiada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `usuario` | Usuario | No |  |  |
+| `usuario.id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `usuario.nombre` | string \| null | No | perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil | `Daniel` |
+| `usuario.email` | string (email) | No | perfiles.email, o el email de Supabase Auth si no hay perfil | `daniel@travelwrap.app` |
+| `usuario.avatar_url` | string \| null | No | perfiles.avatar_url. Con Google, la foto de la cuenta | `null` |
+| `usuario.creado_en` | string (date-time) | No | perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil | `2026-10-07T18:00:00Z` |
+
+**400** — Falta la foto o llega más de una, no es una imagen JPEG o PNG, o ocupa más de 2 MB
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta la foto en el campo «avatar» |
+| `tipo_no_permitido` | La foto debe ser una imagen JPEG o PNG |
+| `archivo_demasiado_grande` | La foto no puede ocupar más de 2 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `perfil_no_encontrado` | El perfil no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir la foto o al guardarla en el perfil)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_storage` | No se ha podido guardar la foto |
+
+### DELETE /perfil/avatar
+
+**Quita la foto del perfil**
+
+Deja el perfil sin foto (`avatar_url` nulo) y borra el archivo anterior si estaba en el bucket `avatares`;
+una foto de Google no se borra. Si el perfil ya no tenía foto, también responde 200.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Respuestas**
+
+**200** — Foto quitada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `usuario` | Usuario | No |  |  |
+| `usuario.id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `usuario.nombre` | string \| null | No | perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil | `Daniel` |
+| `usuario.email` | string (email) | No | perfiles.email, o el email de Supabase Auth si no hay perfil | `daniel@travelwrap.app` |
+| `usuario.avatar_url` | string \| null | No | perfiles.avatar_url. Con Google, la foto de la cuenta | `null` |
+| `usuario.creado_en` | string (date-time) | No | perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil | `2026-10-07T18:00:00Z` |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `perfil_no_encontrado` | El perfil no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_storage` | No se ha podido quitar la foto |

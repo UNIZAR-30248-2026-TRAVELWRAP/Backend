@@ -2503,6 +2503,149 @@ paths:
                   codigo: error_documento
                   mensaje: No se ha podido obtener el enlace del documento
 
+  /perfil:
+    patch:
+      tags:
+        - Perfil
+      summary: Cambia el nombre del perfil
+      description: |
+        Cambia el nombre del perfil de quien hace la petición. La ruta no lleva ningún identificador: el servidor
+        usa siempre el usuario del token, así que solo se puede editar el perfil propio. El nombre se guarda sin
+        los espacios del principio y del final y tiene que quedar entre 1 y 100 caracteres, el mismo límite que el
+        registro. Devuelve el usuario con la misma forma que en la sesión, para que el cliente lo pueda guardar tal cual.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarPerfilRequest'
+      responses:
+        '200':
+          description: Nombre cambiado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilActualizado'
+        '400':
+          description: El nombre no es un texto o, sin contar los espacios de los extremos, tiene menos de 1 o más de 100 caracteres
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El nombre debe tener entre 1 y 100 caracteres
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/PerfilNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /perfil/avatar:
+    put:
+      tags:
+        - Perfil
+      summary: Cambia la foto del perfil
+      description: |
+        Sube una imagen JPEG o PNG de 2 MB como máximo como foto del perfil de quien hace la petición. La ruta no
+        lleva ningún identificador: el servidor usa siempre el usuario del token. La foto se guarda en el bucket
+        público `avatares` de Supabase Storage, en la carpeta del usuario y con un nombre aleatorio, así que la URL
+        cambia con cada subida y los navegadores no siguen mostrando la foto anterior desde la caché.
+
+        El tipo se reconoce por el contenido del archivo (JPEG empieza por `FF D8 FF` y PNG por `89 50 4E 47`),
+        además de por el tipo que indica el cliente, que se puede falsear. Si no se puede guardar la URL en el perfil,
+        la foto subida se borra y el perfil queda igual. Una vez cambiada, se borra la foto anterior si era de este
+        bucket; las fotos de Google no se tocan.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaAvatarRequest'
+      responses:
+        '200':
+          description: Foto cambiada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilActualizado'
+        '400':
+          description: Falta la foto o llega más de una, no es una imagen JPEG o PNG, o ocupa más de 2 MB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta la foto en el campo «avatar»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: La foto debe ser una imagen JPEG o PNG
+                demasiadoGrande:
+                  value:
+                    error:
+                      codigo: archivo_demasiado_grande
+                      mensaje: La foto no puede ocupar más de 2 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/PerfilNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al subir la foto o al guardarla en el perfil)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_storage
+                  mensaje: No se ha podido guardar la foto
+    delete:
+      tags:
+        - Perfil
+      summary: Quita la foto del perfil
+      description: |
+        Deja el perfil sin foto (`avatar_url` nulo) y borra el archivo anterior si estaba en el bucket `avatares`;
+        una foto de Google no se borra. Si el perfil ya no tenía foto, también responde 200.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Foto quitada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilActualizado'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/PerfilNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_storage
+                  mensaje: No se ha podido quitar la foto
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2606,6 +2749,16 @@ components:
             error:
               codigo: error_interno
               mensaje: Error interno del servidor
+    PerfilNoEncontrado:
+      description: El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              codigo: perfil_no_encontrado
+              mensaje: El perfil no existe
   schemas:
     RegistroRequest:
       type: object
@@ -3758,6 +3911,34 @@ components:
           description: Ruta a pie por calles siguiendo el orden de la agenda; null con menos de dos actividades con ubicación
           allOf:
             - $ref: '#/components/schemas/TrazadoDeRuta'
+
+    ActualizarPerfilRequest:
+      type: object
+      required:
+        - nombre
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Nuevo nombre. Se guarda sin los espacios del principio y del final, y tiene que quedar entre 1 y 100 caracteres
+          example: Berta
+
+    SubidaAvatarRequest:
+      type: object
+      required:
+        - avatar
+      properties:
+        avatar:
+          type: string
+          format: binary
+          description: JPEG o PNG de 2 MB (2.000.000 bytes) como máximo. Un solo archivo por petición
+
+    PerfilActualizado:
+      type: object
+      properties:
+        usuario:
+          $ref: '#/components/schemas/Usuario'
 
     Error:
       type: object

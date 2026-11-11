@@ -315,6 +315,7 @@ CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE T
   );
 
 -- BUCKET AVATARES
+
 -- Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto,
 -- pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

@@ -65,7 +65,7 @@ erDiagram
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `uuid` | Sí | PK, FK → auth.users.id (ON DELETE CASCADE) |  |  |
-| `nombre` | `text` | Sí |  |  |  |
+| `nombre` | `text` | Sí |  |  | Entre 1 y 100 caracteres sin contar los espacios de los extremos (restricción perfiles_nombre_valido) |
 | `email` | `text` | No |  |  |  |
 | `avatar_url` | `text` | No |  |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
@@ -404,7 +404,7 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 | Bucket | Acceso | Tamaño máximo | Tipos permitidos | Descripción |
 | --- | --- | --- | --- | --- |
 | `documentos` | Privado | 8 MB (8.000.000 bytes) | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo |
-| `avatares` | Público | 2 MB (2.000.000 bytes) | `image/jpeg`, `image/png` | BUCKET AVATARES Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto, pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo |
+| `avatares` | Público | 2 MB (2.000.000 bytes) | `image/jpeg`, `image/png` | Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto, pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo |
 
 ### Políticas de `storage.objects`
 

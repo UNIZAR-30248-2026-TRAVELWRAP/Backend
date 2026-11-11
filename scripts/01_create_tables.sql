@@ -43,6 +43,7 @@ $$;
 -- 2. TABLAS
 CREATE TABLE IF NOT EXISTS public.perfiles (
   id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  -- Entre 1 y 100 caracteres sin contar los espacios de los extremos (restricción perfiles_nombre_valido)
   nombre text NOT NULL,
   email text,
   avatar_url text,
