@@ -15,6 +15,7 @@ const { comprobarToken } = require('./middleware/authMiddleware');
 const viajeService = require('./services/viajeService');
 const gastoRoutes = require('./routes/gastoRoutes');
 const documentoRoutes = require('./routes/documentoRoutes');
+const perfilRoutes = require('./routes/perfilRoutes');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
 const path = require('path');
@@ -88,6 +89,7 @@ app.use('/api/viajes/:viajeId/actividades', actividadRoutes);
 app.use('/api/viajes/:viajeId/ruta', rutaRoutes);
 app.use('/api/viajes/:viajeId/gastos', gastoRoutes);
 app.use('/api/viajes/:viajeId/documentos', documentoRoutes);
+app.use('/api/perfil', perfilRoutes);
 app.use('/api/direcciones', direccionRoutes);
 app.use('/api', invitationRoutes); // /api/viajes/:viajeId/invitacion y /api/invitaciones/:token/unirse
 
