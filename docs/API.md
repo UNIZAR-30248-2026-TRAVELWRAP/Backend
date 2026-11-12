@@ -46,6 +46,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/liquidacion`](#get-viajesviajeidgastosliquidacion) | Transferencias para saldar las cuentas del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos/{gastoId}`](#get-viajesviajeidgastosgastoid) | Detalle de un gasto con la parte de cada miembro | Token de sesión |
+| PATCH | [`/viajes/{viajeId}/gastos/{gastoId}`](#patch-viajesviajeidgastosgastoid) | Edita un gasto y recalcula su reparto | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/gastos/{gastoId}`](#delete-viajesviajeidgastosgastoid) | Borra un gasto y sus repartos | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
@@ -2300,6 +2303,230 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_gasto` | No se ha podido calcular la liquidación |
+
+### GET /viajes/{viajeId}/gastos/{gastoId}
+
+**Detalle de un gasto con la parte de cada miembro**
+
+Devuelve el gasto con su importe, quién pagó, la categoría, la fecha y el reparto. Cada parte trae el nombre
+del miembro; quien ya abandonó el viaje sale sin nombre y con `abandonado: true`.
+Solo lo pueden pedir los miembros del viaje. Si el gasto no existe o es de otro viaje, responde 404.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `gastoId` | path | Sí | string (uuid) | Identificador del gasto | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+
+**Respuestas**
+
+**200** — Gasto con el nombre y la parte de cada miembro
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `concepto` | string | No |  | `Cena en el Trastevere` |
+| `importe` | number | No |  | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) | No |  | `comida` |
+| `pagado_por` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) | No |  | `2027-05-12` |
+| `creado_por` | string (uuid) \| null | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  |  |
+| `actualizado_en` | string (date-time) | No |  |  |
+| `repartos` | array<RepartoDetalle> | No |  |  |
+| `repartos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `repartos[].nombre` | string \| null | No | Nombre del miembro (null si ya abandonó el viaje) | `Adriana` |
+| `repartos[].abandonado` | boolean | No | true si el miembro ya abandonó el viaje | `false` |
+| `repartos[].importe` | number | No | Parte del gasto que le corresponde a este miembro | `30.25` |
+
+**400** — El identificador del viaje o del gasto no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del gasto no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro, o el gasto no existe o es de otro viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `gasto_no_encontrado` | El gasto no existe o no pertenece a este viaje |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido obtener el gasto |
+
+### PATCH /viajes/{viajeId}/gastos/{gastoId}
+
+**Edita un gasto y recalcula su reparto**
+
+Actualiza el gasto con los mismos datos que al crearlo (concepto, importe, categoría, quién pagó, fecha y
+participantes) y vuelve a repartirlo a partes iguales, en céntimos. El balance y la liquidación se recalculan
+solos, porque salen de los repartos.
+Solo pueden editarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `gastoId` | path | Sí | string (uuid) | Identificador del gasto | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `concepto` | string | Sí | Qué se ha pagado. Se guardan sin los espacios del principio y del final | `Cena en el Trastevere` |
+| `importe` | number | Sí | Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) \| null | No | Tipo de gasto. Opcional; si no se envía se guarda «otros» | `comida` |
+| `pagado_por` | string (uuid) | Sí | Miembro del viaje que ha pagado | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) \| null | No | Día del gasto (AAAA-MM-DD). Opcional; si no se envía se guarda la fecha de hoy | `2027-05-12` |
+| `participantes` | array<string (uuid)> | Sí | Miembros del viaje entre los que se divide el gasto a partes iguales, sin repetir ninguno | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc","5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f"]` |
+
+**Respuestas**
+
+**200** — Gasto editado, con su nuevo reparto
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `concepto` | string | No |  | `Cena en el Trastevere` |
+| `importe` | number | No |  | `60.5` |
+| `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) | No |  | `comida` |
+| `pagado_por` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fecha` | string (date) | No |  | `2027-05-12` |
+| `creado_por` | string (uuid) \| null | No | Quién registró el gasto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `actualizado_en` | string (date-time) | No |  | `2026-10-28T10:00:00Z` |
+| `repartos` | array<RepartoGasto> | No | Parte de cada participante; suman el importe del gasto | `[{"usuario_id":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","importe":30.25},{"usuario_id":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","importe":30.25}]` |
+| `repartos[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `repartos[].importe` | number | No | Parte del gasto que le corresponde a este miembro | `30.25` |
+
+**400** — Datos no válidos, identificador no UUID, o quien paga o un participante no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El importe debe ser un número mayor que 0 con dos decimales como máximo |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — Quien edita no registró el gasto ni es el creador del viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_permiso` | Solo puede editar el gasto quien lo registró o el creador del viaje |
+
+**404** — El viaje no existe o el usuario no es miembro, o el gasto no existe o es de otro viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `gasto_no_encontrado` | El gasto no existe o no pertenece a este viaje |
+
+**409** — El viaje está finalizado o archivado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se han podido guardar los cambios del gasto |
+
+### DELETE /viajes/{viajeId}/gastos/{gastoId}
+
+**Borra un gasto y sus repartos**
+
+Borra el gasto y, en cascada, sus repartos: el total, el balance y la liquidación dejan de contarlo.
+Solo pueden borrarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
+Quien no puede borrarlo recibe el mismo 404 que si el gasto no existiera.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `gastoId` | path | Sí | string (uuid) | Identificador del gasto | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
+
+**Respuestas**
+
+**204** — Gasto borrado
+
+**400** — El identificador del viaje o del gasto no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del gasto no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro, o el gasto no existe, es de otro viaje o no se puede borrar
+
+| Código de error | Mensaje |
+| --- | --- |
+| `gasto_no_encontrado` | El gasto no existe o no pertenece a este viaje |
+
+**409** — El viaje está finalizado o archivado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido eliminar el gasto |
 
 ## Documentos
 

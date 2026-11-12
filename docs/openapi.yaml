@@ -2141,6 +2141,203 @@ paths:
                   codigo: error_gasto
                   mensaje: No se ha podido calcular la liquidación
 
+  /viajes/{viajeId}/gastos/{gastoId}:
+    get:
+      tags:
+        - Gastos
+      summary: Detalle de un gasto con la parte de cada miembro
+      description: |
+        Devuelve el gasto con su importe, quién pagó, la categoría, la fecha y el reparto. Cada parte trae el nombre
+        del miembro; quien ya abandonó el viaje sale sin nombre y con `abandonado: true`.
+        Solo lo pueden pedir los miembros del viaje. Si el gasto no existe o es de otro viaje, responde 404.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/GastoId'
+      responses:
+        '200':
+          description: Gasto con el nombre y la parte de cada miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetalleGasto'
+        '400':
+          description: El identificador del viaje o del gasto no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del gasto no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro, o el gasto no existe o es de otro viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: gasto_no_encontrado
+                  mensaje: El gasto no existe o no pertenece a este viaje
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido obtener el gasto
+    patch:
+      tags:
+        - Gastos
+      summary: Edita un gasto y recalcula su reparto
+      description: |
+        Actualiza el gasto con los mismos datos que al crearlo (concepto, importe, categoría, quién pagó, fecha y
+        participantes) y vuelve a repartirlo a partes iguales, en céntimos. El balance y la liquidación se recalculan
+        solos, porque salen de los repartos.
+        Solo pueden editarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/GastoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoGastoRequest'
+      responses:
+        '200':
+          description: Gasto editado, con su nuevo reparto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Gasto'
+        '400':
+          description: Datos no válidos, identificador no UUID, o quien paga o un participante no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El importe debe ser un número mayor que 0 con dos decimales como máximo
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: Quien edita no registró el gasto ni es el creador del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: sin_permiso
+                  mensaje: Solo puede editar el gasto quien lo registró o el creador del viaje
+        '404':
+          description: El viaje no existe o el usuario no es miembro, o el gasto no existe o es de otro viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: gasto_no_encontrado
+                  mensaje: El gasto no existe o no pertenece a este viaje
+        '409':
+          description: El viaje está finalizado o archivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se han podido guardar los cambios del gasto
+    delete:
+      tags:
+        - Gastos
+      summary: Borra un gasto y sus repartos
+      description: |
+        Borra el gasto y, en cascada, sus repartos: el total, el balance y la liquidación dejan de contarlo.
+        Solo pueden borrarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
+        Quien no puede borrarlo recibe el mismo 404 que si el gasto no existiera.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/GastoId'
+      responses:
+        '204':
+          description: Gasto borrado
+        '400':
+          description: El identificador del viaje o del gasto no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del gasto no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro, o el gasto no existe, es de otro viaje o no se puede borrar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: gasto_no_encontrado
+                  mensaje: El gasto no existe o no pertenece a este viaje
+        '409':
+          description: El viaje está finalizado o archivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido eliminar el gasto
+
   /viajes/{viajeId}/documentos:
     get:
       tags:
@@ -2524,6 +2721,15 @@ components:
         type: string
         format: uuid
       example: 123e4567-e89b-12d3-a456-426614174000
+    GastoId:
+      name: gastoId
+      in: path
+      required: true
+      description: Identificador del gasto
+      schema:
+        type: string
+        format: uuid
+      example: 9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c
     ActividadId:
       name: actividadId
       in: path
@@ -3612,6 +3818,73 @@ components:
               a: df77cba6-4be5-4cbc-814b-1e228dd73dcc
               a_nombre: Adriana
               importe: 3.33
+
+    RepartoDetalle:
+      type: object
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        nombre:
+          type: string
+          nullable: true
+          description: Nombre del miembro (null si ya abandonó el viaje)
+          example: Adriana
+        abandonado:
+          type: boolean
+          description: true si el miembro ya abandonó el viaje
+          example: false
+        importe:
+          type: number
+          description: Parte del gasto que le corresponde a este miembro
+          example: 30.25
+
+    DetalleGasto:
+      type: object
+      description: Gasto con el nombre y la parte de cada miembro (mismos campos que Gasto, con repartos detallados)
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        concepto:
+          type: string
+          example: Cena en el Trastevere
+        importe:
+          type: number
+          example: 60.5
+        categoria:
+          type: string
+          enum: [comida, transporte, entradas, alojamiento, ocio, otros]
+          example: comida
+        pagado_por:
+          type: string
+          format: uuid
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        fecha:
+          type: string
+          format: date
+          example: '2027-05-12'
+        creado_por:
+          type: string
+          format: uuid
+          nullable: true
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+        actualizado_en:
+          type: string
+          format: date-time
+        repartos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepartoDetalle'
 
     SubidaDocumentoRequest:
       type: object
