@@ -186,6 +186,52 @@ describe('POST /viajes/:viajeId/archivar', () => {
   });
 });
 
+describe('POST /viajes/:viajeId/desarchivar', () => {
+  it('devuelve el viaje desarchivado', async () => {
+    const desarchivar = simular('desarchivar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, estado: 'activo' } }));
+
+    const res = await llamar('desarchivar');
+
+    assert.equal(res.codigo, 200);
+    assert.equal(res.cuerpo.estado, 'activo');
+    assert.deepEqual(desarchivar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
+  });
+
+  it('responde 403 si no es el creador y 404 si el viaje no existe', async () => {
+    simular('desarchivar', async () => ({ estado: 'no_creador' }));
+    assert.equal((await llamar('desarchivar')).codigo, 403);
+
+    mock.restoreAll();
+    simular('desarchivar', async () => ({ estado: 'no_existe' }));
+    assert.equal((await llamar('desarchivar')).codigo, 404);
+  });
+
+  it('responde 409 si el viaje no estaba archivado', async () => {
+    simular('desarchivar', async () => ({ estado: 'no_estaba_archivado' }));
+
+    const res = await llamar('desarchivar');
+
+    assert.equal(res.codigo, 409);
+    assert.equal(res.cuerpo.error.codigo, 'viaje_no_archivado');
+    assert.equal(res.cuerpo.error.mensaje, 'El viaje no está archivado');
+  });
+
+  it('rechaza un identificador inválido, responde 502 si falla Supabase y 500 si hay una excepción', async () => {
+    assert.equal((await llamar('desarchivar', { viajeId: 'x' })).codigo, 400);
+
+    simular('desarchivar', async () => ({ error: { code: 'PGRST000' } }));
+    const res = await llamar('desarchivar');
+    assert.equal(res.codigo, 502);
+    assert.equal(res.cuerpo.error.mensaje, 'No se ha podido desarchivar el viaje');
+
+    mock.restoreAll();
+    simular('desarchivar', async () => {
+      throw new Error('fallo');
+    });
+    assert.equal((await llamar('desarchivar')).codigo, 500);
+  });
+});
+
 describe('DELETE /viajes/:viajeId', () => {
   it('responde 204 sin cuerpo al eliminar', async () => {
     simular('eliminar', async () => ({ estado: 'ok' }));

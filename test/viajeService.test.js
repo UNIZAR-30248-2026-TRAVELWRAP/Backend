@@ -30,7 +30,13 @@ const clienteFalso = (respuestas) => {
     );
     return encadenable;
   };
-  return { from, consultas };
+  // rpc se resuelve con la siguiente respuesta preparada y apunta su nombre y parámetros
+  const llamadasRpc = [];
+  const rpc = async (nombre, parametros) => {
+    llamadasRpc.push([nombre, parametros]);
+    return respuestas.shift();
+  };
+  return { from, rpc, consultas, llamadasRpc };
 };
 
 // Fila de viajes tal como la devuelve el select con los miembros embebidos
@@ -182,6 +188,50 @@ describe('viajeService.archivar', () => {
     const cliente = clienteFalso([encontrado({}, 'miembro')]);
 
     assert.deepEqual(await viajeService.archivar(cliente, USUARIO, VIAJE_ID), { estado: 'no_creador' });
+  });
+});
+
+describe('viajeService.desarchivar', () => {
+  it('desarchiva un viaje archivado del creador con la función SQL y devuelve el viaje', async () => {
+    const cliente = clienteFalso([encontrado({ estado: 'archivado' }), { data: true, error: null }, encontrado()]);
+
+    const resultado = await viajeService.desarchivar(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.estado, 'activo');
+    assert.deepEqual(cliente.llamadasRpc, [['desarchivar_viaje', { p_viaje_id: VIAJE_ID }]]);
+  });
+
+  it('no desarchiva un viaje que no está archivado', async () => {
+    const cliente = clienteFalso([encontrado({ estado: 'finalizado' })]);
+
+    assert.deepEqual(await viajeService.desarchivar(cliente, USUARIO, VIAJE_ID), { estado: 'no_estaba_archivado' });
+    assert.equal(cliente.llamadasRpc.length, 0);
+  });
+
+  it('solo desarchiva el creador', async () => {
+    const cliente = clienteFalso([encontrado({ estado: 'archivado' }, 'miembro')]);
+
+    assert.deepEqual(await viajeService.desarchivar(cliente, USUARIO, VIAJE_ID), { estado: 'no_creador' });
+    assert.equal(cliente.llamadasRpc.length, 0);
+  });
+
+  it('responde no_existe si el viaje no existe o no es miembro', async () => {
+    const cliente = clienteFalso([{ data: null, error: null }]);
+
+    assert.deepEqual(await viajeService.desarchivar(cliente, USUARIO, VIAJE_ID), { estado: 'no_existe' });
+  });
+
+  it('devuelve el error si falla la función SQL', async () => {
+    const cliente = clienteFalso([encontrado({ estado: 'archivado' }), { data: null, error: { code: 'PGRST000' } }]);
+
+    assert.deepEqual((await viajeService.desarchivar(cliente, USUARIO, VIAJE_ID)).error, { code: 'PGRST000' });
+  });
+
+  it('trata como error que la función no desarchive nada', async () => {
+    const cliente = clienteFalso([encontrado({ estado: 'archivado' }), { data: false, error: null }]);
+
+    assert.ok((await viajeService.desarchivar(cliente, USUARIO, VIAJE_ID)).error);
   });
 });
 
