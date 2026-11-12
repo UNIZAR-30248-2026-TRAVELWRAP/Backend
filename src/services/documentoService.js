@@ -17,7 +17,7 @@ const EXTENSIONES = {
 const generarRuta = (viajeId, tipoMime) => `${viajeId}/${randomUUID()}.${EXTENSIONES[tipoMime]}`;
 
 // Documentos de la cartera del viaje, del más reciente al más antiguo.
-// También se pueden consultar en viajes finalizados o archivados: solo lee
+// También se pueden consultar en viajes finalizados: solo lee
 // Devuelve { error } | { estado: no_existe | ok (con documentos) }
 const listar = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
@@ -75,7 +75,7 @@ const SEGUNDOS_DE_ENLACE = 300;
 const archivoNoEncontrado = (error) => error.statusCode === '404' || /not found/i.test(error.message ?? '');
 
 // Enlace temporal de Supabase Storage para abrir un documento del viaje, o para descargarlo con su nombre.
-// Sirve también en viajes finalizados o archivados: solo lee. La ruta del archivo no sale del servidor
+// Sirve también en viajes finalizados: solo lee. La ruta del archivo no sale del servidor
 // Devuelve { error } | { estado: no_existe | documento_no_existe | ok (con url, expira_en, nombre y tipo_mime) }
 const obtenerUrl = async (cliente, usuarioId, viajeId, documentoId, { descargar = false } = {}) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);

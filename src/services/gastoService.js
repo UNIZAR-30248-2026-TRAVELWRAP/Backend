@@ -29,7 +29,7 @@ const obtener = async (cliente, viajeId, gastoId) => {
 const sumar = (gastos) => gastos.reduce((total, gasto) => total + Math.round(gasto.importe * 100), 0) / 100;
 
 // Historial de gastos del viaje, del más reciente al más antiguo, con el total gastado.
-// También se puede consultar en viajes archivados o finalizados: solo lee
+// También se puede consultar en viajes finalizados: solo lee
 // Devuelve { error } | { estado: no_existe | ok (con gastos y total) }
 const listar = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);

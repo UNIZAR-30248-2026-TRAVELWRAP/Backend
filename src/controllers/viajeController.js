@@ -1,7 +1,7 @@
 const viajeService = require('../services/viajeService');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
-const ESTADOS = ['activo', 'finalizado', 'archivado'];
+const ESTADOS = ['activo', 'finalizado'];
 const MAX_TEXTO = 100;
 const MAX_PRESUPUESTO = 1e10; // numeric(12,2): 10 dígitos enteros
 
@@ -118,6 +118,7 @@ const validarCambiosViaje = (cuerpo) => {
 const ERRORES_GESTION = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_creador: [403, 'no_creador', 'Solo el creador del viaje puede hacerlo'],
+  no_finalizado: [409, 'viaje_no_finalizado', 'Solo se pueden archivar viajes finalizados'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   ya_finalizado: [409, 'viaje_finalizado', 'El viaje ya está finalizado'],
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
@@ -133,13 +134,19 @@ const responderMotivo = (res, estado, mensajeFallo) => {
 const idInvalido = (res) => responderError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
 
 const listar = async (req, res) => {
-  const { estado } = req.query;
+  const { estado, archivados } = req.query;
   if (estado !== undefined && !ESTADOS.includes(estado)) {
-    return responderError(res, 400, 'datos_invalidos', 'El estado debe ser activo, finalizado o archivado');
+    return responderError(res, 400, 'datos_invalidos', 'El estado debe ser activo o finalizado');
+  }
+  if (archivados !== undefined && archivados !== 'true' && archivados !== 'false') {
+    return responderError(res, 400, 'datos_invalidos', 'El parámetro archivados debe ser true o false');
   }
 
   try {
-    const resultado = await viajeService.listar(req.supabase, req.usuario.id, estado);
+    const resultado = await viajeService.listar(req.supabase, req.usuario.id, {
+      estado,
+      archivados: archivados === 'true',
+    });
     if (resultado.error) {
       return responderError(res, 502, 'error_viaje', 'No se han podido obtener los viajes');
     }

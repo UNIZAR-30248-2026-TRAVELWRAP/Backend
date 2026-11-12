@@ -2,7 +2,7 @@
 
 const SELECCION =
   'id, nombre, destino, descripcion, fecha_inicio, fecha_fin, moneda, presupuesto, estado, creado_en, ' +
-  'miembros_viaje(usuario_id, rol, abandonado_en, perfiles(nombre, avatar_url))';
+  'miembros_viaje(usuario_id, rol, abandonado_en, archivado_en, eliminado_en, perfiles(nombre, avatar_url))';
 
 // Un viaje está pendiente de destino cuando está activo y todavía no lo tiene
 const conPendiente = (viaje) => ({
@@ -10,16 +10,18 @@ const conPendiente = (viaje) => ({
   pendiente_destino: viaje.estado === 'activo' && viaje.destino === null,
 });
 
-// Da al viaje el formato de la API. Devuelve null si el usuario no es miembro activo
+// Da al viaje el formato de la API. Devuelve null si el usuario no es miembro activo o ya lo ha eliminado
+// (para él desaparece, aunque los demás miembros lo sigan viendo)
 const formatear = (fila, usuarioId) => {
   const { miembros_viaje: filas, ...viaje } = fila;
   const miembros = (filas ?? []).filter((m) => m.abandonado_en === null);
   const yo = miembros.find((m) => m.usuario_id === usuarioId);
-  if (!yo) return null;
+  if (!yo || yo.eliminado_en) return null;
 
   return {
     ...conPendiente(viaje),
     rol: yo.rol,
+    archivado: Boolean(yo.archivado_en),
     miembros: miembros.map((m) => ({
       usuario_id: m.usuario_id,
       nombre: m.perfiles?.nombre ?? null,
@@ -29,14 +31,17 @@ const formatear = (fila, usuarioId) => {
   };
 };
 
-const listar = async (cliente, usuarioId, estado) => {
+// Por defecto solo los viajes no archivados por el usuario; con archivados: true, solo los que ha archivado.
+// El archivado es personal (está en la fila del propio usuario), así que se filtra tras formatear
+const listar = async (cliente, usuarioId, { estado, archivados = false } = {}) => {
   let consulta = cliente.from('viajes').select(SELECCION).order('creado_en', { ascending: false });
   if (estado) consulta = consulta.eq('estado', estado);
 
   const { data, error } = await consulta;
   if (error) return { error };
 
-  return { viajes: (data ?? []).map((fila) => formatear(fila, usuarioId)).filter(Boolean) };
+  const viajes = (data ?? []).map((fila) => formatear(fila, usuarioId)).filter(Boolean);
+  return { viajes: viajes.filter((viaje) => viaje.archivado === archivados) };
 };
 
 const obtener = async (cliente, usuarioId, viajeId) => {
@@ -91,7 +96,7 @@ const editar = async (cliente, usuarioId, viajeId, cambios) => {
   return actualizar(cliente, usuarioId, viajeId, cambios);
 };
 
-// Finaliza el viaje: queda de solo lectura en «Viajes anteriores». Después se puede archivar
+// Finaliza el viaje para todos: queda de solo lectura en «Viajes anteriores» y ya no vuelve a activo
 // Devuelve { error } | { estado: no_existe | no_creador | ya_finalizado | ok (con viaje) }
 const finalizar = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
@@ -101,30 +106,33 @@ const finalizar = async (cliente, usuarioId, viajeId) => {
   return actualizar(cliente, usuarioId, viajeId, { estado: 'finalizado', finalizado_en: new Date().toISOString() });
 };
 
-// Archiva el viaje: pasa a «Viajes archivados», también de solo lectura (único estado desde el que se elimina)
-// Devuelve { error } | { estado: no_existe | no_creador | ya_archivado | ok (con viaje) }
+// Archiva el viaje solo para el usuario: pasa a su «Viajes archivados». Los demás miembros lo siguen viendo igual.
+// Solo se archiva un viaje finalizado. Se usa la función SQL archivar_viaje porque nadie puede modificar
+// directamente su fila de miembros_viaje
+// Devuelve { error } | { estado: no_existe | no_finalizado | ya_archivado | ok (con viaje) }
 const archivar = async (cliente, usuarioId, viajeId) => {
-  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
-  if (previo.error || previo.estado !== 'ok') return previo;
-  if (previo.viaje.estado === 'archivado') return { estado: 'ya_archivado' };
+  const previo = await obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (previo.viaje.estado !== 'finalizado') return { estado: 'no_finalizado' };
+  if (previo.viaje.archivado) return { estado: 'ya_archivado' };
 
-  // Un viaje finalizado ya tiene su fecha de cierre: solo se guarda al cerrar uno activo
-  const cambios =
-    previo.viaje.estado === 'activo'
-      ? { estado: 'archivado', finalizado_en: new Date().toISOString() }
-      : { estado: 'archivado' };
-  return actualizar(cliente, usuarioId, viajeId, cambios);
+  return cambiarArchivado(cliente, usuarioId, viajeId, 'archivar_viaje');
 };
 
-// Devuelve el viaje archivado a activo. Un UPDATE normal no puede (la política viajes_update rechaza los
-// archivados), por eso se usa la función SQL desarchivar_viaje
-// Devuelve { error } | { estado: no_existe | no_creador | no_estaba_archivado | ok (con viaje) }
+// Desarchiva el viaje solo para el usuario. No cambia su estado: sigue finalizado y vuelve a «Viajes anteriores»
+// Devuelve { error } | { estado: no_existe | no_estaba_archivado | ok (con viaje) }
 const desarchivar = async (cliente, usuarioId, viajeId) => {
-  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
-  if (previo.error || previo.estado !== 'ok') return previo;
-  if (previo.viaje.estado !== 'archivado') return { estado: 'no_estaba_archivado' };
+  const previo = await obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (!previo.viaje.archivado) return { estado: 'no_estaba_archivado' };
 
-  const { data, error } = await cliente.rpc('desarchivar_viaje', { p_viaje_id: viajeId });
+  return cambiarArchivado(cliente, usuarioId, viajeId, 'desarchivar_viaje_propio');
+};
+
+const cambiarArchivado = async (cliente, usuarioId, viajeId, funcion) => {
+  const { data, error } = await cliente.rpc(funcion, { p_viaje_id: viajeId });
   if (error) return { error };
   if (data !== true) return { error: { code: 'sin_filas' } };
 
@@ -133,16 +141,43 @@ const desarchivar = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok', viaje: resultado.viaje };
 };
 
-// Borra el viaje para todos sus miembros. Lo demás (miembros, gastos...) se borra en cascada
-// Devuelve { error } | { estado: no_existe | no_creador | no_archivado | ok }
-const eliminar = async (cliente, usuarioId, viajeId) => {
-  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
-  if (previo.error || previo.estado !== 'ok') return previo;
-  if (previo.viaje.estado !== 'archivado') return { estado: 'no_archivado' };
+const TAMANO_LOTE = 100;
 
-  const { data, error } = await cliente.from('viajes').delete().eq('id', viajeId).select('id');
+// Borra archivos de un bucket con el cliente del usuario, en lotes. Quitar uno que ya no existe no da error
+const borrarArchivos = async (cliente, bucket, rutas) => {
+  for (let i = 0; i < (rutas ?? []).length; i += TAMANO_LOTE) {
+    const { error } = await cliente.storage.from(bucket).remove(rutas.slice(i, i + TAMANO_LOTE));
+    if (error) return { error };
+  }
+  return {};
+};
+
+// Elimina el viaje solo para el usuario (debe tenerlo archivado): deja de aparecerle, pero los demás lo conservan.
+// Cuando lo eliminan todos los miembros que siguen en él, el último lo borra de verdad: eliminar_viaje no cambia nada
+// y devuelve las rutas de sus archivos, que se borran de Storage con el token del usuario; solo entonces
+// borrar_viaje borra el viaje y todo lo suyo en cascada. Si algo falla antes, la base de datos no ha cambiado
+// y se puede repetir. Las rutas no salen de este servicio
+// Devuelve { error } | { estado: no_existe | no_archivado | ok }
+const eliminar = async (cliente, usuarioId, viajeId) => {
+  const previo = await obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (!previo.viaje.archivado) return { estado: 'no_archivado' };
+
+  const { data, error } = await cliente.rpc('eliminar_viaje', { p_viaje_id: viajeId });
   if (error) return { error };
-  if (!data || data.length === 0) return { error: { code: 'sin_filas' } };
+  if (!data || data.estado !== 'ok') return { error: { code: 'no_permitido' } };
+  if (!data.ultimo) return { estado: 'ok' };
+
+  for (const [bucket, rutas] of [['documentos', data.documentos], ['fotos', data.fotos]]) {
+    const borrado = await borrarArchivos(cliente, bucket, rutas);
+    if (borrado.error) return { error: borrado.error };
+  }
+
+  const borrar = await cliente.rpc('borrar_viaje', { p_viaje_id: viajeId });
+  if (borrar.error) return { error: borrar.error };
+  // También es false si Storage no ha borrado algún archivo (una política puede impedirlo sin dar error)
+  if (borrar.data !== true) return { error: { code: 'sin_filas' } };
   return { estado: 'ok' };
 };
 
