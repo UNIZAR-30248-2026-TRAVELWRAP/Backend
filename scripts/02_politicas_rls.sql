@@ -21,7 +21,7 @@ AS $$
   );
 $$;
 
--- Un viaje solo admite contenido nuevo mientras está activo: al cerrarlo o archivarlo queda de solo lectura.
+-- Un viaje solo admite contenido nuevo mientras está activo: al finalizarlo queda de solo lectura.
 -- Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura
 CREATE OR REPLACE FUNCTION public.es_editable(p_viaje_id uuid)
 RETURNS boolean
@@ -31,6 +31,33 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.viajes
     WHERE id = p_viaje_id AND estado = 'activo'
+  );
+$$;
+
+-- Verdadera si el viaje está finalizado, quien llama lo tiene archivado (y no eliminado ni abandonado) y ningún otro
+-- miembro lo conserva (todos los demás lo han eliminado o abandonado). La usan eliminar_viaje, borrar_viaje y las
+-- políticas de Storage que dejan al último miembro borrar los archivos del viaje
+CREATE OR REPLACE FUNCTION public.es_ultimo_miembro(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.viajes v
+    JOIN public.miembros_viaje yo ON yo.viaje_id = v.id
+    WHERE v.id = p_viaje_id
+      AND v.estado = 'finalizado'
+      AND yo.usuario_id = auth.uid()
+      AND yo.archivado_en IS NOT NULL
+      AND yo.eliminado_en IS NULL
+      AND yo.abandonado_en IS NULL
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM public.miembros_viaje otro
+    WHERE otro.viaje_id = p_viaje_id
+      AND otro.usuario_id <> auth.uid()
+      AND otro.abandonado_en IS NULL
+      AND otro.eliminado_en IS NULL
   );
 $$;
 
@@ -129,16 +156,12 @@ DROP POLICY IF EXISTS viajes_insert ON public.viajes;
 CREATE POLICY viajes_insert ON public.viajes FOR INSERT TO authenticated
   WITH CHECK (creador_id = auth.uid());
 
--- Solo el creador modifica el viaje, y un viaje archivado ya no se puede modificar (solo lectura)
+-- Solo el creador modifica el viaje y solo mientras está activo (puede editarlo y finalizarlo). Un viaje terminado
+-- no se toca ni vuelve a activo. No hay política de DELETE: un viaje solo se borra con eliminar_viaje y borrar_viaje
 DROP POLICY IF EXISTS viajes_update ON public.viajes;
 CREATE POLICY viajes_update ON public.viajes FOR UPDATE TO authenticated
-  USING (public.es_creador(id) AND estado <> 'archivado') WITH CHECK (public.es_creador(id));
-
--- Solo el creador elimina el viaje, y solo desde la papelera de archivados.
--- Sus miembros (y el resto de tablas del viaje) se borran en cascada (ON DELETE CASCADE)
-DROP POLICY IF EXISTS viajes_delete ON public.viajes;
-CREATE POLICY viajes_delete ON public.viajes FOR DELETE TO authenticated
-  USING (public.es_creador(id) AND estado = 'archivado');
+  USING (public.es_creador(id) AND estado = 'activo')
+  WITH CHECK (public.es_creador(id) AND estado <> 'archivado');
 
 -- 5. POLÍTICAS MIEMBROS_VIAJE
 DROP POLICY IF EXISTS miembros_viaje_select ON public.miembros_viaje;
@@ -153,9 +176,9 @@ CREATE POLICY miembros_viaje_insert_creador ON public.miembros_viaje FOR INSERT 
     AND EXISTS (SELECT 1 FROM public.viajes v WHERE v.id = viaje_id AND v.creador_id = auth.uid())
   );
 
-DROP POLICY IF EXISTS miembros_viaje_update_propio ON public.miembros_viaje;
-CREATE POLICY miembros_viaje_update_propio ON public.miembros_viaje FOR UPDATE TO authenticated
-  USING (usuario_id = auth.uid()) WITH CHECK (usuario_id = auth.uid());
+-- Nadie modifica filas de miembros_viaje directamente (ni su rol ni sus columnas personales): se hace con las
+-- funciones SECURITY DEFINER (unirse_con_invitacion, archivar_viaje, desarchivar_viaje_propio, eliminar_viaje...)
+REVOKE UPDATE ON public.miembros_viaje FROM authenticated;
 
 -- 6. POLÍTICAS VOTACIONES
 DROP POLICY IF EXISTS votaciones_select ON public.votaciones;
@@ -324,6 +347,12 @@ CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE T
     AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)
   );
 
+-- El último miembro que elimina un viaje finalizado borra sus documentos (lo hace el backend con su propio token,
+-- justo antes de llamar a borrar_viaje). Se suma (OR) a la anterior, que exige un viaje activo
+DROP POLICY IF EXISTS documentos_storage_delete_ultimo ON storage.objects;
+CREATE POLICY documentos_storage_delete_ultimo ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'documentos' AND public.es_ultimo_miembro(public.viaje_de_ruta(name)));
+
 -- BUCKET AVATARES
 
 -- Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto,
@@ -399,7 +428,12 @@ CREATE POLICY fotos_storage_delete_huerfano ON storage.objects FOR DELETE TO aut
     AND NOT EXISTS (SELECT 1 FROM public.fotos f WHERE f.ruta = objects.name)
   );
 
--- 9. FUNCIÓN UNIRSE CON INVITACIÓN
+-- El último miembro que elimina un viaje finalizado borra sus fotos (igual que con los documentos)
+DROP POLICY IF EXISTS fotos_storage_delete_ultimo ON storage.objects;
+CREATE POLICY fotos_storage_delete_ultimo ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'fotos' AND public.es_ultimo_miembro(public.viaje_de_ruta(name)));
+
+-- 9.FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
@@ -820,26 +854,143 @@ WHERE v.destino IS NULL
   AND v.estado = 'activo'
   AND NOT EXISTS (SELECT 1 FROM public.votaciones vo WHERE vo.viaje_id = v.id AND vo.tipo = 'destino');
 
--- 16. FUNCIÓN DESARCHIVAR VIAJE
--- Devuelve un viaje archivado a activo. Hace falta una función SECURITY DEFINER porque la política viajes_update
--- no deja modificar viajes archivados (USING ... estado <> 'archivado'), así que un UPDATE normal nunca podría
--- desarchivarlo. Solo lo hace el creador; se borra la fecha de cierre porque el viaje vuelve a estar abierto.
--- Devuelve true si se ha desarchivado y false si el viaje no existe, no está archivado o quien llama no es el creador
-CREATE OR REPLACE FUNCTION public.desarchivar_viaje(p_viaje_id uuid)
+-- 16. ARCHIVAR, DESARCHIVAR Y ELIMINAR UN VIAJE POR USUARIO
+-- Son acciones personales sobre un viaje finalizado: lo que hace un miembro no cambia lo que ven los demás.
+-- Se guardan en su fila de miembros_viaje (archivado_en, eliminado_en), que nadie puede modificar directamente
+-- (REVOKE UPDATE de la sección 5), así que hacen falta funciones SECURITY DEFINER.
+-- Todas devuelven false (o un estado distinto de ok) sin cambiar nada si el viaje no existe, no está en la situación
+-- que se exige o quien llama no es un miembro que siga en el viaje
+
+-- Archiva el viaje para quien llama: solo si está finalizado y todavía no lo tenía archivado
+CREATE OR REPLACE FUNCTION public.archivar_viaje(p_viaje_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  UPDATE public.viajes
-  SET estado = 'activo', finalizado_en = NULL
-  WHERE id = p_viaje_id
-    AND estado = 'archivado'
-    AND public.es_creador(p_viaje_id);
+  UPDATE public.miembros_viaje m
+  SET archivado_en = now()
+  FROM public.viajes v
+  WHERE v.id = m.viaje_id
+    AND m.viaje_id = p_viaje_id
+    AND m.usuario_id = auth.uid()
+    AND m.abandonado_en IS NULL
+    AND m.eliminado_en IS NULL
+    AND m.archivado_en IS NULL
+    AND v.estado = 'finalizado';
   RETURN FOUND;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.desarchivar_viaje(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.desarchivar_viaje(uuid) TO authenticated;
+-- Desarchiva el viaje para quien llama. No toca el estado del viaje: sigue finalizado y vuelve a «Viajes anteriores»
+CREATE OR REPLACE FUNCTION public.desarchivar_viaje_propio(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.miembros_viaje
+  SET archivado_en = NULL
+  WHERE viaje_id = p_viaje_id
+    AND usuario_id = auth.uid()
+    AND abandonado_en IS NULL
+    AND eliminado_en IS NULL
+    AND archivado_en IS NOT NULL;
+  RETURN FOUND;
+END;
+$$;
+
+-- Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve:
+--   { "estado": "no_permitido" }  sin cambios
+--   { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan
+--   { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...] }  sin cambios todavía: es el último
+--     miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje.
+-- Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida
+CREATE OR REPLACE FUNCTION public.eliminar_viaje(p_viaje_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_documentos text[];
+  v_fotos text[];
+BEGIN
+  -- Bloquea el viaje: si dos últimos miembros eliminan a la vez, el segundo espera y ve el resultado del primero
+  PERFORM 1 FROM public.viajes WHERE id = p_viaje_id FOR UPDATE;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.miembros_viaje
+    WHERE viaje_id = p_viaje_id
+      AND usuario_id = auth.uid()
+      AND archivado_en IS NOT NULL
+      AND eliminado_en IS NULL
+      AND abandonado_en IS NULL
+  ) THEN
+    RETURN jsonb_build_object('estado', 'no_permitido');
+  END IF;
+
+  IF public.es_ultimo_miembro(p_viaje_id) THEN
+    SELECT coalesce(array_agg(name), '{}') INTO v_documentos
+    FROM storage.objects
+    WHERE bucket_id = 'documentos' AND public.viaje_de_ruta(name) = p_viaje_id;
+
+    SELECT coalesce(array_agg(name), '{}') INTO v_fotos
+    FROM storage.objects
+    WHERE bucket_id = 'fotos' AND public.viaje_de_ruta(name) = p_viaje_id;
+
+    RETURN jsonb_build_object(
+      'estado', 'ok', 'ultimo', true,
+      'documentos', to_jsonb(v_documentos), 'fotos', to_jsonb(v_fotos)
+    );
+  END IF;
+
+  UPDATE public.miembros_viaje
+  SET eliminado_en = now()
+  WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid();
+
+  RETURN jsonb_build_object('estado', 'ok', 'ultimo', false);
+END;
+$$;
+
+-- Borra de verdad el viaje y todo lo suyo (en cascada: miembros, gastos, documentos, fotos, votaciones, tareas...;
+-- los sellos no, son de cada usuario). Solo lo puede hacer el último miembro y solo cuando ya no queda ningún archivo
+-- suyo en Storage: Storage no da error cuando una política le impide borrar (devuelve la lista vacía), y sin esta
+-- comprobación un borrado rechazado dejaría archivos huérfanos sin viaje. Devuelve false si no borra nada
+CREATE OR REPLACE FUNCTION public.borrar_viaje(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM 1 FROM public.viajes WHERE id = p_viaje_id FOR UPDATE;
+
+  IF NOT public.es_ultimo_miembro(p_viaje_id) THEN
+    RETURN false;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM storage.objects
+    WHERE bucket_id IN ('documentos', 'fotos') AND public.viaje_de_ruta(name) = p_viaje_id
+  ) THEN
+    RETURN false;
+  END IF;
+
+  DELETE FROM public.viajes WHERE id = p_viaje_id;
+  RETURN FOUND;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.es_ultimo_miembro(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.es_ultimo_miembro(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.archivar_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.archivar_viaje(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.desarchivar_viaje_propio(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.desarchivar_viaje_propio(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.eliminar_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.eliminar_viaje(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.borrar_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.borrar_viaje(uuid) TO authenticated;

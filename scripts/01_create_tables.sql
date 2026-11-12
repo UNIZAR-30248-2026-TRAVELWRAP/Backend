@@ -76,11 +76,11 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   moneda char(3) NOT NULL DEFAULT 'EUR',
   -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
   presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
-  -- activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores».
-  -- archivado: solo lectura, aparece en «Viajes archivados»; es el único estado desde el que se puede eliminar.
-  -- El creador puede desarchivarlo (función desarchivar_viaje) y vuelve a activo
+  -- activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores»; no vuelve a activo.
+  -- archivado: sin uso desde MEJ-12 (archivar y eliminar son personales: ver archivado_en y eliminado_en
+  -- en miembros_viaje)
   estado public.estado_viaje NOT NULL DEFAULT 'activo',
-  -- Momento en que se cerró el viaje (al finalizarlo o archivarlo)
+  -- Momento en que el creador finalizó el viaje
   finalizado_en timestamptz,
   -- Token del enlace/QR de invitación: uno por viaje, permanente
   token_invitacion text NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
@@ -95,6 +95,10 @@ CREATE TABLE IF NOT EXISTS public.miembros_viaje (
   rol public.rol_miembro NOT NULL DEFAULT 'miembro',
   unido_en timestamptz NOT NULL DEFAULT now(),
   abandonado_en timestamptz,
+  -- Archivado y eliminado por este usuario (null = no). Son personales: los demás miembros siguen viendo el viaje.
+  -- Solo se cambian con las funciones archivar_viaje, desarchivar_viaje_propio y eliminar_viaje
+  archivado_en timestamptz,
+  eliminado_en timestamptz,
   PRIMARY KEY (viaje_id, usuario_id)
 );
 
