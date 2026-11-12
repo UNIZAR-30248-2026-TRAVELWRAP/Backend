@@ -125,4 +125,22 @@ const obtenerUrl = async (req, res) => {
   }
 };
 
-module.exports = { listar, subir, obtenerUrl, detectarTipo };
+const eliminar = async (req, res) => {
+  const { viajeId, documentoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(documentoId)) {
+    return responderError(res, 400, 'datos_invalidos', 'El identificador del documento no es válido');
+  }
+
+  try {
+    const resultado = await documentoService.eliminar(req.supabase, req.usuario.id, viajeId, documentoId);
+
+    if (resultado.error) return responderError(res, 502, 'error_documento', 'No se ha podido eliminar el documento');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido eliminar el documento');
+    return res.status(204).end();
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, subir, obtenerUrl, eliminar, detectarTipo };
