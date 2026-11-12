@@ -769,16 +769,103 @@ paths:
                   codigo: error_viaje
                   mensaje: No se ha podido eliminar el viaje
 
+  /viajes/{viajeId}/finalizar:
+    post:
+      tags:
+        - Viajes
+      summary: Finaliza un viaje sin archivarlo
+      description: |
+        Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `finalizado_en` (MEJ-12).
+        Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
+        Aparece en «Viajes anteriores» de «Mis viajes». Después el creador puede archivarlo con `/archivar`.
+        Solo lo puede hacer el creador del viaje. No se puede deshacer.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Viaje finalizado, con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: El usuario es miembro del viaje pero no su creador
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: no_creador
+                  mensaje: Solo el creador del viaje puede hacerlo
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje ya estaba finalizado o archivado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_finalizado
+                  mensaje: El viaje ya está finalizado
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido finalizar el viaje
+
   /viajes/{viajeId}/archivar:
     post:
       tags:
         - Viajes
-      summary: Finaliza y archiva un viaje
+      summary: Archiva un viaje
       description: |
-        Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
-        no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
-        Si el viaje estaba activo, se guarda el momento del cierre en `finalizado_en`.
-        Solo lo puede hacer el creador del viaje. No se puede deshacer.
+        Pasa el viaje a estado `archivado` (PB-12). Sigue siendo un historial de solo lectura:
+        no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Viajes anteriores» y aparece en «Viajes archivados».
+        Desde la app se archiva un viaje ya finalizado (`/finalizar`); si estaba activo, se guarda el momento del cierre en `finalizado_en`.
+        Solo lo puede hacer el creador del viaje.
       security:
         - bearerAuth: []
       parameters:
