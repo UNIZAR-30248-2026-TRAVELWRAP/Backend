@@ -580,3 +580,199 @@ describe('gastoService.liquidacion', () => {
     assert.deepEqual(await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID), { error });
   });
 });
+
+// Detalle de un gasto: cada reparto con el nombre de su miembro, y quien ya abandonó el viaje sin nombre
+describe('gastoService.detalle', () => {
+  afterEach(() => mock.restoreAll());
+
+  // Solo Adriana sigue en el viaje: Berta ya lo abandonó
+  const conMiembros = (miembros = [{ usuario_id: ADRIANA, nombre: 'Adriana' }]) =>
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, miembros } }));
+
+  it('devuelve el gasto con el nombre y la parte de cada miembro', async () => {
+    conMiembros();
+    const cliente = clienteFalso({ respuestas: [{ data: FILA, error: null }] });
+
+    const resultado = await gastoService.detalle(cliente, ADRIANA, VIAJE_ID, GASTO_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.gasto.importe, 10);
+    assert.equal(resultado.gasto.pagado_por, ADRIANA);
+    assert.deepEqual(resultado.gasto.repartos, [
+      { usuario_id: ADRIANA, nombre: 'Adriana', abandonado: false, importe: 3.34 },
+      { usuario_id: BERTA, nombre: null, abandonado: true, importe: 3.33 },
+    ]);
+  });
+
+  it('busca el gasto dentro del viaje indicado', async () => {
+    conMiembros();
+    const cliente = clienteFalso({ respuestas: [{ data: FILA, error: null }] });
+
+    await gastoService.detalle(cliente, ADRIANA, VIAJE_ID, GASTO_ID);
+
+    assert.deepEqual(operacion(cliente.consultas[0], 'eq'), [['eq', 'id', GASTO_ID], ['eq', 'viaje_id', VIAJE_ID]]);
+  });
+
+  it('devuelve no_existe sin buscar el gasto si el viaje no existe o no se es miembro', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.detalle(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'no_existe' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve no_encontrado si el gasto no está en el viaje', async () => {
+    conMiembros();
+    const cliente = clienteFalso({ respuestas: [{ data: null, error: null }] });
+
+    assert.deepEqual(await gastoService.detalle(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'no_encontrado' });
+  });
+
+  it('devuelve el error si falla la comprobación del viaje', async () => {
+    const error = { code: 'PGRST301' };
+    mock.method(viajeService, 'obtener', async () => ({ error }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.detalle(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { error });
+  });
+
+  it('devuelve el error si falla la lectura del gasto', async () => {
+    conMiembros();
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [{ data: null, error }] });
+
+    assert.deepEqual(await gastoService.detalle(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { error });
+  });
+});
+
+// Edición: la función editar_gasto hace el trabajo; el servicio le pasa los datos y lee el gasto editado
+describe('gastoService.editar', () => {
+  afterEach(() => mock.restoreAll());
+
+  const DATOS_EDICION = {
+    concepto: 'Cena corregida',
+    importe: 10,
+    categoria: 'comida',
+    pagado_por: ADRIANA,
+    fecha: '2027-05-12',
+    participantes: [ADRIANA, BERTA],
+  };
+
+  it('llama a editar_gasto con el gasto, el viaje y los datos, y devuelve el gasto editado', async () => {
+    const cliente = clienteFalso({
+      respuestaRpc: { data: { estado: 'ok', gasto_id: GASTO_ID }, error: null },
+      respuestas: [{ data: FILA, error: null }],
+    });
+
+    const resultado = await gastoService.editar(cliente, VIAJE_ID, GASTO_ID, DATOS_EDICION);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.gasto.id, GASTO_ID);
+    assert.deepEqual(cliente.llamadasRpc, [[
+      'editar_gasto',
+      {
+        p_gasto_id: GASTO_ID,
+        p_viaje_id: VIAJE_ID,
+        p_concepto: 'Cena corregida',
+        p_importe: 10,
+        p_categoria: 'comida',
+        p_pagado_por: ADRIANA,
+        p_fecha: '2027-05-12',
+        p_participantes: [ADRIANA, BERTA],
+      },
+    ]]);
+  });
+
+  // Rechazos de la función: no se lee nada más
+  for (const estado of ['no_existe', 'no_activo', 'no_encontrado', 'sin_permiso', 'no_miembro']) {
+    it(`devuelve ${estado} sin leer el gasto cuando la función lo rechaza`, async () => {
+      const cliente = clienteFalso({ respuestaRpc: { data: { estado }, error: null } });
+
+      assert.deepEqual(await gastoService.editar(cliente, VIAJE_ID, GASTO_ID, DATOS_EDICION), { estado });
+      assert.equal(cliente.consultas.length, 0);
+    });
+  }
+
+  it('devuelve el error de la función', async () => {
+    const error = { code: '23514' };
+    const cliente = clienteFalso({ respuestaRpc: { data: null, error } });
+
+    assert.deepEqual(await gastoService.editar(cliente, VIAJE_ID, GASTO_ID, DATOS_EDICION), { error });
+  });
+
+  it('trata una respuesta vacía de la función como un error', async () => {
+    const cliente = clienteFalso({ respuestaRpc: { data: null, error: null } });
+
+    assert.deepEqual(await gastoService.editar(cliente, VIAJE_ID, GASTO_ID, DATOS_EDICION), {
+      error: { code: 'respuesta_vacia' },
+    });
+  });
+
+  it('trata como error que el gasto editado no se encuentre al leerlo', async () => {
+    const cliente = clienteFalso({
+      respuestaRpc: { data: { estado: 'ok', gasto_id: GASTO_ID }, error: null },
+      respuestas: [{ data: null, error: null }],
+    });
+
+    assert.deepEqual(await gastoService.editar(cliente, VIAJE_ID, GASTO_ID, DATOS_EDICION), {
+      error: { code: 'sin_filas' },
+    });
+  });
+});
+
+// Borrado: la política RLS filtra los gastos que quien pide no puede borrar, así que no aparecen en el resultado
+describe('gastoService.eliminar', () => {
+  afterEach(() => mock.restoreAll());
+
+  const conViaje = (estado = 'activo') =>
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado, miembros: [] } }));
+
+  it('borra el gasto del viaje y devuelve ok', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [{ data: [{ id: GASTO_ID }], error: null }] });
+
+    assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'ok' });
+    const [consulta] = cliente.consultas;
+    assert.equal(consulta.tabla, 'gastos');
+    assert.deepEqual(consulta.operaciones.map(([metodo]) => metodo), ['delete', 'eq', 'eq', 'select']);
+    assert.deepEqual(operacion(consulta, 'eq'), [['eq', 'id', GASTO_ID], ['eq', 'viaje_id', VIAJE_ID]]);
+  });
+
+  it('devuelve no_encontrado si no se borra ninguna fila (no existe o no tiene permiso)', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [{ data: [], error: null }] });
+
+    assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'no_encontrado' });
+  });
+
+  it('trata una respuesta sin filas como no_encontrado', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [{ data: null, error: null }] });
+
+    assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'no_encontrado' });
+  });
+
+  it('en un viaje archivado devuelve no_activo sin borrar nada', async () => {
+    conViaje('archivado');
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'no_activo' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve no_existe sin borrar nada si el viaje no existe o no se es miembro', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { estado: 'no_existe' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('devuelve el error si falla el borrado', async () => {
+    conViaje();
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [{ data: null, error }] });
+
+    assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { error });
+  });
+});
