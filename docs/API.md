@@ -28,6 +28,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | DELETE | [`/viajes/{viajeId}`](#delete-viajesviajeid) | Elimina un viaje archivado | Token de sesión |
 | POST | [`/viajes/{viajeId}/finalizar`](#post-viajesviajeidfinalizar) | Finaliza un viaje sin archivarlo | Token de sesión |
 | POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Archiva un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/desarchivar`](#post-viajesviajeiddesarchivar) | Desarchiva un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 | GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
@@ -866,6 +867,86 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido archivar el viaje |
+
+### POST /viajes/{viajeId}/desarchivar
+
+**Desarchiva un viaje**
+
+Devuelve un viaje `archivado` a estado `activo` (PB-51): vuelve a «Mis viajes», se puede editar de nuevo
+y se borra `finalizado_en`. Solo lo puede hacer el creador del viaje.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Viaje desarchivado, con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — El usuario es miembro del viaje pero no su creador
+
+| Código de error | Mensaje |
+| --- | --- |
+| `no_creador` | Solo el creador del viaje puede hacerlo |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje no está archivado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_archivado` | El viaje no está archivado |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido desarchivar el viaje |
 
 ## Invitaciones
 

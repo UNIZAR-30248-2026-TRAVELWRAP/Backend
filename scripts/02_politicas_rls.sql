@@ -819,3 +819,27 @@ FROM public.viajes v
 WHERE v.destino IS NULL
   AND v.estado = 'activo'
   AND NOT EXISTS (SELECT 1 FROM public.votaciones vo WHERE vo.viaje_id = v.id AND vo.tipo = 'destino');
+
+-- 16. FUNCIÓN DESARCHIVAR VIAJE
+-- Devuelve un viaje archivado a activo. Hace falta una función SECURITY DEFINER porque la política viajes_update
+-- no deja modificar viajes archivados (USING ... estado <> 'archivado'), así que un UPDATE normal nunca podría
+-- desarchivarlo. Solo lo hace el creador; se borra la fecha de cierre porque el viaje vuelve a estar abierto.
+-- Devuelve true si se ha desarchivado y false si el viaje no existe, no está archivado o quien llama no es el creador
+CREATE OR REPLACE FUNCTION public.desarchivar_viaje(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.viajes
+  SET estado = 'activo', finalizado_en = NULL
+  WHERE id = p_viaje_id
+    AND estado = 'archivado'
+    AND public.es_creador(p_viaje_id);
+  RETURN FOUND;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.desarchivar_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.desarchivar_viaje(uuid) TO authenticated;
