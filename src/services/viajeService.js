@@ -91,7 +91,17 @@ const editar = async (cliente, usuarioId, viajeId, cambios) => {
   return actualizar(cliente, usuarioId, viajeId, cambios);
 };
 
-// Finaliza el viaje y lo pasa al historial de solo lectura
+// Finaliza el viaje: queda de solo lectura en «Viajes anteriores». Después se puede archivar
+// Devuelve { error } | { estado: no_existe | no_creador | ya_finalizado | ok (con viaje) }
+const finalizar = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.estado !== 'activo') return { estado: 'ya_finalizado' };
+
+  return actualizar(cliente, usuarioId, viajeId, { estado: 'finalizado', finalizado_en: new Date().toISOString() });
+};
+
+// Archiva el viaje: pasa a «Viajes archivados», también de solo lectura (único estado desde el que se elimina)
 // Devuelve { error } | { estado: no_existe | no_creador | ya_archivado | ok (con viaje) }
 const archivar = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
@@ -119,4 +129,4 @@ const eliminar = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok' };
 };
 
-module.exports = { listar, obtener, crear, editar, archivar, eliminar };
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, eliminar };

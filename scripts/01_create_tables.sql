@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   moneda char(3) NOT NULL DEFAULT 'EUR',
   -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
   presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
-  -- activo: se puede editar. archivado: solo lectura; es el único estado desde el que se puede eliminar
+  -- activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores».
+  -- archivado: solo lectura, aparece en «Viajes archivados»; es el único estado desde el que se puede eliminar
   estado public.estado_viaje NOT NULL DEFAULT 'activo',
   -- Momento en que se cerró el viaje (al finalizarlo o archivarlo)
   finalizado_en timestamptz,

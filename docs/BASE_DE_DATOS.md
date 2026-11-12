@@ -90,7 +90,7 @@ erDiagram
 | `imagen_portada_url` | `text` | No |  |  |  |
 | `moneda` | `char(3)` | Sí |  | `'EUR'` |  |
 | `presupuesto` | `numeric(12,2)` | Sí |  |  | Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después<br>Debe cumplir: `presupuesto >= 0` |
-| `estado` | `estado_viaje` | Sí |  | `'activo'` | activo: se puede editar. archivado: solo lectura; es el único estado desde el que se puede eliminar |
+| `estado` | `estado_viaje` | Sí |  | `'activo'` | activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores». archivado: solo lectura, aparece en «Viajes archivados»; es el único estado desde el que se puede eliminar |
 | `finalizado_en` | `timestamptz` | No |  |  | Momento en que se cerró el viaje (al finalizarlo o archivarlo) |
 | `token_invitacion` | `text` | Sí | UNIQUE | `replace(gen_random_uuid()::text, '-', '')` | Token del enlace/QR de invitación: uno por viaje, permanente |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
