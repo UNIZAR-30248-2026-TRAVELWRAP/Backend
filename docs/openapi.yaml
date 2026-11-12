@@ -403,8 +403,11 @@ paths:
       summary: Lista los viajes del usuario
       description: |
         Devuelve los viajes de los que el usuario es miembro activo, del más reciente al más antiguo, con sus miembros.
+        No incluye los que el usuario ha eliminado (para él ya no existen). Por defecto tampoco los que ha archivado:
+        se piden con `archivados=true`. El archivado es personal (MEJ-12), no cambia lo que ven los demás miembros.
         La PWA los reparte en «Mis viajes»: los activos con destino (tarjeta azul), los activos sin destino
-        (`pendiente_destino: true`, tarjeta verde) y, por estado, los finalizados y archivados (viajes anteriores).
+        (`pendiente_destino: true`, tarjeta verde) y los finalizados no archivados (viajes anteriores).
+        Los archivados se piden aparte, para «Viajes archivados».
       security:
         - bearerAuth: []
       parameters:
@@ -414,7 +417,16 @@ paths:
           description: Devuelve solo los viajes en ese estado
           schema:
             type: string
-            enum: [activo, finalizado, archivado]
+            enum: [activo, finalizado]
+        - name: archivados
+          in: query
+          required: false
+          description: |
+            Por defecto (`false`) devuelve solo los viajes que el usuario no ha archivado. Con `true`, solo los que
+            ha archivado
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Viajes del usuario (lista vacía si no tiene ninguno)
@@ -423,7 +435,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListaViajes'
         '400':
-          description: El filtro `estado` no es válido
+          description: El filtro `estado` o `archivados` no es válido (`estado=archivado` ya no existe)
           content:
             application/json:
               schema:
@@ -431,7 +443,7 @@ paths:
               example:
                 error:
                   codigo: datos_invalidos
-                  mensaje: El estado debe ser activo, finalizado o archivado
+                  mensaje: El estado debe ser activo o finalizado
         '401':
           $ref: '#/components/responses/SinSesion'
         '500':
@@ -587,7 +599,7 @@ paths:
         Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
         Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
         los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
-        Un viaje archivado es de solo lectura y no se puede editar.
+        Un viaje finalizado es de solo lectura y no se puede editar.
       security:
         - bearerAuth: []
       parameters:
@@ -662,7 +674,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está finalizado o archivado y ya no se puede modificar
+          description: El viaje está finalizado y ya no se puede modificar
           content:
             application/json:
               schema:
@@ -690,12 +702,15 @@ paths:
     delete:
       tags:
         - Viajes
-      summary: Elimina un viaje archivado
+      summary: Elimina un viaje archivado, solo para ti
       description: |
-        Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros, votaciones, actividades,
-        gastos y los datos de sus documentos), que se elimina en cascada (PB-13). No se puede deshacer.
-        Los archivos de la cartera siguen en el bucket `documentos` de Supabase Storage.
-        Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
+        Elimina el viaje **solo para quien lo pide** (MEJ-12): deja de aparecerle en su cuenta (el detalle responde 404)
+        y no se puede recuperar desde la app, pero los demás miembros lo siguen viendo igual. Lo puede hacer
+        cualquier miembro, y solo con un viaje que tenga archivado: la PWA lo ofrece desde «Viajes archivados».
+        Cuando lo han eliminado todos los miembros que siguen en el viaje, el último lo borra de verdad: se borran sus
+        documentos y fotos de Supabase Storage y después el viaje con todo lo asociado (miembros, votaciones,
+        actividades, gastos...), en cascada. Los sellos de cada usuario se conservan. La respuesta es la misma en
+        ambos casos y no incluye rutas de archivos. Si falla el borrado definitivo, no cambia nada y se puede repetir.
       security:
         - bearerAuth: []
       parameters:
@@ -722,18 +737,8 @@ paths:
                   mensaje: El identificador del viaje no es válido
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede hacerlo
         '404':
-          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          description: El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
           content:
             application/json:
               schema:
@@ -743,7 +748,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje no está archivado
+          description: El usuario no tiene archivado el viaje
           content:
             application/json:
               schema:
@@ -777,7 +782,8 @@ paths:
       description: |
         Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `finalizado_en` (MEJ-12).
         Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
-        Aparece en «Viajes anteriores» de «Mis viajes». Después el creador puede archivarlo con `/archivar`.
+        Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
+        archivarlo para sí mismo con `/archivar`.
         Solo lo puede hacer el creador del viaje. No se puede deshacer.
       security:
         - bearerAuth: []
@@ -830,7 +836,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje ya estaba finalizado o archivado
+          description: El viaje ya estaba finalizado
           content:
             application/json:
               schema:
@@ -860,12 +866,12 @@ paths:
     post:
       tags:
         - Viajes
-      summary: Archiva un viaje
+      summary: Archiva un viaje, solo para ti
       description: |
-        Pasa el viaje a estado `archivado` (PB-12). Sigue siendo un historial de solo lectura:
-        no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Viajes anteriores» y aparece en «Viajes archivados».
-        Desde la app se archiva un viaje ya finalizado (`/finalizar`); si estaba activo, se guarda el momento del cierre en `finalizado_en`.
-        Solo lo puede hacer el creador del viaje.
+        Archiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes anteriores» y aparece en sus
+        «Viajes archivados» (`archivado: true` en la respuesta). No cambia el estado del viaje, que sigue
+        `finalizado`, ni lo que ven los demás miembros. Lo puede hacer cualquier miembro y solo con un viaje
+        finalizado (`/finalizar`).
       security:
         - bearerAuth: []
       parameters:
@@ -896,18 +902,8 @@ paths:
                   mensaje: El identificador del viaje no es válido
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede hacerlo
         '404':
-          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          description: El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
           content:
             application/json:
               schema:
@@ -917,15 +913,22 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje ya estaba archivado
+          description: El viaje no está finalizado (`viaje_no_finalizado`) o el usuario ya lo tenía archivado (`viaje_archivado`)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: viaje_archivado
-                  mensaje: El viaje ya está archivado
+              examples:
+                noFinalizado:
+                  value:
+                    error:
+                      codigo: viaje_no_finalizado
+                      mensaje: Solo se pueden archivar viajes finalizados
+                yaArchivado:
+                  value:
+                    error:
+                      codigo: viaje_archivado
+                      mensaje: El viaje ya está archivado
         '500':
           description: Error interno del servidor
           content:
@@ -949,8 +952,9 @@ paths:
         - Viajes
       summary: Desarchiva un viaje
       description: |
-        Devuelve un viaje `archivado` a estado `activo` (PB-51): vuelve a «Mis viajes», se puede editar de nuevo
-        y se borra `finalizado_en`. Solo lo puede hacer el creador del viaje.
+        Desarchiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes archivados» y vuelve a sus
+        «Viajes anteriores» (`archivado: false` en la respuesta). No cambia el estado del viaje, que sigue
+        `finalizado` y de solo lectura: nunca vuelve a «En curso». Lo puede hacer cualquier miembro.
       security:
         - bearerAuth: []
       parameters:
@@ -981,18 +985,8 @@ paths:
                   mensaje: El identificador del viaje no es válido
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede hacerlo
         '404':
-          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          description: El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
           content:
             application/json:
               schema:
@@ -1002,7 +996,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje no está archivado
+          description: El usuario no tiene archivado el viaje
           content:
             application/json:
               schema:
@@ -1136,7 +1130,7 @@ paths:
                   codigo: invitacion_no_encontrada
                   mensaje: El enlace de invitación no es válido
         '409':
-          description: El viaje está finalizado o archivado y ya no admite nuevos miembros
+          description: El viaje está finalizado y ya no admite nuevos miembros
           content:
             application/json:
               schema:
@@ -1278,7 +1272,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -1683,7 +1677,7 @@ paths:
         hora de inicio (las que empiezan a la misma hora, por su posición `orden`). Las que no tienen hora van al final
         del día, por su posición, salvo las que el usuario ha colocado entre las demás con PUT /viajes/{viajeId}/actividades/orden,
         que aparecen en el lugar donde las puso. Con `fecha` solo devuelve las de ese día.
-        Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+        Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje finalizado (solo lectura).
 
         Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
         dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
@@ -1793,7 +1787,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -1973,7 +1967,7 @@ paths:
                       codigo: actividad_no_encontrada
                       mensaje: La actividad no existe en este viaje
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2039,7 +2033,7 @@ paths:
                       codigo: actividad_no_encontrada
                       mensaje: La actividad no existe en este viaje
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2069,7 +2063,7 @@ paths:
       description: |
         Devuelve los gastos del viaje del más reciente al más antiguo (por fecha y, en el mismo día, por la hora a
         la que se registraron), cada uno con la parte de cada participante, y el total gastado, sumado en céntimos.
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -2176,7 +2170,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2208,7 +2202,7 @@ paths:
         positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
         siempre está al día y la suma de todos los saldos es 0.
         Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
-        sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+        sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados.
       security:
         - bearerAuth: []
       parameters:
@@ -2266,7 +2260,7 @@ paths:
         mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
         Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
         viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
-        Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados, porque solo lee.
+        Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados, porque solo lee.
       security:
         - bearerAuth: []
       parameters:
@@ -2321,7 +2315,7 @@ paths:
       description: |
         Devuelve los datos de los documentos de la cartera compartida del viaje (billetes, reservas, seguros...),
         del más reciente al más antiguo. No incluye el contenido de los archivos.
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -2435,7 +2429,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2466,7 +2460,7 @@ paths:
         Devuelve las fotos de la galería compartida del viaje, de la más reciente a la más antigua. Cada foto incluye
         `url`, una URL firmada de Supabase Storage para verla que caduca a la hora de generarla (1 hora): pasado ese
         tiempo hay que volver a pedir el listado.
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -2579,7 +2573,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2609,7 +2603,7 @@ paths:
       description: |
         Calcula los datos que muestra el resumen de fin de viaje: los días del viaje, lo gastado, el gasto más alto, la
         actividad más votada y el «alma del grupo». Los datos se calculan al pedirlos, así que siempre están al día.
-        Solo lo pueden pedir los miembros del viaje, y funciona con el viaje activo, finalizado o archivado porque solo
+        Solo lo pueden pedir los miembros del viaje, y funciona con el viaje activo o finalizado porque solo
         lee. Las fotos y el balance que también aparecen en la pantalla se piden con `GET /viajes/{viajeId}/fotos` y
         `GET /viajes/{viajeId}/gastos/balance`.
 
@@ -2676,7 +2670,7 @@ paths:
       description: |
         Toma las actividades del día indicado que tienen coordenadas, en el orden de la agenda, y devuelve la ruta a
         pie por calles que las une junto con distancia, duración y un orden más corto para visitarlas. Solo lo pueden
-        pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+        pedir los miembros del viaje, y también funciona con un viaje finalizado (solo lectura).
 
         La ruta la calcula un servicio externo basado en OSRM con datos de OpenStreetMap (por defecto el servidor de rutas
         a pie de OpenStreetMap Alemania; se cambia con la variable de entorno `RUTAS_URL`). Para respetar su política de
@@ -2858,7 +2852,7 @@ paths:
                       codigo: documento_no_encontrado
                       mensaje: El documento no existe en este viaje
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2894,7 +2888,7 @@ paths:
         Con `descargar=true` el enlace hace que el navegador guarde el archivo con el nombre del documento.
         No devuelve la ruta interna del archivo en el bucket.
 
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -3446,7 +3440,10 @@ components:
           example: 850
         estado:
           type: string
-          enum: [activo, finalizado, archivado]
+          enum: [activo, finalizado]
+          description: |
+            activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar
+            son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario)
           example: activo
         creado_en:
           type: string
@@ -3487,6 +3484,10 @@ components:
               enum: [creador, miembro]
               description: Rol del usuario que hace la petición en este viaje
               example: creador
+            archivado:
+              type: boolean
+              description: true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado
+              example: false
             miembros:
               type: array
               description: Miembros activos del viaje
