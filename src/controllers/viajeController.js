@@ -122,6 +122,7 @@ const ERRORES_GESTION = {
   ya_finalizado: [409, 'viaje_finalizado', 'El viaje ya está finalizado'],
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
+  no_estaba_archivado: [409, 'viaje_no_archivado', 'El viaje no está archivado'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -245,6 +246,21 @@ const archivar = async (req, res) => {
   }
 };
 
+const desarchivar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  try {
+    const resultado = await viajeService.desarchivar(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido desarchivar el viaje');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido desarchivar el viaje');
+    return res.status(200).json(resultado.viaje);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const eliminar = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
@@ -260,4 +276,4 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, eliminar };
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar };

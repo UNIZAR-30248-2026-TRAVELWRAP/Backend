@@ -116,6 +116,23 @@ const archivar = async (cliente, usuarioId, viajeId) => {
   return actualizar(cliente, usuarioId, viajeId, cambios);
 };
 
+// Devuelve el viaje archivado a activo. Un UPDATE normal no puede (la política viajes_update rechaza los
+// archivados), por eso se usa la función SQL desarchivar_viaje
+// Devuelve { error } | { estado: no_existe | no_creador | no_estaba_archivado | ok (con viaje) }
+const desarchivar = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.estado !== 'archivado') return { estado: 'no_estaba_archivado' };
+
+  const { data, error } = await cliente.rpc('desarchivar_viaje', { p_viaje_id: viajeId });
+  if (error) return { error };
+  if (data !== true) return { error: { code: 'sin_filas' } };
+
+  const resultado = await obtener(cliente, usuarioId, viajeId);
+  if (resultado.error || !resultado.viaje) return { error: resultado.error ?? { code: 'sin_filas' } };
+  return { estado: 'ok', viaje: resultado.viaje };
+};
+
 // Borra el viaje para todos sus miembros. Lo demás (miembros, gastos...) se borra en cascada
 // Devuelve { error } | { estado: no_existe | no_creador | no_archivado | ok }
 const eliminar = async (cliente, usuarioId, viajeId) => {
@@ -129,4 +146,4 @@ const eliminar = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok' };
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, eliminar };
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar };
