@@ -197,8 +197,8 @@ describe('votacionService.votar', () => {
     assert.equal(cliente.consultas.length, 3);
   });
 
-  it('no deja votar en un viaje archivado', async () => {
-    const cliente = clienteFalso([viaje({ estado: 'archivado' }), ok(votacion())]);
+  it('no deja votar en un viaje finalizado', async () => {
+    const cliente = clienteFalso([viaje({ estado: 'finalizado' }), ok(votacion())]);
     assert.deepEqual(await votacionService.votar(cliente, USUARIO, VIAJE_ID, VOTACION_ID, LISBOA), { estado: 'no_activo' });
   });
 

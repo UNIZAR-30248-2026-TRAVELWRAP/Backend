@@ -23,8 +23,8 @@ const crearRes = () => ({
   },
 });
 
-const llamar = async (accion, { viajeId = VIAJE_ID, body } = {}) => {
-  const req = { params: { viajeId }, body, usuario: USUARIO, supabase: {} };
+const llamar = async (accion, { viajeId = VIAJE_ID, body, query = {} } = {}) => {
+  const req = { params: { viajeId }, query, body, usuario: USUARIO, supabase: {} };
   const res = crearRes();
   await viajeController[accion](req, res);
   return res;
@@ -39,7 +39,7 @@ describe('PATCH /viajes/:viajeId (editar)', () => {
     const editar = simular('editar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, nombre: 'Roma 2028' } }));
 
     const res = await llamar('editar', {
-      body: { nombre: '  Roma 2028 ', presupuesto: 950, fecha_inicio: '', estado: 'archivado', id: 'otro' },
+      body: { nombre: '  Roma 2028 ', presupuesto: 950, fecha_inicio: '', estado: 'finalizado', id: 'otro' },
     });
 
     assert.equal(res.codigo, 200);
@@ -53,7 +53,7 @@ describe('PATCH /viajes/:viajeId (editar)', () => {
   const invalidos = [
     ['sin datos', {}, 'Indica al menos un dato del viaje que cambiar'],
     ['sin cuerpo', undefined, 'Indica al menos un dato del viaje que cambiar'],
-    ['solo campos desconocidos', { estado: 'archivado' }, 'Indica al menos un dato del viaje que cambiar'],
+    ['solo campos desconocidos', { estado: 'finalizado' }, 'Indica al menos un dato del viaje que cambiar'],
     ['nombre vacío', { nombre: '   ' }, 'El nombre es obligatorio y tiene un máximo de 100 caracteres'],
     ['presupuesto negativo', { presupuesto: -1 }, 'El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999'],
     ['presupuesto como texto', { presupuesto: '900' }, 'El presupuesto es obligatorio y debe ser un número entre 0 y 9999999999'],
@@ -118,6 +118,52 @@ describe('PATCH /viajes/:viajeId (editar)', () => {
   });
 });
 
+describe('GET /viajes (listar)', () => {
+  it('por defecto pide los viajes no archivados, sin filtrar por estado', async () => {
+    const listar = simular('listar', async () => ({ viajes: [{ id: VIAJE_ID }] }));
+
+    const res = await llamar('listar');
+
+    assert.equal(res.codigo, 200);
+    assert.deepEqual(res.cuerpo, { viajes: [{ id: VIAJE_ID }] });
+    assert.deepEqual(listar.mock.calls[0].arguments.slice(1), [USUARIO.id, { estado: undefined, archivados: false }]);
+  });
+
+  it('con archivados=true pide solo los archivados del usuario y admite filtrar por estado', async () => {
+    const listar = simular('listar', async () => ({ viajes: [] }));
+
+    await llamar('listar', { query: { archivados: 'true' } });
+    await llamar('listar', { query: { estado: 'finalizado', archivados: 'false' } });
+
+    assert.deepEqual(listar.mock.calls[0].arguments[2], { estado: undefined, archivados: true });
+    assert.deepEqual(listar.mock.calls[1].arguments[2], { estado: 'finalizado', archivados: false });
+  });
+
+  it('rechaza con 400 el estado archivado (ya no existe) y los valores no válidos, sin llamar al servicio', async () => {
+    const listar = simular('listar', async () => ({ viajes: [] }));
+
+    const archivado = await llamar('listar', { query: { estado: 'archivado' } });
+    assert.equal(archivado.codigo, 400);
+    assert.equal(archivado.cuerpo.error.mensaje, 'El estado debe ser activo o finalizado');
+
+    const archivados = await llamar('listar', { query: { archivados: 'quizas' } });
+    assert.equal(archivados.codigo, 400);
+    assert.equal(archivados.cuerpo.error.codigo, 'datos_invalidos');
+    assert.equal(listar.mock.callCount(), 0);
+  });
+
+  it('responde 502 si falla Supabase y 500 si algo revienta', async () => {
+    simular('listar', async () => ({ error: { code: 'PGRST000' } }));
+    assert.equal((await llamar('listar')).codigo, 502);
+
+    mock.restoreAll();
+    simular('listar', async () => {
+      throw new Error('boom');
+    });
+    assert.equal((await llamar('listar')).codigo, 500);
+  });
+});
+
 describe('POST /viajes/:viajeId/finalizar', () => {
   it('devuelve el viaje finalizado', async () => {
     const finalizar = simular('finalizar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
@@ -155,54 +201,75 @@ describe('POST /viajes/:viajeId/finalizar', () => {
 });
 
 describe('POST /viajes/:viajeId/archivar', () => {
-  it('devuelve el viaje archivado', async () => {
-    const archivar = simular('archivar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, estado: 'archivado' } }));
+  it('devuelve el viaje finalizado para el usuario, sea o no el creador', async () => {
+    const archivar = simular('archivar', async () => ({
+      estado: 'ok',
+      viaje: { id: VIAJE_ID, estado: 'finalizado', rol: 'miembro', archivado: true },
+    }));
 
     const res = await llamar('archivar');
 
     assert.equal(res.codigo, 200);
-    assert.equal(res.cuerpo.estado, 'archivado');
+    assert.equal(res.cuerpo.archivado, true);
+    assert.equal(res.cuerpo.estado, 'finalizado');
     assert.deepEqual(archivar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('responde 409 si ya estaba archivado y 403 si no es el creador', async () => {
+  it('responde 409 viaje_no_finalizado si el viaje sigue activo', async () => {
+    simular('archivar', async () => ({ estado: 'no_finalizado' }));
+
+    const res = await llamar('archivar');
+
+    assert.equal(res.codigo, 409);
+    assert.equal(res.cuerpo.error.codigo, 'viaje_no_finalizado');
+    assert.equal(res.cuerpo.error.mensaje, 'Solo se pueden archivar viajes finalizados');
+  });
+
+  it('responde 409 viaje_archivado si ya lo tenía archivado y 404 si no existe', async () => {
     simular('archivar', async () => ({ estado: 'ya_archivado' }));
     const yaArchivado = await llamar('archivar');
     assert.equal(yaArchivado.codigo, 409);
     assert.equal(yaArchivado.cuerpo.error.codigo, 'viaje_archivado');
 
     mock.restoreAll();
-    simular('archivar', async () => ({ estado: 'no_creador' }));
-    assert.equal((await llamar('archivar')).codigo, 403);
+    simular('archivar', async () => ({ estado: 'no_existe' }));
+    assert.equal((await llamar('archivar')).codigo, 404);
   });
 
-  it('rechaza un identificador inválido y responde 502 si falla Supabase', async () => {
+  it('rechaza un identificador inválido, responde 502 si falla Supabase y 500 si hay una excepción', async () => {
     assert.equal((await llamar('archivar', { viajeId: 'x' })).codigo, 400);
 
     simular('archivar', async () => ({ error: { code: 'PGRST000' } }));
     const res = await llamar('archivar');
     assert.equal(res.codigo, 502);
     assert.equal(res.cuerpo.error.mensaje, 'No se ha podido archivar el viaje');
+
+    mock.restoreAll();
+    simular('archivar', async () => {
+      throw new Error('fallo');
+    });
+    assert.equal((await llamar('archivar')).codigo, 500);
   });
 });
 
 describe('POST /viajes/:viajeId/desarchivar', () => {
-  it('devuelve el viaje desarchivado', async () => {
-    const desarchivar = simular('desarchivar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, estado: 'activo' } }));
+  it('devuelve el viaje desarchivado, que sigue finalizado, sea o no el creador', async () => {
+    const desarchivar = simular('desarchivar', async () => ({
+      estado: 'ok',
+      viaje: { id: VIAJE_ID, estado: 'finalizado', rol: 'miembro', archivado: false },
+    }));
 
     const res = await llamar('desarchivar');
 
     assert.equal(res.codigo, 200);
-    assert.equal(res.cuerpo.estado, 'activo');
+    assert.equal(res.cuerpo.archivado, false);
+    assert.equal(res.cuerpo.estado, 'finalizado');
     assert.deepEqual(desarchivar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('responde 403 si no es el creador y 404 si el viaje no existe', async () => {
-    simular('desarchivar', async () => ({ estado: 'no_creador' }));
-    assert.equal((await llamar('desarchivar')).codigo, 403);
-
-    mock.restoreAll();
+  it('responde 404 si el viaje no existe', async () => {
     simular('desarchivar', async () => ({ estado: 'no_existe' }));
+
     assert.equal((await llamar('desarchivar')).codigo, 404);
   });
 
@@ -233,13 +300,14 @@ describe('POST /viajes/:viajeId/desarchivar', () => {
 });
 
 describe('DELETE /viajes/:viajeId', () => {
-  it('responde 204 sin cuerpo al eliminar', async () => {
-    simular('eliminar', async () => ({ estado: 'ok' }));
+  it('responde 204 sin cuerpo al eliminar, sea o no el creador', async () => {
+    const eliminar = simular('eliminar', async () => ({ estado: 'ok' }));
 
     const res = await llamar('eliminar');
 
     assert.equal(res.codigo, 204);
     assert.equal(res.cuerpo, undefined);
+    assert.deepEqual(eliminar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
   it('responde 409 si el viaje no está archivado y 404 si no existe', async () => {
@@ -251,6 +319,25 @@ describe('DELETE /viajes/:viajeId', () => {
     mock.restoreAll();
     simular('eliminar', async () => ({ estado: 'no_existe' }));
     assert.equal((await llamar('eliminar')).codigo, 404);
+  });
+
+  it('responde 502 sin rutas de archivos si falla el borrado y 500 si hay una excepción', async () => {
+    simular('eliminar', async () => ({ error: { message: 'fallo', rutas: ['x/y.pdf'] } }));
+
+    const res = await llamar('eliminar');
+
+    assert.equal(res.codigo, 502);
+    assert.deepEqual(res.cuerpo, { error: { codigo: 'error_viaje', mensaje: 'No se ha podido eliminar el viaje' } });
+
+    mock.restoreAll();
+    simular('eliminar', async () => {
+      throw new Error('boom');
+    });
+    assert.equal((await llamar('eliminar')).codigo, 500);
+  });
+
+  it('rechaza un identificador que no es un UUID', async () => {
+    assert.equal((await llamar('eliminar', { viajeId: 'x' })).codigo, 400);
   });
 });
 

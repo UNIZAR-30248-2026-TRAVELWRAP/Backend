@@ -141,8 +141,8 @@ describe('documentoService.subir', () => {
     assert.equal(storage.subidas.length, 0);
   });
 
-  it('devuelve no_activo si el viaje está archivado o finalizado, sin subir nada', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'archivado' } }));
+  it('devuelve no_activo si el viaje está finalizado, sin subir nada', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'finalizado' } }));
     const { cliente, storage } = clienteFalso();
     assert.deepEqual(await documentoService.subir(cliente, USUARIO_ID, VIAJE_ID, DATOS), { estado: 'no_activo' });
     assert.equal(storage.subidas.length, 0);
@@ -191,8 +191,8 @@ describe('documentoService.listar', () => {
     assert.deepEqual(await documentoService.listar(cliente, USUARIO_ID, VIAJE_ID), { estado: 'ok', documentos: [] });
   });
 
-  it('lista también los documentos de un viaje archivado', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'archivado' } }));
+  it('lista también los documentos de un viaje finalizado', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'finalizado' } }));
     const { cliente } = clienteFalso({ respuesta: { data: [{ id: 'd1' }], error: null } });
     assert.equal((await documentoService.listar(cliente, USUARIO_ID, VIAJE_ID)).estado, 'ok');
   });
@@ -270,8 +270,8 @@ describe('documentoService.obtenerUrl', () => {
     assert.equal(storage.enlaces.length, 0);
   });
 
-  it('funciona con el viaje archivado o finalizado, porque solo lee', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'archivado' } }));
+  it('funciona con el viaje finalizado, porque solo lee', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
     const { cliente } = clienteFalso({ respuesta: { data: fila, error: null } });
     const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
     assert.equal(resultado.estado, 'ok');
@@ -363,8 +363,8 @@ describe('documentoService.eliminar', () => {
     assert.equal(storage.borrados.length, 0);
   });
 
-  it('devuelve no_activo con el viaje archivado o finalizado, sin borrar nada', async () => {
-    for (const estado of ['archivado', 'finalizado']) {
+  it('devuelve no_activo con el viaje finalizado, sin borrar nada', async () => {
+    for (const estado of ['finalizado']) {
       mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado } }));
       const { cliente, storage, consultas } = clienteFalso({ respuesta: borrada });
       assert.deepEqual(await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { estado: 'no_activo' });

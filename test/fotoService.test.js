@@ -152,8 +152,8 @@ describe('fotoService.subir', () => {
     assert.equal(storage.subidas.length, 0);
   });
 
-  it('devuelve no_activo si el viaje está archivado, sin subir nada', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'archivado' } }));
+  it('devuelve no_activo si el viaje está finalizado, sin subir nada', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'finalizado' } }));
     const { cliente, storage } = clienteFalso();
     assert.deepEqual(await fotoService.subir(cliente, USUARIO_ID, VIAJE_ID, DATOS), { estado: 'no_activo' });
     assert.equal(storage.subidas.length, 0);
@@ -225,7 +225,7 @@ describe('fotoService.listar', () => {
   });
 
   it('también funciona con un viaje finalizado', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'archivado' } }));
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
     const { cliente } = clienteFalso({ respuesta: { data: [], error: null } });
     assert.equal((await fotoService.listar(cliente, USUARIO_ID, VIAJE_ID)).estado, 'ok');
   });

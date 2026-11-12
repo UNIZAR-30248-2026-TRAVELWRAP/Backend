@@ -305,7 +305,7 @@ describe('DELETE /viajes/:viajeId/documentos/:documentoId (eliminar)', () => {
     esperarError(await llamarEliminar(), 404, 'documento_no_encontrado');
   });
 
-  it('devuelve 409 viaje_no_activo si el viaje está archivado o finalizado', async () => {
+  it('devuelve 409 viaje_no_activo si el viaje está finalizado', async () => {
     mock.method(documentoService, 'eliminar', async () => ({ estado: 'no_activo' }));
     esperarError(await llamarEliminar(), 409, 'viaje_no_activo');
   });

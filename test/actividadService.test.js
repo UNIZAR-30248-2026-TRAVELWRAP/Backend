@@ -108,8 +108,8 @@ describe('actividadService.crear', () => {
     assert.deepEqual(await actividadService.crear(ajeno, USUARIO, VIAJE_ID, DATOS), { estado: 'no_existe' });
   });
 
-  it('devuelve no_activo sin insertar si el viaje está archivado', async () => {
-    const cliente = clienteFalso([{ data: viaje('archivado'), error: null }]);
+  it('devuelve no_activo sin insertar si el viaje está finalizado', async () => {
+    const cliente = clienteFalso([{ data: viaje('finalizado'), error: null }]);
 
     const resultado = await actividadService.crear(cliente, USUARIO, VIAJE_ID, DATOS);
 
@@ -201,9 +201,9 @@ describe('actividadService.listar', () => {
     assert.deepEqual(await actividadService.listar(cliente, USUARIO, VIAJE_ID), { estado: 'ok', actividades: [] });
   });
 
-  it('también lista las de un viaje archivado (solo lectura)', async () => {
+  it('también lista las de un viaje finalizado (solo lectura)', async () => {
     const cliente = clienteFalso([
-      { data: viaje('archivado'), error: null },
+      { data: viaje('finalizado'), error: null },
       { data: [{ id: 'a1' }], error: null },
     ]);
 
