@@ -120,6 +120,31 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
   return recontar(cliente, usuarioId, viajeId, data.votacion_id);
 };
 
+// Cambia el tipo de la votación (solo el creador del viaje, con el viaje activo y la votación abierta).
+// La de destino no se puede cambiar: el viaje depende de ella
+// Devuelve { error } | { estado: no_existe | no_encontrada | no_creador_tipo | no_activo | votacion_cerrada
+//   | tipo_no_modificable | ok (con votacion) }
+const cambiarTipo = async (cliente, usuarioId, viajeId, votacionId, tipo) => {
+  const previo = await votacionDelViaje(cliente, usuarioId, viajeId, votacionId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.rol !== 'creador') return { estado: 'no_creador_tipo' };
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+  if (previo.votacion.estado !== 'abierta') return { estado: 'votacion_cerrada' };
+  if (previo.votacion.tipo === 'destino') return { estado: 'tipo_no_modificable' };
+
+  const { data, error } = await cliente
+    .from('votaciones')
+    .update({ tipo })
+    .eq('id', votacionId)
+    .eq('viaje_id', viajeId)
+    .select('id');
+  if (error) return { error };
+  // Las políticas RLS no dejan actualizar ninguna fila: se trata como un fallo
+  if (!data || data.length === 0) return { error: { code: 'sin_filas' } };
+
+  return recontar(cliente, usuarioId, viajeId, votacionId);
+};
+
 // Comprueba que la votación admite opciones y votos: viaje activo y votación abierta
 // Devuelve { error } | { estado: no_existe | no_encontrada | no_activo | votacion_cerrada | ok (con viaje y votacion) }
 const votacionAbierta = async (cliente, usuarioId, viajeId, votacionId) => {
@@ -215,4 +240,4 @@ const cerrar = async (cliente, usuarioId, viajeId, votacionId) => {
   return { estado: 'ok', votacion: resultado.votacion, hubo_empate: data.hubo_empate, destino: data.destino ?? null };
 };
 
-module.exports = { listar, obtener, crear, anadirOpcion, votar, retirarVoto, cerrar };
+module.exports = { listar, obtener, crear, cambiarTipo, anadirOpcion, votar, retirarVoto, cerrar };

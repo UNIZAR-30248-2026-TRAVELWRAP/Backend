@@ -7,6 +7,7 @@ const { requiereSesion } = require('../middleware/authMiddleware');
 router.get('/', requiereSesion, votacionController.listar);
 router.post('/', requiereSesion, votacionController.crear);
 router.get('/:votacionId', requiereSesion, votacionController.obtener);
+router.patch('/:votacionId', requiereSesion, votacionController.cambiarTipo);
 router.post('/:votacionId/opciones', requiereSesion, votacionController.anadirOpcion);
 router.put('/:votacionId/voto', requiereSesion, votacionController.votar);
 router.delete('/:votacionId/voto', requiereSesion, votacionController.retirarVoto);

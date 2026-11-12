@@ -89,6 +89,8 @@ const ERRORES = {
   votacion_cerrada: [409, 'votacion_cerrada', 'La votación ya está cerrada'],
   faltan_votos: [409, 'faltan_votos', 'La votación solo se puede cerrar cuando hayan votado todos los miembros'],
   opcion_no_valida: [400, 'opcion_no_valida', 'La opción no es de esta votación'],
+  no_creador_tipo: [403, 'no_creador', 'Solo el creador del viaje puede cambiar el tipo de las votaciones'],
+  tipo_no_modificable: [409, 'tipo_no_modificable', 'El tipo de la votación de destino no se puede cambiar'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -176,6 +178,24 @@ const crear = async (req, res) => {
   );
 };
 
+// Cambia el tipo de una votación abierta. Solo entre los tipos que se pueden crear a mano
+const cambiarTipo = async (req, res) => {
+  if (!idsValidos(req, res)) return;
+  const tipo = req.body?.tipo;
+  if (!TIPOS_CREABLES.includes(tipo)) {
+    return responderError(res, 400, 'datos_invalidos', `El tipo debe ser ${TIPOS_CREABLES.join(', ')}`);
+  }
+
+  const { viajeId, votacionId } = req.params;
+  return ejecutar(
+    res,
+    () => votacionService.cambiarTipo(req.supabase, req.usuario.id, viajeId, votacionId, tipo),
+    200,
+    'No se ha podido cambiar el tipo de la votación',
+    { viajeId, motivo: 'tipo' },
+  );
+};
+
 const anadirOpcion = async (req, res) => {
   if (!idsValidos(req, res)) return;
   const validacion = validarOpcion(req.body);
@@ -236,4 +256,4 @@ const cerrar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, anadirOpcion, votar, retirarVoto, cerrar };
+module.exports = { listar, obtener, crear, cambiarTipo, anadirOpcion, votar, retirarVoto, cerrar };
