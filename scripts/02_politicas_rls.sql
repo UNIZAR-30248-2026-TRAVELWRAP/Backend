@@ -281,6 +281,11 @@ DROP POLICY IF EXISTS documentos_insert ON public.documentos;
 CREATE POLICY documentos_insert ON public.documentos FOR INSERT TO authenticated
   WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
+-- Cualquier miembro elimina documentos de la cartera mientras el viaje está activo, no solo quien los subió
+DROP POLICY IF EXISTS documentos_delete ON public.documentos;
+CREATE POLICY documentos_delete ON public.documentos FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
 -- Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada)
 -- y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -307,8 +312,9 @@ CREATE POLICY documentos_storage_insert ON storage.objects FOR INSERT TO authent
     AND public.es_editable(public.viaje_de_ruta(name))
   );
 
--- Solo para deshacer una subida cuando falla el registro del documento: se puede borrar un archivo
--- de la carpeta de un viaje activo que todavía no tiene fila en documentos
+-- Se puede borrar un archivo de la carpeta de un viaje activo que ya no tiene fila en documentos: sirve para
+-- deshacer una subida cuando falla el registro y para quitar el archivo después de eliminar el documento
+-- (primero se borra la fila, con documentos_delete, y entonces el archivo queda huérfano)
 DROP POLICY IF EXISTS documentos_storage_delete_huerfano ON storage.objects;
 CREATE POLICY documentos_storage_delete_huerfano ON storage.objects FOR DELETE TO authenticated
   USING (

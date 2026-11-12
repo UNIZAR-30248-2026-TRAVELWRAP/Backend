@@ -52,6 +52,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto a la galería del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/resumen`](#get-viajesviajeidresumen) | Resumen «Fin de viaje» (Wrap) del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/documentos/{documentoId}`](#delete-viajesviajeiddocumentosdocumentoid) | Elimina un documento de la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
 | PATCH | [`/perfil`](#patch-perfil) | Cambia el nombre del perfil | Token de sesión |
 | PUT | [`/perfil/avatar`](#put-perfilavatar) | Cambia la foto del perfil | Token de sesión |
@@ -2458,6 +2459,68 @@ no es válido o el identificador del viaje no es un UUID
 | Código de error | Mensaje |
 | --- | --- |
 | `error_documento` | No se ha podido subir el documento |
+
+### DELETE /viajes/{viajeId}/documentos/{documentoId}
+
+**Elimina un documento de la cartera del viaje**
+
+Elimina un documento de la cartera compartida del viaje: borra su fila de la tabla `documentos` y, después,
+su archivo del bucket privado `documentos` de Supabase Storage. No se puede deshacer.
+
+Cualquier miembro puede eliminar cualquier documento, no solo quien lo subió, y solo mientras el viaje esté
+activo. Si falla el borrado del archivo una vez borrada la fila, la respuesta sigue siendo 204: para los
+miembros el documento ya no existe y el archivo queda en el bucket sin fila, invisible.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `documentoId` | path | Sí | string (uuid) | Identificador del documento | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+
+**Respuestas**
+
+**204** — Documento eliminado (sin cuerpo)
+
+**400** — El identificador del viaje o del documento no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del documento no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje, por ejemplo porque otro miembro ya lo eliminó (`documento_no_encontrado`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `documento_no_encontrado` | El documento no existe en este viaje |
+
+**409** — El viaje está archivado o finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al borrar el documento)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido eliminar el documento |
 
 ### GET /viajes/{viajeId}/documentos/{documentoId}/url
 

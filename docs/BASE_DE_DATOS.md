@@ -17,7 +17,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [actividades](#actividades) | 16 | Activada | 4 |
 | [gastos](#gastos) | 10 | Activada | 4 |
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
-| [documentos](#documentos) | 8 | Activada | 2 |
+| [documentos](#documentos) | 8 | Activada | 3 |
 | [fotos](#fotos) | 8 | Activada | 2 |
 
 ## Relaciones
@@ -273,7 +273,7 @@ Parte de un gasto que le corresponde a cada miembro. Las partes deben sumar el i
 
 Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). El archivo se guarda en el bucket privado «documentos» de Supabase Storage y esta fila guarda sus datos y dónde está
 
-**Seguridad por filas (RLS):** activada, 2 políticas
+**Seguridad por filas (RLS):** activada, 3 políticas
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -425,6 +425,7 @@ Fotos de la galería compartida del viaje. El archivo se guarda en el bucket pri
 | --- | --- | --- | --- | --- |
 | `documentos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `documentos_insert` | INSERT | authenticated |  | `subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `documentos_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 #### fotos
 
@@ -449,7 +450,7 @@ Fotos de la galería compartida del viaje. El archivo se guarda en el bucket pri
 | --- | --- | --- | --- | --- | --- |
 | `documentos_storage_select` | SELECT | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name))` |  | Los archivos de un viaje están en la carpeta del bucket con su viaje_id. Los miembros pueden leerlos (para abrirlos o generar URLs firmadas), también en viajes finalizados o archivados |
 | `documentos_storage_insert` | INSERT | authenticated |  | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Los miembros suben archivos a la carpeta de su viaje mientras está activo |
-| `documentos_storage_delete_huerfano` | DELETE | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name)) AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)` |  | Solo para deshacer una subida cuando falla el registro del documento: se puede borrar un archivo de la carpeta de un viaje activo que todavía no tiene fila en documentos |
+| `documentos_storage_delete_huerfano` | DELETE | authenticated | `bucket_id = 'documentos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name)) AND NOT EXISTS (SELECT 1 FROM public.documentos d WHERE d.ruta = objects.name)` |  | Se puede borrar un archivo de la carpeta de un viaje activo que ya no tiene fila en documentos: sirve para deshacer una subida cuando falla el registro y para quitar el archivo después de eliminar el documento (primero se borra la fila, con documentos_delete, y entonces el archivo queda huérfano) |
 | `avatares_storage_select` | SELECT | authenticated | `bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text` |  | Lectura con la sesión de la carpeta propia (Supabase la necesita para borrar) |
 | `avatares_storage_insert` | INSERT | authenticated |  | `bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text` |  |
 | `avatares_storage_delete` | DELETE | authenticated | `bucket_id = 'avatares' AND (storage.foldername(name))[1] = auth.uid()::text` |  |  |
