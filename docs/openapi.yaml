@@ -2636,6 +2636,78 @@ paths:
                   codigo: error_ruta
                   mensaje: No se ha podido calcular la ruta
 
+  /viajes/{viajeId}/documentos/{documentoId}:
+    delete:
+      tags:
+        - Documentos
+      summary: Elimina un documento de la cartera del viaje
+      description: |
+        Elimina un documento de la cartera compartida del viaje: borra su fila de la tabla `documentos` y, después,
+        su archivo del bucket privado `documentos` de Supabase Storage. No se puede deshacer.
+
+        Cualquier miembro puede eliminar cualquier documento, no solo quien lo subió, y solo mientras el viaje esté
+        activo. Si falla el borrado del archivo una vez borrada la fila, la respuesta sigue siendo 204: para los
+        miembros el documento ya no existe y el archivo queda en el bucket sin fila, invisible.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/DocumentoId'
+      responses:
+        '204':
+          description: Documento eliminado (sin cuerpo)
+        '400':
+          description: El identificador del viaje o del documento no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del documento no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje, por ejemplo porque otro miembro ya lo eliminó (`documento_no_encontrado`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viaje:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                documento:
+                  value:
+                    error:
+                      codigo: documento_no_encontrado
+                      mensaje: El documento no existe en este viaje
+        '409':
+          description: El viaje está archivado o finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al borrar el documento)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_documento
+                  mensaje: No se ha podido eliminar el documento
+
   /viajes/{viajeId}/documentos/{documentoId}/url:
     get:
       tags:
