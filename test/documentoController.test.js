@@ -1,4 +1,4 @@
-// Pruebas del controlador de documentos (GET y POST /api/viajes/:viajeId/documentos y GET .../:documentoId/url).
+// Pruebas del controlador de documentos (GET y POST /api/viajes/:viajeId/documentos, GET .../:documentoId/url y DELETE .../:documentoId).
 // El servicio se sustituye por un mock: aquí se comprueba la validación del archivo y la traducción
 // de cada resultado del servicio a su código HTTP. El límite de tamaño lo aplica el middleware de subida,
 // que se prueba con un servidor real.
@@ -26,6 +26,10 @@ const crearRes = () => ({
   },
   json(cuerpo) {
     this.cuerpo = cuerpo;
+    return this;
+  },
+  end() {
+    this.terminada = true;
     return this;
   },
 });
@@ -260,6 +264,62 @@ describe('GET /viajes/:viajeId/documentos/:documentoId/url (obtenerUrl)', () => 
       throw new Error('fallo');
     });
     esperarError(await llamarObtenerUrl(), 500, 'error_interno');
+  });
+});
+
+describe('DELETE /viajes/:viajeId/documentos/:documentoId (eliminar)', () => {
+  const llamarEliminar = async ({ viajeId = VIAJE_ID, documentoId = DOCUMENTO_ID } = {}) => {
+    const res = crearRes();
+    await documentoController.eliminar({ params: { viajeId, documentoId }, usuario: USUARIO, supabase: {} }, res);
+    return res;
+  };
+
+  it('devuelve 204 sin cuerpo y pasa al servicio el usuario, el viaje y el documento', async () => {
+    const servicio = mock.method(documentoService, 'eliminar', async () => ({ estado: 'ok' }));
+    const res = await llamarEliminar();
+    assert.equal(res.codigo, 204);
+    assert.equal(res.cuerpo, undefined);
+    assert.equal(res.terminada, true);
+    assert.deepEqual(servicio.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID, DOCUMENTO_ID]);
+  });
+
+  it('devuelve 400 si el identificador del viaje no es un UUID, sin llamar al servicio', async () => {
+    const servicio = mock.method(documentoService, 'eliminar', async () => ({ estado: 'ok' }));
+    esperarError(await llamarEliminar({ viajeId: 'x' }), 400, 'datos_invalidos');
+    assert.equal(servicio.mock.callCount(), 0);
+  });
+
+  it('devuelve 400 si el identificador del documento no es un UUID, sin llamar al servicio', async () => {
+    const servicio = mock.method(documentoService, 'eliminar', async () => ({ estado: 'ok' }));
+    esperarError(await llamarEliminar({ documentoId: 'x' }), 400, 'datos_invalidos');
+    assert.equal(servicio.mock.callCount(), 0);
+  });
+
+  it('devuelve 404 viaje_no_encontrado si el viaje no existe o es ajeno', async () => {
+    mock.method(documentoService, 'eliminar', async () => ({ estado: 'no_existe' }));
+    esperarError(await llamarEliminar(), 404, 'viaje_no_encontrado');
+  });
+
+  it('devuelve 404 documento_no_encontrado si el documento no existe en el viaje', async () => {
+    mock.method(documentoService, 'eliminar', async () => ({ estado: 'documento_no_existe' }));
+    esperarError(await llamarEliminar(), 404, 'documento_no_encontrado');
+  });
+
+  it('devuelve 409 viaje_no_activo si el viaje está archivado o finalizado', async () => {
+    mock.method(documentoService, 'eliminar', async () => ({ estado: 'no_activo' }));
+    esperarError(await llamarEliminar(), 409, 'viaje_no_activo');
+  });
+
+  it('devuelve 502 si Supabase falla', async () => {
+    mock.method(documentoService, 'eliminar', async () => ({ error: { code: 'XX000' } }));
+    esperarError(await llamarEliminar(), 502, 'error_documento');
+  });
+
+  it('devuelve 500 si el servicio lanza una excepción', async () => {
+    mock.method(documentoService, 'eliminar', async () => {
+      throw new Error('fallo');
+    });
+    esperarError(await llamarEliminar(), 500, 'error_interno');
   });
 });
 
