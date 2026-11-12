@@ -110,6 +110,47 @@ describe('viajeService.editar', () => {
   });
 });
 
+describe('viajeService.finalizar', () => {
+  it('finaliza un viaje activo guardando el momento del cierre', async () => {
+    const cliente = clienteFalso([encontrado(), actualizado, encontrado({ estado: 'finalizado' })]);
+
+    const resultado = await viajeService.finalizar(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.estado, 'finalizado');
+    const [, cambios] = operacion(cliente.consultas[1], 'update');
+    assert.equal(cambios.estado, 'finalizado');
+    assert.ok(!Number.isNaN(Date.parse(cambios.finalizado_en)));
+  });
+
+  it('no finaliza un viaje ya finalizado o archivado', async () => {
+    for (const estado of ['finalizado', 'archivado']) {
+      const cliente = clienteFalso([encontrado({ estado })]);
+      assert.deepEqual(await viajeService.finalizar(cliente, USUARIO, VIAJE_ID), { estado: 'ya_finalizado' });
+    }
+  });
+
+  it('solo finaliza el creador', async () => {
+    const cliente = clienteFalso([encontrado({}, 'miembro')]);
+
+    assert.deepEqual(await viajeService.finalizar(cliente, USUARIO, VIAJE_ID), { estado: 'no_creador' });
+  });
+
+  it('indica que el viaje no existe', async () => {
+    const cliente = clienteFalso([{ data: null, error: null }]);
+
+    assert.deepEqual(await viajeService.finalizar(cliente, USUARIO, VIAJE_ID), { estado: 'no_existe' });
+  });
+
+  it('devuelve el error si falla la base de datos', async () => {
+    const cliente = clienteFalso([{ data: null, error: { code: 'PGRST000' } }]);
+
+    const resultado = await viajeService.finalizar(cliente, USUARIO, VIAJE_ID);
+
+    assert.deepEqual(resultado.error, { code: 'PGRST000' });
+  });
+});
+
 describe('viajeService.archivar', () => {
   it('archiva un viaje activo guardando el momento del cierre', async () => {
     const cliente = clienteFalso([encontrado(), actualizado, encontrado({ estado: 'archivado' })]);

@@ -118,6 +118,42 @@ describe('PATCH /viajes/:viajeId (editar)', () => {
   });
 });
 
+describe('POST /viajes/:viajeId/finalizar', () => {
+  it('devuelve el viaje finalizado', async () => {
+    const finalizar = simular('finalizar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
+
+    const res = await llamar('finalizar');
+
+    assert.equal(res.codigo, 200);
+    assert.equal(res.cuerpo.estado, 'finalizado');
+    assert.deepEqual(finalizar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
+  });
+
+  it('responde 409 si ya estaba finalizado, 403 si no es el creador y 404 si no existe', async () => {
+    simular('finalizar', async () => ({ estado: 'ya_finalizado' }));
+    const yaFinalizado = await llamar('finalizar');
+    assert.equal(yaFinalizado.codigo, 409);
+    assert.equal(yaFinalizado.cuerpo.error.codigo, 'viaje_finalizado');
+
+    mock.restoreAll();
+    simular('finalizar', async () => ({ estado: 'no_creador' }));
+    assert.equal((await llamar('finalizar')).codigo, 403);
+
+    mock.restoreAll();
+    simular('finalizar', async () => ({ estado: 'no_existe' }));
+    assert.equal((await llamar('finalizar')).codigo, 404);
+  });
+
+  it('rechaza un identificador inválido y responde 502 si falla Supabase', async () => {
+    assert.equal((await llamar('finalizar', { viajeId: 'x' })).codigo, 400);
+
+    simular('finalizar', async () => ({ error: { code: 'PGRST000' } }));
+    const res = await llamar('finalizar');
+    assert.equal(res.codigo, 502);
+    assert.equal(res.cuerpo.error.mensaje, 'No se ha podido finalizar el viaje');
+  });
+});
+
 describe('POST /viajes/:viajeId/archivar', () => {
   it('devuelve el viaje archivado', async () => {
     const archivar = simular('archivar', async () => ({ estado: 'ok', viaje: { id: VIAJE_ID, estado: 'archivado' } }));
