@@ -403,8 +403,11 @@ paths:
       summary: Lista los viajes del usuario
       description: |
         Devuelve los viajes de los que el usuario es miembro activo, del más reciente al más antiguo, con sus miembros.
+        No incluye los que el usuario ha eliminado (para él ya no existen). Por defecto tampoco los que ha archivado:
+        se piden con `archivados=true`. El archivado es personal (MEJ-12), no cambia lo que ven los demás miembros.
         La PWA los reparte en «Mis viajes»: los activos con destino (tarjeta azul), los activos sin destino
-        (`pendiente_destino: true`, tarjeta verde) y, por estado, los finalizados y archivados (viajes anteriores).
+        (`pendiente_destino: true`, tarjeta verde) y los finalizados no archivados (viajes anteriores).
+        Los archivados se piden aparte, para «Viajes archivados».
       security:
         - bearerAuth: []
       parameters:
@@ -414,7 +417,16 @@ paths:
           description: Devuelve solo los viajes en ese estado
           schema:
             type: string
-            enum: [activo, finalizado, archivado]
+            enum: [activo, finalizado]
+        - name: archivados
+          in: query
+          required: false
+          description: |
+            Por defecto (`false`) devuelve solo los viajes que el usuario no ha archivado. Con `true`, solo los que
+            ha archivado
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Viajes del usuario (lista vacía si no tiene ninguno)
@@ -423,7 +435,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListaViajes'
         '400':
-          description: El filtro `estado` no es válido
+          description: El filtro `estado` o `archivados` no es válido (`estado=archivado` ya no existe)
           content:
             application/json:
               schema:
@@ -431,7 +443,7 @@ paths:
               example:
                 error:
                   codigo: datos_invalidos
-                  mensaje: El estado debe ser activo, finalizado o archivado
+                  mensaje: El estado debe ser activo o finalizado
         '401':
           $ref: '#/components/responses/SinSesion'
         '500':
@@ -587,7 +599,7 @@ paths:
         Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
         Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
         los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
-        Un viaje archivado es de solo lectura y no se puede editar.
+        Un viaje finalizado es de solo lectura y no se puede editar.
       security:
         - bearerAuth: []
       parameters:
@@ -662,7 +674,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está finalizado o archivado y ya no se puede modificar
+          description: El viaje está finalizado y ya no se puede modificar
           content:
             application/json:
               schema:
@@ -690,12 +702,15 @@ paths:
     delete:
       tags:
         - Viajes
-      summary: Elimina un viaje archivado
+      summary: Elimina un viaje archivado, solo para ti
       description: |
-        Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros, votaciones, actividades,
-        gastos y los datos de sus documentos), que se elimina en cascada (PB-13). No se puede deshacer.
-        Los archivos de la cartera siguen en el bucket `documentos` de Supabase Storage.
-        Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
+        Elimina el viaje **solo para quien lo pide** (MEJ-12): deja de aparecerle en su cuenta (el detalle responde 404)
+        y no se puede recuperar desde la app, pero los demás miembros lo siguen viendo igual. Lo puede hacer
+        cualquier miembro, y solo con un viaje que tenga archivado: la PWA lo ofrece desde «Viajes archivados».
+        Cuando lo han eliminado todos los miembros que siguen en el viaje, el último lo borra de verdad: se borran sus
+        documentos y fotos de Supabase Storage y después el viaje con todo lo asociado (miembros, votaciones,
+        actividades, gastos...), en cascada. Los sellos de cada usuario se conservan. La respuesta es la misma en
+        ambos casos y no incluye rutas de archivos. Si falla el borrado definitivo, no cambia nada y se puede repetir.
       security:
         - bearerAuth: []
       parameters:
@@ -722,18 +737,8 @@ paths:
                   mensaje: El identificador del viaje no es válido
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede hacerlo
         '404':
-          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          description: El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
           content:
             application/json:
               schema:
@@ -743,7 +748,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje no está archivado
+          description: El usuario no tiene archivado el viaje
           content:
             application/json:
               schema:
@@ -769,15 +774,16 @@ paths:
                   codigo: error_viaje
                   mensaje: No se ha podido eliminar el viaje
 
-  /viajes/{viajeId}/archivar:
+  /viajes/{viajeId}/finalizar:
     post:
       tags:
         - Viajes
-      summary: Finaliza y archiva un viaje
+      summary: Finaliza un viaje sin archivarlo
       description: |
-        Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
-        no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
-        Si el viaje estaba activo, se guarda el momento del cierre en `finalizado_en`.
+        Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `finalizado_en` (MEJ-12).
+        Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
+        Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
+        archivarlo para sí mismo con `/archivar`.
         Solo lo puede hacer el creador del viaje. No se puede deshacer.
       security:
         - bearerAuth: []
@@ -792,7 +798,7 @@ paths:
           example: 123e4567-e89b-12d3-a456-426614174000
       responses:
         '200':
-          description: Viaje archivado, con el mismo formato que el detalle
+          description: Viaje finalizado, con el mismo formato que el detalle
           content:
             application/json:
               schema:
@@ -830,15 +836,99 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje ya estaba archivado
+          description: El viaje ya estaba finalizado
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
               example:
                 error:
-                  codigo: viaje_archivado
-                  mensaje: El viaje ya está archivado
+                  codigo: viaje_finalizado
+                  mensaje: El viaje ya está finalizado
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido finalizar el viaje
+
+  /viajes/{viajeId}/archivar:
+    post:
+      tags:
+        - Viajes
+      summary: Archiva un viaje, solo para ti
+      description: |
+        Archiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes anteriores» y aparece en sus
+        «Viajes archivados» (`archivado: true` en la respuesta). No cambia el estado del viaje, que sigue
+        `finalizado`, ni lo que ven los demás miembros. Lo puede hacer cualquier miembro y solo con un viaje
+        finalizado (`/finalizar`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Viaje archivado, con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje no está finalizado (`viaje_no_finalizado`) o el usuario ya lo tenía archivado (`viaje_archivado`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                noFinalizado:
+                  value:
+                    error:
+                      codigo: viaje_no_finalizado
+                      mensaje: Solo se pueden archivar viajes finalizados
+                yaArchivado:
+                  value:
+                    error:
+                      codigo: viaje_archivado
+                      mensaje: El viaje ya está archivado
         '500':
           description: Error interno del servidor
           content:
@@ -855,6 +945,82 @@ paths:
                 error:
                   codigo: error_viaje
                   mensaje: No se ha podido archivar el viaje
+
+  /viajes/{viajeId}/desarchivar:
+    post:
+      tags:
+        - Viajes
+      summary: Desarchiva un viaje
+      description: |
+        Desarchiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes archivados» y vuelve a sus
+        «Viajes anteriores» (`archivado: false` en la respuesta). No cambia el estado del viaje, que sigue
+        `finalizado` y de solo lectura: nunca vuelve a «En curso». Lo puede hacer cualquier miembro.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Viaje desarchivado, con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El usuario no tiene archivado el viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_archivado
+                  mensaje: El viaje no está archivado
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido desarchivar el viaje
 
   /viajes/{viajeId}/invitacion:
     get:
@@ -964,7 +1130,7 @@ paths:
                   codigo: invitacion_no_encontrada
                   mensaje: El enlace de invitación no es válido
         '409':
-          description: El viaje está finalizado o archivado y ya no admite nuevos miembros
+          description: El viaje está finalizado y ya no admite nuevos miembros
           content:
             application/json:
               schema:
@@ -1106,7 +1272,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -1511,7 +1677,7 @@ paths:
         hora de inicio (las que empiezan a la misma hora, por su posición `orden`). Las que no tienen hora van al final
         del día, por su posición, salvo las que el usuario ha colocado entre las demás con PUT /viajes/{viajeId}/actividades/orden,
         que aparecen en el lugar donde las puso. Con `fecha` solo devuelve las de ese día.
-        Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+        Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje finalizado (solo lectura).
 
         Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
         dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
@@ -1621,7 +1787,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -1801,7 +1967,7 @@ paths:
                       codigo: actividad_no_encontrada
                       mensaje: La actividad no existe en este viaje
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -1867,7 +2033,7 @@ paths:
                       codigo: actividad_no_encontrada
                       mensaje: La actividad no existe en este viaje
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -1897,7 +2063,7 @@ paths:
       description: |
         Devuelve los gastos del viaje del más reciente al más antiguo (por fecha y, en el mismo día, por la hora a
         la que se registraron), cada uno con la parte de cada participante, y el total gastado, sumado en céntimos.
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -2004,7 +2170,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2036,7 +2202,7 @@ paths:
         positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
         siempre está al día y la suma de todos los saldos es 0.
         Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
-        sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+        sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados.
       security:
         - bearerAuth: []
       parameters:
@@ -2094,7 +2260,7 @@ paths:
         mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
         Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
         viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
-        Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados, porque solo lee.
+        Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados, porque solo lee.
       security:
         - bearerAuth: []
       parameters:
@@ -2346,7 +2512,7 @@ paths:
       description: |
         Devuelve los datos de los documentos de la cartera compartida del viaje (billetes, reservas, seguros...),
         del más reciente al más antiguo. No incluye el contenido de los archivos.
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -2460,7 +2626,7 @@ paths:
                   codigo: viaje_no_encontrado
                   mensaje: El viaje no existe o no perteneces a él
         '409':
-          description: El viaje está archivado o finalizado (solo lectura)
+          description: El viaje está finalizado (solo lectura)
           content:
             application/json:
               schema:
@@ -2482,6 +2648,217 @@ paths:
                   codigo: error_documento
                   mensaje: No se ha podido subir el documento
 
+  /viajes/{viajeId}/fotos:
+    get:
+      tags:
+        - Fotos
+      summary: Lista las fotos de la galería del viaje
+      description: |
+        Devuelve las fotos de la galería compartida del viaje, de la más reciente a la más antigua. Cada foto incluye
+        `url`, una URL firmada de Supabase Storage para verla que caduca a la hora de generarla (1 hora): pasado ese
+        tiempo hay que volver a pedir el listado.
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
+        solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Fotos del viaje (lista vacía si aún no tiene ninguna)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaFotos'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_foto
+                  mensaje: No se han podido obtener las fotos
+    post:
+      tags:
+        - Fotos
+      summary: Sube una foto a la galería del viaje
+      description: |
+        Sube una imagen JPEG, PNG o WebP de 8 MB como máximo a la galería compartida del viaje. El archivo se guarda
+        en el bucket privado `fotos` de Supabase Storage, en la carpeta del viaje y con un nombre aleatorio, y sus
+        datos quedan registrados en la tabla `fotos`. Si el registro falla, el archivo se borra del bucket.
+
+        El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+        navegador. El nombre de la foto es el del archivo (recortado a 150 caracteres). Cualquier miembro puede subir
+        fotos mientras el viaje esté activo; quien hace la petición queda como `subido_por`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaFotoRequest'
+      responses:
+        '201':
+          description: Foto subida y registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Foto'
+        '400':
+          description: |
+            Falta el archivo o llega más de uno, el archivo no es una imagen JPEG, PNG o WebP, ocupa más de 8 MB o el
+            identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta la foto en el campo «archivo»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: Solo se pueden subir fotos JPEG, PNG o WebP
+                demasiadoGrande:
+                  value:
+                    error:
+                      codigo: archivo_demasiado_grande
+                      mensaje: La foto no puede ocupar más de 8 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_foto
+                  mensaje: No se ha podido subir la foto
+
+  /viajes/{viajeId}/resumen:
+    get:
+      tags:
+        - Resumen
+      summary: Resumen «Fin de viaje» (Wrap) del viaje
+      description: |
+        Calcula los datos que muestra el resumen de fin de viaje: los días del viaje, lo gastado, el gasto más alto, la
+        actividad más votada y el «alma del grupo». Los datos se calculan al pedirlos, así que siempre están al día.
+        Solo lo pueden pedir los miembros del viaje, y funciona con el viaje activo o finalizado porque solo
+        lee. Las fotos y el balance que también aparecen en la pantalla se piden con `GET /viajes/{viajeId}/fotos` y
+        `GET /viajes/{viajeId}/gastos/balance`.
+
+        - `dias`: días desde el primero hasta el último del viaje, ambos incluidos. Si el viaje no tiene las dos
+          fechas, los días distintos que tienen actividades.
+        - `gasto_total`: suma de todos los gastos, calculada en céntimos para no arrastrar errores de coma flotante.
+        - `gasto_mayor`: el gasto de mayor importe (con un empate, el primero), o `null` si no hay gastos.
+        - `actividad_mas_votada`: la opción con más votos entre las votaciones de tipo `actividad` (con un empate, la
+          que va antes en la lista), o `null` si nadie ha votado.
+        - `alma_del_grupo`: el miembro actual que ha pagado más gastos (con el mismo número, el que ha pagado más
+          dinero y después el primero de la lista) con sus pagos, planes propuestos (actividades creadas) y fotos
+          subidas, o `null` si no hay gastos.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Resumen del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenViaje'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_resumen
+                  mensaje: No se ha podido calcular el resumen del viaje
+
   /viajes/{viajeId}/ruta:
     get:
       tags:
@@ -2490,7 +2867,7 @@ paths:
       description: |
         Toma las actividades del día indicado que tienen coordenadas, en el orden de la agenda, y devuelve la ruta a
         pie por calles que las une junto con distancia, duración y un orden más corto para visitarlas. Solo lo pueden
-        pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+        pedir los miembros del viaje, y también funciona con un viaje finalizado (solo lectura).
 
         La ruta la calcula un servicio externo basado en OSRM con datos de OpenStreetMap (por defecto el servidor de rutas
         a pie de OpenStreetMap Alemania; se cambia con la variable de entorno `RUTAS_URL`). Para respetar su política de
@@ -2622,6 +2999,78 @@ paths:
                   codigo: error_ruta
                   mensaje: No se ha podido calcular la ruta
 
+  /viajes/{viajeId}/documentos/{documentoId}:
+    delete:
+      tags:
+        - Documentos
+      summary: Elimina un documento de la cartera del viaje
+      description: |
+        Elimina un documento de la cartera compartida del viaje: borra su fila de la tabla `documentos` y, después,
+        su archivo del bucket privado `documentos` de Supabase Storage. No se puede deshacer.
+
+        Cualquier miembro puede eliminar cualquier documento, no solo quien lo subió, y solo mientras el viaje esté
+        activo. Si falla el borrado del archivo una vez borrada la fila, la respuesta sigue siendo 204: para los
+        miembros el documento ya no existe y el archivo queda en el bucket sin fila, invisible.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/DocumentoId'
+      responses:
+        '204':
+          description: Documento eliminado (sin cuerpo)
+        '400':
+          description: El identificador del viaje o del documento no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del documento no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje, por ejemplo porque otro miembro ya lo eliminó (`documento_no_encontrado`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viaje:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                documento:
+                  value:
+                    error:
+                      codigo: documento_no_encontrado
+                      mensaje: El documento no existe en este viaje
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al borrar el documento)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_documento
+                  mensaje: No se ha podido eliminar el documento
+
   /viajes/{viajeId}/documentos/{documentoId}/url:
     get:
       tags:
@@ -2636,7 +3085,7 @@ paths:
         Con `descargar=true` el enlace hace que el navegador guarde el archivo con el nombre del documento.
         No devuelve la ruta interna del archivo en el bucket.
 
-        Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+        Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
         solo lee.
       security:
         - bearerAuth: []
@@ -2699,6 +3148,149 @@ paths:
                 error:
                   codigo: error_documento
                   mensaje: No se ha podido obtener el enlace del documento
+
+  /perfil:
+    patch:
+      tags:
+        - Perfil
+      summary: Cambia el nombre del perfil
+      description: |
+        Cambia el nombre del perfil de quien hace la petición. La ruta no lleva ningún identificador: el servidor
+        usa siempre el usuario del token, así que solo se puede editar el perfil propio. El nombre se guarda sin
+        los espacios del principio y del final y tiene que quedar entre 1 y 100 caracteres, el mismo límite que el
+        registro. Devuelve el usuario con la misma forma que en la sesión, para que el cliente lo pueda guardar tal cual.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActualizarPerfilRequest'
+      responses:
+        '200':
+          description: Nombre cambiado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilActualizado'
+        '400':
+          description: El nombre no es un texto o, sin contar los espacios de los extremos, tiene menos de 1 o más de 100 caracteres
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El nombre debe tener entre 1 y 100 caracteres
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/PerfilNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /perfil/avatar:
+    put:
+      tags:
+        - Perfil
+      summary: Cambia la foto del perfil
+      description: |
+        Sube una imagen JPEG o PNG de 2 MB como máximo como foto del perfil de quien hace la petición. La ruta no
+        lleva ningún identificador: el servidor usa siempre el usuario del token. La foto se guarda en el bucket
+        público `avatares` de Supabase Storage, en la carpeta del usuario y con un nombre aleatorio, así que la URL
+        cambia con cada subida y los navegadores no siguen mostrando la foto anterior desde la caché.
+
+        El tipo se reconoce por el contenido del archivo (JPEG empieza por `FF D8 FF` y PNG por `89 50 4E 47`),
+        además de por el tipo que indica el cliente, que se puede falsear. Si no se puede guardar la URL en el perfil,
+        la foto subida se borra y el perfil queda igual. Una vez cambiada, se borra la foto anterior si era de este
+        bucket; las fotos de Google no se tocan.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaAvatarRequest'
+      responses:
+        '200':
+          description: Foto cambiada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilActualizado'
+        '400':
+          description: Falta la foto o llega más de una, no es una imagen JPEG o PNG, o ocupa más de 2 MB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta la foto en el campo «avatar»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: La foto debe ser una imagen JPEG o PNG
+                demasiadoGrande:
+                  value:
+                    error:
+                      codigo: archivo_demasiado_grande
+                      mensaje: La foto no puede ocupar más de 2 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/PerfilNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al subir la foto o al guardarla en el perfil)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_storage
+                  mensaje: No se ha podido guardar la foto
+    delete:
+      tags:
+        - Perfil
+      summary: Quita la foto del perfil
+      description: |
+        Deja el perfil sin foto (`avatar_url` nulo) y borra el archivo anterior si estaba en el bucket `avatares`;
+        una foto de Google no se borra. Si el perfil ya no tenía foto, también responde 200.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Foto quitada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfilActualizado'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/PerfilNoEncontrado'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_storage
+                  mensaje: No se ha podido quitar la foto
 
 components:
   securitySchemes:
@@ -2812,6 +3404,16 @@ components:
             error:
               codigo: error_interno
               mensaje: Error interno del servidor
+    PerfilNoEncontrado:
+      description: El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              codigo: perfil_no_encontrado
+              mensaje: El perfil no existe
   schemas:
     RegistroRequest:
       type: object
@@ -3044,7 +3646,10 @@ components:
           example: 850
         estado:
           type: string
-          enum: [activo, finalizado, archivado]
+          enum: [activo, finalizado]
+          description: |
+            activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar
+            son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario)
           example: activo
         creado_en:
           type: string
@@ -3085,6 +3690,10 @@ components:
               enum: [creador, miembro]
               description: Rol del usuario que hace la petición en este viaje
               example: creador
+            archivado:
+              type: boolean
+              description: true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado
+              example: false
             miembros:
               type: array
               description: Miembros activos del viaje
@@ -3965,6 +4574,126 @@ components:
           enum: [application/pdf, image/jpeg, image/png]
           example: application/pdf
 
+    SubidaFotoRequest:
+      type: object
+      required:
+        - archivo
+      properties:
+        archivo:
+          type: string
+          format: binary
+          description: Imagen JPEG, PNG o WebP de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición
+
+    Foto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e
+        viaje_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        nombre:
+          type: string
+          description: Nombre del archivo original
+          example: coliseo.jpg
+        tipo_mime:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+          description: Tipo reconocido a partir del contenido del archivo
+          example: image/jpeg
+        tamano_bytes:
+          type: integer
+          description: Tamaño del archivo en bytes (8.000.000 como máximo)
+          example: 248731
+        subido_por:
+          type: string
+          format: uuid
+          nullable: true
+          description: Quién subió la foto (null si su cuenta se ha eliminado)
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-11-08T10:00:00Z'
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL firmada de Supabase Storage para ver la foto; caduca a la hora (null si no se ha podido generar)
+          example: https://proyecto.supabase.co/storage/v1/object/sign/fotos/123e4567-e89b-12d3-a456-426614174000/0b0e8f5a.jpg?token=eyJ...
+
+    ListaFotos:
+      type: object
+      properties:
+        fotos:
+          type: array
+          description: Fotos del viaje, de la más reciente a la más antigua
+          items:
+            $ref: '#/components/schemas/Foto'
+
+    ResumenViaje:
+      type: object
+      properties:
+        dias:
+          type: integer
+          minimum: 0
+          description: Días del viaje
+          example: 4
+        gasto_total:
+          type: number
+          description: Suma de los gastos del viaje
+          example: 850
+        gasto_mayor:
+          type: object
+          nullable: true
+          description: Gasto de mayor importe (null si no hay gastos)
+          properties:
+            concepto:
+              type: string
+              example: Cena Trastevere
+            importe:
+              type: number
+              example: 120.5
+        actividad_mas_votada:
+          type: object
+          nullable: true
+          description: Opción con más votos de las votaciones de tipo actividad (null si nadie ha votado)
+          properties:
+            titulo:
+              type: string
+              example: Coliseo Romano
+            votos:
+              type: integer
+              example: 3
+        alma_del_grupo:
+          type: object
+          nullable: true
+          description: Miembro que ha pagado más gastos (null si no hay gastos)
+          properties:
+            usuario_id:
+              type: string
+              format: uuid
+              example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+            nombre:
+              type: string
+              nullable: true
+              example: Berta
+            pagos:
+              type: integer
+              description: Gastos que ha pagado
+              example: 2
+            planes_propuestos:
+              type: integer
+              description: Actividades que ha creado
+              example: 4
+            fotos_subidas:
+              type: integer
+              description: Fotos que ha subido a la galería
+              example: 3
+
     PuntoDeRuta:
       type: object
       properties:
@@ -4031,6 +4760,34 @@ components:
           description: Ruta a pie por calles siguiendo el orden de la agenda; null con menos de dos actividades con ubicación
           allOf:
             - $ref: '#/components/schemas/TrazadoDeRuta'
+
+    ActualizarPerfilRequest:
+      type: object
+      required:
+        - nombre
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Nuevo nombre. Se guarda sin los espacios del principio y del final, y tiene que quedar entre 1 y 100 caracteres
+          example: Berta
+
+    SubidaAvatarRequest:
+      type: object
+      required:
+        - avatar
+      properties:
+        avatar:
+          type: string
+          format: binary
+          description: JPEG o PNG de 2 MB (2.000.000 bytes) como máximo. Un solo archivo por petición
+
+    PerfilActualizado:
+      type: object
+      properties:
+        usuario:
+          $ref: '#/components/schemas/Usuario'
 
     Error:
       type: object

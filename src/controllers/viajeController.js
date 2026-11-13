@@ -1,7 +1,7 @@
 const viajeService = require('../services/viajeService');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
-const ESTADOS = ['activo', 'finalizado', 'archivado'];
+const ESTADOS = ['activo', 'finalizado'];
 const MAX_TEXTO = 100;
 const MAX_PRESUPUESTO = 1e10; // numeric(12,2): 10 dígitos enteros
 
@@ -118,9 +118,12 @@ const validarCambiosViaje = (cuerpo) => {
 const ERRORES_GESTION = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_creador: [403, 'no_creador', 'Solo el creador del viaje puede hacerlo'],
+  no_finalizado: [409, 'viaje_no_finalizado', 'Solo se pueden archivar viajes finalizados'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
+  ya_finalizado: [409, 'viaje_finalizado', 'El viaje ya está finalizado'],
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
+  no_estaba_archivado: [409, 'viaje_no_archivado', 'El viaje no está archivado'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -131,13 +134,19 @@ const responderMotivo = (res, estado, mensajeFallo) => {
 const idInvalido = (res) => responderError(res, 400, 'datos_invalidos', 'El identificador del viaje no es válido');
 
 const listar = async (req, res) => {
-  const { estado } = req.query;
+  const { estado, archivados } = req.query;
   if (estado !== undefined && !ESTADOS.includes(estado)) {
-    return responderError(res, 400, 'datos_invalidos', 'El estado debe ser activo, finalizado o archivado');
+    return responderError(res, 400, 'datos_invalidos', 'El estado debe ser activo o finalizado');
+  }
+  if (archivados !== undefined && archivados !== 'true' && archivados !== 'false') {
+    return responderError(res, 400, 'datos_invalidos', 'El parámetro archivados debe ser true o false');
   }
 
   try {
-    const resultado = await viajeService.listar(req.supabase, req.usuario.id, estado);
+    const resultado = await viajeService.listar(req.supabase, req.usuario.id, {
+      estado,
+      archivados: archivados === 'true',
+    });
     if (resultado.error) {
       return responderError(res, 502, 'error_viaje', 'No se han podido obtener los viajes');
     }
@@ -214,6 +223,21 @@ const editar = async (req, res) => {
   }
 };
 
+const finalizar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  try {
+    const resultado = await viajeService.finalizar(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido finalizar el viaje');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido finalizar el viaje');
+    return res.status(200).json(resultado.viaje);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const archivar = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
@@ -223,6 +247,21 @@ const archivar = async (req, res) => {
 
     if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido archivar el viaje');
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido archivar el viaje');
+    return res.status(200).json(resultado.viaje);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+const desarchivar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  try {
+    const resultado = await viajeService.desarchivar(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido desarchivar el viaje');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido desarchivar el viaje');
     return res.status(200).json(resultado.viaje);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
@@ -244,4 +283,4 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, editar, archivar, eliminar };
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar };

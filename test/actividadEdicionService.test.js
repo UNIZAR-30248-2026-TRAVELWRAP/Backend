@@ -182,7 +182,7 @@ describe('actividadService.editar', () => {
   it('devuelve no_existe, no_activo o no_encontrada sin modificar nada', async () => {
     const sinViaje = clienteFalso([{ data: null, error: null }]);
     const ajeno = clienteFalso([{ data: viaje('activo', false), error: null }]);
-    const archivado = clienteFalso([{ data: viaje('archivado'), error: null }]);
+    const archivado = clienteFalso([{ data: viaje('finalizado'), error: null }]);
     const sinActividad = clienteFalso([{ data: viaje(), error: null }, { data: null, error: null }]);
 
     assert.deepEqual(await actividadService.editar(sinViaje, USUARIO, VIAJE_ID, ACTIVIDAD_ID, { titulo: 'X' }), { estado: 'no_existe' });
@@ -234,7 +234,7 @@ describe('actividadService.eliminar', () => {
 
   it('devuelve no_existe, no_activo o no_encontrada sin borrar nada', async () => {
     const sinViaje = clienteFalso([{ data: null, error: null }]);
-    const archivado = clienteFalso([{ data: viaje('archivado'), error: null }]);
+    const archivado = clienteFalso([{ data: viaje('finalizado'), error: null }]);
     const sinActividad = clienteFalso([{ data: viaje(), error: null }, { data: null, error: null }]);
 
     assert.deepEqual(await actividadService.eliminar(sinViaje, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { estado: 'no_existe' });

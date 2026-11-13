@@ -8,6 +8,8 @@ router.post('/', requiereSesion, viajeController.crear);
 router.get('/:viajeId', requiereSesion, viajeController.obtener);
 router.patch('/:viajeId', requiereSesion, viajeController.editar);
 router.delete('/:viajeId', requiereSesion, viajeController.eliminar);
+router.post('/:viajeId/finalizar', requiereSesion, viajeController.finalizar);
 router.post('/:viajeId/archivar', requiereSesion, viajeController.archivar);
+router.post('/:viajeId/desarchivar', requiereSesion, viajeController.desarchivar);
 
 module.exports = router;

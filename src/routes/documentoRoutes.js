@@ -35,6 +35,7 @@ const recibirArchivo = (req, res, next) => {
 router.get('/', requiereSesion, documentoController.listar);
 router.post('/', requiereSesion, recibirArchivo, documentoController.subir);
 router.get('/:documentoId/url', requiereSesion, documentoController.obtenerUrl);
+router.delete('/:documentoId', requiereSesion, documentoController.eliminar);
 
 module.exports = router;
 module.exports.recibirArchivo = recibirArchivo;

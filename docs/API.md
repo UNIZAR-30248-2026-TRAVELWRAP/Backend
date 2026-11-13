@@ -25,8 +25,10 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes`](#post-viajes) | Crea un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}`](#get-viajesviajeid) | Obtiene el detalle de un viaje | Token de sesión |
 | PATCH | [`/viajes/{viajeId}`](#patch-viajesviajeid) | Edita los datos de un viaje | Token de sesión |
-| DELETE | [`/viajes/{viajeId}`](#delete-viajesviajeid) | Elimina un viaje archivado | Token de sesión |
-| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Finaliza y archiva un viaje | Token de sesión |
+| DELETE | [`/viajes/{viajeId}`](#delete-viajesviajeid) | Elimina un viaje archivado, solo para ti | Token de sesión |
+| POST | [`/viajes/{viajeId}/finalizar`](#post-viajesviajeidfinalizar) | Finaliza un viaje sin archivarlo | Token de sesión |
+| POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Archiva un viaje, solo para ti | Token de sesión |
+| POST | [`/viajes/{viajeId}/desarchivar`](#post-viajesviajeiddesarchivar) | Desarchiva un viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 | GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
@@ -51,8 +53,15 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | DELETE | [`/viajes/{viajeId}/gastos/{gastoId}`](#delete-viajesviajeidgastosgastoid) | Borra un gasto y sus repartos | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/fotos`](#get-viajesviajeidfotos) | Lista las fotos de la galería del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto a la galería del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/resumen`](#get-viajesviajeidresumen) | Resumen «Fin de viaje» (Wrap) del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/documentos/{documentoId}`](#delete-viajesviajeiddocumentosdocumentoid) | Elimina un documento de la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
+| PATCH | [`/perfil`](#patch-perfil) | Cambia el nombre del perfil | Token de sesión |
+| PUT | [`/perfil/avatar`](#put-perfilavatar) | Cambia la foto del perfil | Token de sesión |
+| DELETE | [`/perfil/avatar`](#delete-perfilavatar) | Quita la foto del perfil | Token de sesión |
 
 ## General
 
@@ -369,8 +378,11 @@ que el navegador no envía a ningún servidor:
 **Lista los viajes del usuario**
 
 Devuelve los viajes de los que el usuario es miembro activo, del más reciente al más antiguo, con sus miembros.
+No incluye los que el usuario ha eliminado (para él ya no existen). Por defecto tampoco los que ha archivado:
+se piden con `archivados=true`. El archivado es personal (MEJ-12), no cambia lo que ven los demás miembros.
 La PWA los reparte en «Mis viajes»: los activos con destino (tarjeta azul), los activos sin destino
-(`pendiente_destino: true`, tarjeta verde) y, por estado, los finalizados y archivados (viajes anteriores).
+(`pendiente_destino: true`, tarjeta verde) y los finalizados no archivados (viajes anteriores).
+Los archivados se piden aparte, para «Viajes archivados».
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -378,7 +390,8 @@ La PWA los reparte en «Mis viajes»: los activos con destino (tarjeta azul), lo
 
 | Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- | --- |
-| `estado` | query | No | enum (activo, finalizado, archivado) | Devuelve solo los viajes en ese estado |  |
+| `estado` | query | No | enum (activo, finalizado) | Devuelve solo los viajes en ese estado |  |
+| `archivados` | query | No | boolean | Por defecto (`false`) devuelve solo los viajes que el usuario no ha archivado. Con `true`, solo los que<br>ha archivado |  |
 
 **Respuestas**
 
@@ -390,11 +403,11 @@ Cuerpo (`application/json`):
 | --- | --- | --- | --- | --- |
 | `viajes` | array<any> | No |  |  |
 
-**400** — El filtro `estado` no es válido
+**400** — El filtro `estado` o `archivados` no es válido (`estado=archivado` ya no existe)
 
 | Código de error | Mensaje |
 | --- | --- |
-| `datos_invalidos` | El estado debe ser activo, finalizado o archivado |
+| `datos_invalidos` | El estado debe ser activo o finalizado |
 
 **401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
 
@@ -448,7 +461,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 
@@ -506,10 +519,11 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
@@ -550,7 +564,7 @@ Cuerpo (`application/json`):
 Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
 Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
 los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
-Un viaje archivado es de solo lectura y no se puede editar.
+Un viaje finalizado es de solo lectura y no se puede editar.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -586,10 +600,11 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
@@ -624,7 +639,7 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está finalizado o archivado y ya no se puede modificar
+**409** — El viaje está finalizado y ya no se puede modificar
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -640,12 +655,15 @@ Cuerpo (`application/json`):
 
 ### DELETE /viajes/{viajeId}
 
-**Elimina un viaje archivado**
+**Elimina un viaje archivado, solo para ti**
 
-Borra el viaje para todos sus miembros, junto con todo lo asociado (miembros, votaciones, actividades,
-gastos y los datos de sus documentos), que se elimina en cascada (PB-13). No se puede deshacer.
-Los archivos de la cartera siguen en el bucket `documentos` de Supabase Storage.
-Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece desde «Viajes archivados».
+Elimina el viaje **solo para quien lo pide** (MEJ-12): deja de aparecerle en su cuenta (el detalle responde 404)
+y no se puede recuperar desde la app, pero los demás miembros lo siguen viendo igual. Lo puede hacer
+cualquier miembro, y solo con un viaje que tenga archivado: la PWA lo ofrece desde «Viajes archivados».
+Cuando lo han eliminado todos los miembros que siguen en el viaje, el último lo borra de verdad: se borran sus
+documentos y fotos de Supabase Storage y después el viaje con todo lo asociado (miembros, votaciones,
+actividades, gastos...), en cascada. Los sellos de cada usuario se conservan. La respuesta es la misma en
+ambos casos y no incluye rutas de archivos. Si falla el borrado definitivo, no cambia nada y se puede repetir.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -672,19 +690,13 @@ Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece de
 | `sin_sesion` | Falta el token de acceso |
 | `sesion_invalida` | La sesión ha caducado o no es válida |
 
-**403** — El usuario es miembro del viaje pero no su creador
-
-| Código de error | Mensaje |
-| --- | --- |
-| `no_creador` | Solo el creador del viaje puede hacerlo |
-
-**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+**404** — El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
 
 | Código de error | Mensaje |
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje no está archivado
+**409** — El usuario no tiene archivado el viaje
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -698,13 +710,14 @@ Solo lo puede hacer el creador y solo con viajes archivados: la PWA lo ofrece de
 | --- | --- |
 | `error_viaje` | No se ha podido eliminar el viaje |
 
-### POST /viajes/{viajeId}/archivar
+### POST /viajes/{viajeId}/finalizar
 
-**Finaliza y archiva un viaje**
+**Finaliza un viaje sin archivarlo**
 
-Pasa el viaje a estado `archivado` (PB-12). A partir de ese momento es un historial de solo lectura:
-no se puede editar ni añadir contenido (gastos, tareas...). Sale de «Mis viajes» y aparece en «Viajes archivados».
-Si el viaje estaba activo, se guarda el momento del cierre en `finalizado_en`.
+Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `finalizado_en` (MEJ-12).
+Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
+Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
+archivarlo para sí mismo con `/archivar`.
 Solo lo puede hacer el creador del viaje. No se puede deshacer.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -717,7 +730,7 @@ Solo lo puede hacer el creador del viaje. No se puede deshacer.
 
 **Respuestas**
 
-**200** — Viaje archivado, con el mismo formato que el detalle
+**200** — Viaje finalizado, con el mismo formato que el detalle
 
 Cuerpo (`application/json`):
 
@@ -731,10 +744,11 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado, archivado) | No |  | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
@@ -766,10 +780,88 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje ya estaba archivado
+**409** — El viaje ya estaba finalizado
 
 | Código de error | Mensaje |
 | --- | --- |
+| `viaje_finalizado` | El viaje ya está finalizado |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido finalizar el viaje |
+
+### POST /viajes/{viajeId}/archivar
+
+**Archiva un viaje, solo para ti**
+
+Archiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes anteriores» y aparece en sus
+«Viajes archivados» (`archivado: true` en la respuesta). No cambia el estado del viaje, que sigue
+`finalizado`, ni lo que ven los demás miembros. Lo puede hacer cualquier miembro y solo con un viaje
+finalizado (`/finalizar`).
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Viaje archivado, con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje no está finalizado (`viaje_no_finalizado`) o el usuario ya lo tenía archivado (`viaje_archivado`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_finalizado` | Solo se pueden archivar viajes finalizados |
 | `viaje_archivado` | El viaje ya está archivado |
 
 **500** — Error interno del servidor
@@ -779,6 +871,82 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido archivar el viaje |
+
+### POST /viajes/{viajeId}/desarchivar
+
+**Desarchiva un viaje**
+
+Desarchiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes archivados» y vuelve a sus
+«Viajes anteriores» (`archivado: false` en la respuesta). No cambia el estado del viaje, que sigue
+`finalizado` y de solo lectura: nunca vuelve a «En curso». Lo puede hacer cualquier miembro.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Viaje desarchivado, con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o ya lo ha eliminado (las políticas RLS no permiten distinguir los casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El usuario no tiene archivado el viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_archivado` | El viaje no está archivado |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido desarchivar el viaje |
 
 ## Invitaciones
 
@@ -885,7 +1053,7 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `invitacion_no_encontrada` | El enlace de invitación no es válido |
 
-**409** — El viaje está finalizado o archivado y ya no admite nuevos miembros
+**409** — El viaje está finalizado y ya no admite nuevos miembros
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -1056,7 +1224,7 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está archivado o finalizado (solo lectura)
+**409** — El viaje está finalizado (solo lectura)
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -1591,7 +1759,7 @@ Devuelve las actividades del viaje ordenadas por día. Dentro de cada día van p
 hora de inicio (las que empiezan a la misma hora, por su posición `orden`). Las que no tienen hora van al final
 del día, por su posición, salvo las que el usuario ha colocado entre las demás con PUT /viajes/{viajeId}/actividades/orden,
 que aparecen en el lugar donde las puso. Con `fecha` solo devuelve las de ese día.
-Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje finalizado (solo lectura).
 
 Cada actividad incluye `latitud`, `longitud` (números con 6 decimales) y `lugar_externo_id` cuando se eligió su
 dirección con GET /direcciones; si no, los tres valen `null`. Con ellas el Itinerario dibuja un marcador por
@@ -1741,7 +1909,7 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está archivado o finalizado (solo lectura)
+**409** — El viaje está finalizado (solo lectura)
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -1933,7 +2101,7 @@ Cuerpo (`application/json`):
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 | `actividad_no_encontrada` | La actividad no existe en este viaje |
 
-**409** — El viaje está archivado o finalizado (solo lectura)
+**409** — El viaje está finalizado (solo lectura)
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -1991,7 +2159,7 @@ está activo. Responde 204 sin cuerpo.
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 | `actividad_no_encontrada` | La actividad no existe en este viaje |
 
-**409** — El viaje está archivado o finalizado (solo lectura)
+**409** — El viaje está finalizado (solo lectura)
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -2017,7 +2185,7 @@ está activo. Responde 204 sin cuerpo.
 
 Devuelve los gastos del viaje del más reciente al más antiguo (por fecha y, en el mismo día, por la hora a
 la que se registraron), cada uno con la parte de cada participante, y el total gastado, sumado en céntimos.
-Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
 solo lee.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -2157,7 +2325,7 @@ participante no es miembro del viaje
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está archivado o finalizado (solo lectura)
+**409** — El viaje está finalizado (solo lectura)
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -2183,7 +2351,7 @@ Devuelve, para cada miembro, lo que ha pagado, su parte de los gastos y su saldo
 positivo, le deben; negativo, debe. Se calcula en céntimos a partir de los gastos y sus repartos, así que
 siempre está al día y la suma de todos los saldos es 0.
 Salen primero los miembros actuales, en el orden del viaje, y después quien abandonó el viaje con gastos,
-sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados.
+sin nombre. Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -2248,7 +2416,7 @@ a partir del balance: primero empareja los saldos iguales de signo contrario y d
 mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
 Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
 viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
-Solo lo pueden pedir los miembros del viaje; también funciona en viajes archivados o finalizados, porque solo lee.
+Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados, porque solo lee.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -2536,7 +2704,7 @@ Quien no puede borrarlo recibe el mismo 404 que si el gasto no existiera.
 
 Devuelve los datos de los documentos de la cartera compartida del viaje (billetes, reservas, seguros...),
 del más reciente al más antiguo. No incluye el contenido de los archivos.
-Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
 solo lee.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -2662,7 +2830,7 @@ no es válido o el identificador del viaje no es un UUID
 | --- | --- |
 | `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
 
-**409** — El viaje está archivado o finalizado (solo lectura)
+**409** — El viaje está finalizado (solo lectura)
 
 | Código de error | Mensaje |
 | --- | --- |
@@ -2680,6 +2848,68 @@ no es válido o el identificador del viaje no es un UUID
 | --- | --- |
 | `error_documento` | No se ha podido subir el documento |
 
+### DELETE /viajes/{viajeId}/documentos/{documentoId}
+
+**Elimina un documento de la cartera del viaje**
+
+Elimina un documento de la cartera compartida del viaje: borra su fila de la tabla `documentos` y, después,
+su archivo del bucket privado `documentos` de Supabase Storage. No se puede deshacer.
+
+Cualquier miembro puede eliminar cualquier documento, no solo quien lo subió, y solo mientras el viaje esté
+activo. Si falla el borrado del archivo una vez borrada la fila, la respuesta sigue siendo 204: para los
+miembros el documento ya no existe y el archivo queda en el bucket sin fila, invisible.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `documentoId` | path | Sí | string (uuid) | Identificador del documento | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+
+**Respuestas**
+
+**204** — Documento eliminado (sin cuerpo)
+
+**400** — El identificador del viaje o del documento no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del documento no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el documento no existe en este viaje, por ejemplo porque otro miembro ya lo eliminó (`documento_no_encontrado`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `documento_no_encontrado` | El documento no existe en este viaje |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al borrar el documento)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido eliminar el documento |
+
 ### GET /viajes/{viajeId}/documentos/{documentoId}/url
 
 **Obtiene un enlace temporal para abrir o descargar un documento**
@@ -2692,7 +2922,7 @@ enlace nuevo. El archivo no pasa por el servidor.
 Con `descargar=true` el enlace hace que el navegador guarde el archivo con el nombre del documento.
 No devuelve la ruta interna del archivo en el bucket.
 
-Solo lo pueden pedir los miembros del viaje. También funciona en viajes archivados o finalizados, porque
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
 solo lee.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -2750,6 +2980,243 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `error_documento` | No se ha podido obtener el enlace del documento |
 
+## Fotos
+
+### GET /viajes/{viajeId}/fotos
+
+**Lista las fotos de la galería del viaje**
+
+Devuelve las fotos de la galería compartida del viaje, de la más reciente a la más antigua. Cada foto incluye
+`url`, una URL firmada de Supabase Storage para verla que caduca a la hora de generarla (1 hora): pasado ese
+tiempo hay que volver a pedir el listado.
+Solo lo pueden pedir los miembros del viaje. También funciona en viajes finalizados, porque
+solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Fotos del viaje (lista vacía si aún no tiene ninguna)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `fotos` | array<Foto> | No | Fotos del viaje, de la más reciente a la más antigua |  |
+| `fotos[].id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `fotos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `fotos[].nombre` | string | No | Nombre del archivo original | `coliseo.jpg` |
+| `fotos[].tipo_mime` | enum (image/jpeg, image/png, image/webp) | No | Tipo reconocido a partir del contenido del archivo | `image/jpeg` |
+| `fotos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `fotos[].subido_por` | string (uuid) \| null | No | Quién subió la foto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `fotos[].creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+| `fotos[].url` | string (uri) \| null | No | URL firmada de Supabase Storage para ver la foto; caduca a la hora (null si no se ha podido generar) | `https://proyecto.supabase.co/storage/v1/object/sign/fotos/123e4567-e89b-12d3-a456-426614174000/0b0e8f5a.jpg?token=eyJ...` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_foto` | No se han podido obtener las fotos |
+
+### POST /viajes/{viajeId}/fotos
+
+**Sube una foto a la galería del viaje**
+
+Sube una imagen JPEG, PNG o WebP de 8 MB como máximo a la galería compartida del viaje. El archivo se guarda
+en el bucket privado `fotos` de Supabase Storage, en la carpeta del viaje y con un nombre aleatorio, y sus
+datos quedan registrados en la tabla `fotos`. Si el registro falla, el archivo se borra del bucket.
+
+El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el
+navegador. El nombre de la foto es el del archivo (recortado a 150 caracteres). Cualquier miembro puede subir
+fotos mientras el viaje esté activo; quien hace la petición queda como `subido_por`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `archivo` | string (binary) | Sí | Imagen JPEG, PNG o WebP de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición |  |
+
+**Respuestas**
+
+**201** — Foto subida y registrada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No | Nombre del archivo original | `coliseo.jpg` |
+| `tipo_mime` | enum (image/jpeg, image/png, image/webp) | No | Tipo reconocido a partir del contenido del archivo | `image/jpeg` |
+| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `subido_por` | string (uuid) \| null | No | Quién subió la foto (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+| `url` | string (uri) \| null | No | URL firmada de Supabase Storage para ver la foto; caduca a la hora (null si no se ha podido generar) | `https://proyecto.supabase.co/storage/v1/object/sign/fotos/123e4567-e89b-12d3-a456-426614174000/0b0e8f5a.jpg?token=eyJ...` |
+
+**400** — Falta el archivo o llega más de uno, el archivo no es una imagen JPEG, PNG o WebP, ocupa más de 8 MB o el
+identificador del viaje no es un UUID
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta la foto en el campo «archivo» |
+| `tipo_no_permitido` | Solo se pueden subir fotos JPEG, PNG o WebP |
+| `archivo_demasiado_grande` | La foto no puede ocupar más de 8 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_foto` | No se ha podido subir la foto |
+
+## Resumen
+
+### GET /viajes/{viajeId}/resumen
+
+**Resumen «Fin de viaje» (Wrap) del viaje**
+
+Calcula los datos que muestra el resumen de fin de viaje: los días del viaje, lo gastado, el gasto más alto, la
+actividad más votada y el «alma del grupo». Los datos se calculan al pedirlos, así que siempre están al día.
+Solo lo pueden pedir los miembros del viaje, y funciona con el viaje activo o finalizado porque solo
+lee. Las fotos y el balance que también aparecen en la pantalla se piden con `GET /viajes/{viajeId}/fotos` y
+`GET /viajes/{viajeId}/gastos/balance`.
+
+- `dias`: días desde el primero hasta el último del viaje, ambos incluidos. Si el viaje no tiene las dos
+  fechas, los días distintos que tienen actividades.
+- `gasto_total`: suma de todos los gastos, calculada en céntimos para no arrastrar errores de coma flotante.
+- `gasto_mayor`: el gasto de mayor importe (con un empate, el primero), o `null` si no hay gastos.
+- `actividad_mas_votada`: la opción con más votos entre las votaciones de tipo `actividad` (con un empate, la
+  que va antes en la lista), o `null` si nadie ha votado.
+- `alma_del_grupo`: el miembro actual que ha pagado más gastos (con el mismo número, el que ha pagado más
+  dinero y después el primero de la lista) con sus pagos, planes propuestos (actividades creadas) y fotos
+  subidas, o `null` si no hay gastos.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Resumen del viaje
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `dias` | integer | No | Días del viaje | `4` |
+| `gasto_total` | number | No | Suma de los gastos del viaje | `850` |
+| `gasto_mayor` | object \| null | No | Gasto de mayor importe (null si no hay gastos) |  |
+| `gasto_mayor.concepto` | string | No |  | `Cena Trastevere` |
+| `gasto_mayor.importe` | number | No |  | `120.5` |
+| `actividad_mas_votada` | object \| null | No | Opción con más votos de las votaciones de tipo actividad (null si nadie ha votado) |  |
+| `actividad_mas_votada.titulo` | string | No |  | `Coliseo Romano` |
+| `actividad_mas_votada.votos` | integer | No |  | `3` |
+| `alma_del_grupo` | object \| null | No | Miembro que ha pagado más gastos (null si no hay gastos) |  |
+| `alma_del_grupo.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `alma_del_grupo.nombre` | string \| null | No |  | `Berta` |
+| `alma_del_grupo.pagos` | integer | No | Gastos que ha pagado | `2` |
+| `alma_del_grupo.planes_propuestos` | integer | No | Actividades que ha creado | `4` |
+| `alma_del_grupo.fotos_subidas` | integer | No | Fotos que ha subido a la galería | `3` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_resumen` | No se ha podido calcular el resumen del viaje |
+
 ## Rutas
 
 ### GET /viajes/{viajeId}/ruta
@@ -2758,7 +3225,7 @@ Cuerpo (`application/json`):
 
 Toma las actividades del día indicado que tienen coordenadas, en el orden de la agenda, y devuelve la ruta a
 pie por calles que las une junto con distancia, duración y un orden más corto para visitarlas. Solo lo pueden
-pedir los miembros del viaje, y también funciona con un viaje archivado (solo lectura).
+pedir los miembros del viaje, y también funciona con un viaje finalizado (solo lectura).
 
 La ruta la calcula un servicio externo basado en OSRM con datos de OpenStreetMap (por defecto el servidor de rutas
 a pie de OpenStreetMap Alemania; se cambia con la variable de entorno `RUTAS_URL`). Para respetar su política de
@@ -2842,3 +3309,181 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_ruta` | No se ha podido calcular la ruta |
+
+## Perfil
+
+### PATCH /perfil
+
+**Cambia el nombre del perfil**
+
+Cambia el nombre del perfil de quien hace la petición. La ruta no lleva ningún identificador: el servidor
+usa siempre el usuario del token, así que solo se puede editar el perfil propio. El nombre se guarda sin
+los espacios del principio y del final y tiene que quedar entre 1 y 100 caracteres, el mismo límite que el
+registro. Devuelve el usuario con la misma forma que en la sesión, para que el cliente lo pueda guardar tal cual.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `nombre` | string | Sí | Nuevo nombre. Se guarda sin los espacios del principio y del final, y tiene que quedar entre 1 y 100 caracteres | `Berta` |
+
+**Respuestas**
+
+**200** — Nombre cambiado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `usuario` | Usuario | No |  |  |
+| `usuario.id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `usuario.nombre` | string \| null | No | perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil | `Daniel` |
+| `usuario.email` | string (email) | No | perfiles.email, o el email de Supabase Auth si no hay perfil | `daniel@travelwrap.app` |
+| `usuario.avatar_url` | string \| null | No | perfiles.avatar_url. Con Google, la foto de la cuenta | `null` |
+| `usuario.creado_en` | string (date-time) | No | perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil | `2026-10-07T18:00:00Z` |
+
+**400** — El nombre no es un texto o, sin contar los espacios de los extremos, tiene menos de 1 o más de 100 caracteres
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El nombre debe tener entre 1 y 100 caracteres |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `perfil_no_encontrado` | El perfil no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+### PUT /perfil/avatar
+
+**Cambia la foto del perfil**
+
+Sube una imagen JPEG o PNG de 2 MB como máximo como foto del perfil de quien hace la petición. La ruta no
+lleva ningún identificador: el servidor usa siempre el usuario del token. La foto se guarda en el bucket
+público `avatares` de Supabase Storage, en la carpeta del usuario y con un nombre aleatorio, así que la URL
+cambia con cada subida y los navegadores no siguen mostrando la foto anterior desde la caché.
+
+El tipo se reconoce por el contenido del archivo (JPEG empieza por `FF D8 FF` y PNG por `89 50 4E 47`),
+además de por el tipo que indica el cliente, que se puede falsear. Si no se puede guardar la URL en el perfil,
+la foto subida se borra y el perfil queda igual. Una vez cambiada, se borra la foto anterior si era de este
+bucket; las fotos de Google no se tocan.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `avatar` | string (binary) | Sí | JPEG o PNG de 2 MB (2.000.000 bytes) como máximo. Un solo archivo por petición |  |
+
+**Respuestas**
+
+**200** — Foto cambiada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `usuario` | Usuario | No |  |  |
+| `usuario.id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `usuario.nombre` | string \| null | No | perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil | `Daniel` |
+| `usuario.email` | string (email) | No | perfiles.email, o el email de Supabase Auth si no hay perfil | `daniel@travelwrap.app` |
+| `usuario.avatar_url` | string \| null | No | perfiles.avatar_url. Con Google, la foto de la cuenta | `null` |
+| `usuario.creado_en` | string (date-time) | No | perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil | `2026-10-07T18:00:00Z` |
+
+**400** — Falta la foto o llega más de una, no es una imagen JPEG o PNG, o ocupa más de 2 MB
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta la foto en el campo «avatar» |
+| `tipo_no_permitido` | La foto debe ser una imagen JPEG o PNG |
+| `archivo_demasiado_grande` | La foto no puede ocupar más de 2 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `perfil_no_encontrado` | El perfil no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir la foto o al guardarla en el perfil)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_storage` | No se ha podido guardar la foto |
+
+### DELETE /perfil/avatar
+
+**Quita la foto del perfil**
+
+Deja el perfil sin foto (`avatar_url` nulo) y borra el archivo anterior si estaba en el bucket `avatares`;
+una foto de Google no se borra. Si el perfil ya no tenía foto, también responde 200.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Respuestas**
+
+**200** — Foto quitada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `usuario` | Usuario | No |  |  |
+| `usuario.id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `usuario.nombre` | string \| null | No | perfiles.nombre. Con Google se toma del nombre de la cuenta la primera vez. Nulo si el usuario aún no tiene perfil | `Daniel` |
+| `usuario.email` | string (email) | No | perfiles.email, o el email de Supabase Auth si no hay perfil | `daniel@travelwrap.app` |
+| `usuario.avatar_url` | string \| null | No | perfiles.avatar_url. Con Google, la foto de la cuenta | `null` |
+| `usuario.creado_en` | string (date-time) | No | perfiles.creado_en, o la fecha de alta en Supabase Auth si no hay perfil | `2026-10-07T18:00:00Z` |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El usuario no tiene perfil (el login por email no siempre lo crea hasta que crea un viaje o se une a uno)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `perfil_no_encontrado` | El perfil no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_storage` | No se ha podido quitar la foto |

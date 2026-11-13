@@ -17,7 +17,7 @@ const EXTENSIONES = {
 const generarRuta = (viajeId, tipoMime) => `${viajeId}/${randomUUID()}.${EXTENSIONES[tipoMime]}`;
 
 // Documentos de la cartera del viaje, del más reciente al más antiguo.
-// También se pueden consultar en viajes finalizados o archivados: solo lee
+// También se pueden consultar en viajes finalizados: solo lee
 // Devuelve { error } | { estado: no_existe | ok (con documentos) }
 const listar = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
@@ -75,7 +75,7 @@ const SEGUNDOS_DE_ENLACE = 300;
 const archivoNoEncontrado = (error) => error.statusCode === '404' || /not found/i.test(error.message ?? '');
 
 // Enlace temporal de Supabase Storage para abrir un documento del viaje, o para descargarlo con su nombre.
-// Sirve también en viajes finalizados o archivados: solo lee. La ruta del archivo no sale del servidor
+// Sirve también en viajes finalizados: solo lee. La ruta del archivo no sale del servidor
 // Devuelve { error } | { estado: no_existe | documento_no_existe | ok (con url, expira_en, nombre y tipo_mime) }
 const obtenerUrl = async (cliente, usuarioId, viajeId, documentoId, { descargar = false } = {}) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
@@ -109,4 +109,33 @@ const obtenerUrl = async (cliente, usuarioId, viajeId, documentoId, { descargar 
   };
 };
 
-module.exports = { listar, subir, obtenerUrl, BUCKET, SEGUNDOS_DE_ENLACE };
+// Elimina el documento de la cartera y su archivo del bucket. Primero se borra la fila y después el archivo:
+// al revés, si fallara el borrado de la fila quedaría un documento en la cartera que ya no se puede abrir.
+// Si falla el borrado del archivo, el documento ya no existe para los miembros y el archivo queda huérfano, invisible
+// Devuelve { error } | { estado: no_existe | no_activo | documento_no_existe | ok }
+const eliminar = async (cliente, usuarioId, viajeId, documentoId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+
+  // El documento tiene que ser de este viaje: con otro id de viaje no se borra nada
+  const { data, error } = await cliente
+    .from('documentos')
+    .delete()
+    .eq('id', documentoId)
+    .eq('viaje_id', viajeId)
+    .select('ruta');
+  if (error) return { error };
+  if (!data?.length) return { estado: 'documento_no_existe' };
+
+  // La política de Storage solo deja borrar archivos sin fila, que es como queda este tras borrar la fila
+  await cliente.storage
+    .from(BUCKET)
+    .remove([data[0].ruta])
+    .catch(() => {});
+
+  return { estado: 'ok' };
+};
+
+module.exports = { listar, subir, obtenerUrl, eliminar, BUCKET, SEGUNDOS_DE_ENLACE };

@@ -43,11 +43,22 @@ $$;
 -- 2. TABLAS
 CREATE TABLE IF NOT EXISTS public.perfiles (
   id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  -- Entre 1 y 100 caracteres sin contar los espacios de los extremos (restricción perfiles_nombre_valido)
   nombre text NOT NULL,
   email text,
   avatar_url text,
   creado_en timestamptz NOT NULL DEFAULT now()
 );
+
+-- El nombre del perfil tiene entre 1 y 100 caracteres sin contar los espacios de los extremos (como en el registro)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'perfiles_nombre_valido') THEN
+    ALTER TABLE public.perfiles
+      ADD CONSTRAINT perfiles_nombre_valido CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 100);
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS public.viajes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -65,9 +76,11 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   moneda char(3) NOT NULL DEFAULT 'EUR',
   -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
   presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
-  -- activo: se puede editar. archivado: solo lectura; es el único estado desde el que se puede eliminar
+  -- activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores»; no vuelve a activo.
+  -- archivado: sin uso desde MEJ-12 (archivar y eliminar son personales: ver archivado_en y eliminado_en
+  -- en miembros_viaje)
   estado public.estado_viaje NOT NULL DEFAULT 'activo',
-  -- Momento en que se cerró el viaje (al finalizarlo o archivarlo)
+  -- Momento en que el creador finalizó el viaje
   finalizado_en timestamptz,
   -- Token del enlace/QR de invitación: uno por viaje, permanente
   token_invitacion text NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
@@ -82,6 +95,10 @@ CREATE TABLE IF NOT EXISTS public.miembros_viaje (
   rol public.rol_miembro NOT NULL DEFAULT 'miembro',
   unido_en timestamptz NOT NULL DEFAULT now(),
   abandonado_en timestamptz,
+  -- Archivado y eliminado por este usuario (null = no). Son personales: los demás miembros siguen viendo el viaje.
+  -- Solo se cambian con las funciones archivar_viaje, desarchivar_viaje_propio y eliminar_viaje
+  archivado_en timestamptz,
+  eliminado_en timestamptz,
   PRIMARY KEY (viaje_id, usuario_id)
 );
 
@@ -240,6 +257,25 @@ ALTER TABLE public.documentos
   DROP CONSTRAINT IF EXISTS documentos_tamano_bytes_check,
   ADD CONSTRAINT documentos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000);
 
+-- Fotos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase
+-- Storage y esta fila guarda sus datos y dónde está
+CREATE TABLE IF NOT EXISTS public.fotos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Al eliminar el viaje se borran sus filas, pero no los archivos del bucket
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  -- Nombre que ve el usuario (el del archivo original)
+  nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 150),
+  -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
+  ruta text NOT NULL UNIQUE,
+  tipo_mime text NOT NULL CHECK (tipo_mime IN ('image/jpeg', 'image/png', 'image/webp')),
+  -- Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000),
+  subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+  CONSTRAINT fotos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
+);
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -254,3 +290,5 @@ CREATE INDEX IF NOT EXISTS gastos_viaje_fecha_idx ON public.gastos (viaje_id, fe
 CREATE INDEX IF NOT EXISTS repartos_gasto_miembro_idx ON public.repartos_gasto (viaje_id, usuario_id);
 -- Cartera del viaje, del documento más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);
+-- Galería del viaje, de la foto más reciente a la más antigua
+CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);

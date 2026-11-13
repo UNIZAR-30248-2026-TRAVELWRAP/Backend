@@ -172,7 +172,7 @@ describe('actividadService.reordenar', () => {
   it('devuelve no_existe si el viaje no existe o el usuario no es miembro, y no_activo si está finalizado', async () => {
     const sinViaje = clienteFalso([{ data: null, error: null }]);
     const noMiembro = clienteFalso([{ data: viaje('activo', false), error: null }]);
-    const finalizado = clienteFalso([{ data: viaje('archivado'), error: null }]);
+    const finalizado = clienteFalso([{ data: viaje('finalizado'), error: null }]);
 
     assert.deepEqual(await actividadService.reordenar(sinViaje, USUARIO, VIAJE_ID, FECHA, ['a']), { estado: 'no_existe' });
     assert.deepEqual(await actividadService.reordenar(noMiembro, USUARIO, VIAJE_ID, FECHA, ['a']), { estado: 'no_existe' });

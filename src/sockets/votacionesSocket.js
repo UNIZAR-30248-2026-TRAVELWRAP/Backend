@@ -7,7 +7,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 // Motivos del aviso: cambios en una votación, o en los miembros del viaje (cambia quién puede votar y,
 // con ello, si ya han votado todos)
-const MOTIVOS = ['creada', 'opcion', 'voto', 'cerrada', 'miembros'];
+const MOTIVOS = ['creada', 'opcion', 'voto', 'cerrada', 'tipo', 'miembros'];
 
 const sala = (viajeId) => `viaje:${viajeId}`;
 
