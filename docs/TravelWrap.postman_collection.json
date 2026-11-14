@@ -134,6 +134,10 @@
       "value": ""
     },
     {
+      "key": "selloId",
+      "value": ""
+    },
+    {
       "key": "viajeIdFoto",
       "value": ""
     },
@@ -9633,6 +9637,263 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Elegir de nuevo el sello del viaje",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdSello}}/sello",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diseno\": \"mapa\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('selloId', pm.response.json().sello.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar mis sellos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye el sello del viaje', () => pm.expect(pm.response.json().sellos.some((s) => s.id === pm.collectionVariables.get('selloId'))).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar mis sellos sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/perfil/sellos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar el diseño de un sello propio",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos/{{selloId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diseno\": \"ruta\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Diseño nuevo', () => pm.expect(pm.response.json().sello.diseno).to.eql('ruta'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar el sello a un diseño que no existe",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos/{{selloId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diseno\": \"corona\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Diseño inválido', () => pm.expect(pm.response.json().error.codigo).to.eql('diseno_invalido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar un sello con un id no válido",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos/no-es-un-uuid",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diseno\": \"ruta\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar un sello que no existe",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos/00000000-0000-4000-8000-000000000000",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diseno\": \"ruta\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Sello no encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('sello_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar un sello propio",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos/{{selloId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar un sello que ya no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/perfil/sellos/{{selloId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Sello no encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('sello_no_encontrado'));"
                 ]
               }
             }

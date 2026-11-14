@@ -3857,6 +3857,163 @@ paths:
                   codigo: error_storage
                   mensaje: No se ha podido quitar la foto
 
+  /perfil/sellos:
+    get:
+      tags:
+        - Sello
+      summary: Lista los sellos del usuario (pasaporte de viajes)
+      description: |
+        Devuelve todos los sellos del usuario con sesión, por año descendente y, dentro de cada año, por fecha de
+        elección. Se leen solo de la tabla de sellos, así que siguen apareciendo aunque el usuario haya archivado
+        o eliminado el viaje, o aunque el viaje se haya borrado del todo (en ese caso `viaje_id` es `null`).
+        Cada usuario solo ve los suyos.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sellos del usuario (lista vacía si no tiene ninguno)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sellos:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sello'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_sello
+                  mensaje: No se han podido obtener los sellos
+
+  /perfil/sellos/{selloId}:
+    patch:
+      tags:
+        - Sello
+      summary: Cambia el diseño de un sello propio
+      description: |
+        Cambia el diseño de un sello del usuario, también cuando su viaje ya no existe. El destino y el año no
+        cambian. Un sello ajeno responde 404, igual que uno que no existe.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SelloId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ElegirSello'
+      responses:
+        '200':
+          description: Sello cambiado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sello:
+                    $ref: '#/components/schemas/Sello'
+        '400':
+          description: El identificador del sello no es un UUID (`datos_invalidos`) o el diseño no es uno de los cuatro (`diseno_invalido`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sello:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El identificador del sello no es válido
+                diseno:
+                  value:
+                    error:
+                      codigo: diseno_invalido
+                      mensaje: 'El diseño debe ser uno de: chincheta, mapa, ruta, avion'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El sello no existe o no es del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: sello_no_encontrado
+                  mensaje: El sello no existe
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_sello
+                  mensaje: No se ha podido cambiar el sello
+    delete:
+      tags:
+        - Sello
+      summary: Quita un sello propio
+      description: |
+        Quita un sello del usuario por su identificador, también cuando su viaje ya no existe. No afecta a los
+        sellos de los demás usuarios.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SelloId'
+      responses:
+        '204':
+          description: Sello quitado (sin cuerpo)
+        '400':
+          description: El identificador del sello no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del sello no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El sello no existe o no es del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: sello_no_encontrado
+                  mensaje: El sello no existe
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_sello
+                  mensaje: No se ha podido quitar el sello
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3923,6 +4080,15 @@ components:
         type: string
         format: uuid
       example: 5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e
+    SelloId:
+      name: selloId
+      in: path
+      required: true
+      description: Identificador del sello
+      schema:
+        type: string
+        format: uuid
+      example: 7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f
   responses:
     SinSesion:
       description: Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido

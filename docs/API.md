@@ -70,6 +70,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | PATCH | [`/perfil`](#patch-perfil) | Cambia el nombre del perfil | Token de sesión |
 | PUT | [`/perfil/avatar`](#put-perfilavatar) | Cambia la foto del perfil | Token de sesión |
 | DELETE | [`/perfil/avatar`](#delete-perfilavatar) | Quita la foto del perfil | Token de sesión |
+| GET | [`/perfil/sellos`](#get-perfilsellos) | Lista los sellos del usuario (pasaporte de viajes) | Token de sesión |
+| PATCH | [`/perfil/sellos/{selloId}`](#patch-perfilsellosselloid) | Cambia el diseño de un sello propio | Token de sesión |
+| DELETE | [`/perfil/sellos/{selloId}`](#delete-perfilsellosselloid) | Quita un sello propio | Token de sesión |
 
 ## General
 
@@ -3516,6 +3519,171 @@ sellos de los demás miembros.
 | Código de error | Mensaje |
 | --- | --- |
 | `viaje_no_terminado` | El viaje todavía no ha terminado |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_sello` | No se ha podido quitar el sello |
+
+### GET /perfil/sellos
+
+**Lista los sellos del usuario (pasaporte de viajes)**
+
+Devuelve todos los sellos del usuario con sesión, por año descendente y, dentro de cada año, por fecha de
+elección. Se leen solo de la tabla de sellos, así que siguen apareciendo aunque el usuario haya archivado
+o eliminado el viaje, o aunque el viaje se haya borrado del todo (en ese caso `viaje_id` es `null`).
+Cada usuario solo ve los suyos.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Respuestas**
+
+**200** — Sellos del usuario (lista vacía si no tiene ninguno)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `sellos` | array<Sello> | No |  |  |
+| `sellos[].id` | string (uuid) | No |  | `7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f` |
+| `sellos[].viaje_id` | string (uuid) \| null | No | Viaje al que pertenece el sello (null si el viaje se ha borrado del todo) | `0e6d7f1a-3b2c-4d5e-9f80-a1b2c3d4e5f6` |
+| `sellos[].diseno` | enum (chincheta, mapa, ruta, avion) | No |  | `mapa` |
+| `sellos[].destino` | string | No | Destino del viaje cuando se eligió el sello | `Roma` |
+| `sellos[].anio` | integer | No | Año del viaje cuando se eligió el sello | `2027` |
+| `sellos[].elegido_en` | string (date-time) | No |  | `2026-11-15T10:00:00Z` |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_sello` | No se han podido obtener los sellos |
+
+### PATCH /perfil/sellos/{selloId}
+
+**Cambia el diseño de un sello propio**
+
+Cambia el diseño de un sello del usuario, también cuando su viaje ya no existe. El destino y el año no
+cambian. Un sello ajeno responde 404, igual que uno que no existe.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `selloId` | path | Sí | string (uuid) | Identificador del sello | `7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `diseno` | enum (chincheta, mapa, ruta, avion) | Sí |  | `mapa` |
+
+**Respuestas**
+
+**200** — Sello cambiado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `sello` | Sello | No |  |  |
+| `sello.id` | string (uuid) | No |  | `7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f` |
+| `sello.viaje_id` | string (uuid) \| null | No | Viaje al que pertenece el sello (null si el viaje se ha borrado del todo) | `0e6d7f1a-3b2c-4d5e-9f80-a1b2c3d4e5f6` |
+| `sello.diseno` | enum (chincheta, mapa, ruta, avion) | No |  | `mapa` |
+| `sello.destino` | string | No | Destino del viaje cuando se eligió el sello | `Roma` |
+| `sello.anio` | integer | No | Año del viaje cuando se eligió el sello | `2027` |
+| `sello.elegido_en` | string (date-time) | No |  | `2026-11-15T10:00:00Z` |
+
+**400** — El identificador del sello no es un UUID (`datos_invalidos`) o el diseño no es uno de los cuatro (`diseno_invalido`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del sello no es válido |
+| `diseno_invalido` | El diseño debe ser uno de: chincheta, mapa, ruta, avion |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El sello no existe o no es del usuario
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sello_no_encontrado` | El sello no existe |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_sello` | No se ha podido cambiar el sello |
+
+### DELETE /perfil/sellos/{selloId}
+
+**Quita un sello propio**
+
+Quita un sello del usuario por su identificador, también cuando su viaje ya no existe. No afecta a los
+sellos de los demás usuarios.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `selloId` | path | Sí | string (uuid) | Identificador del sello | `7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f` |
+
+**Respuestas**
+
+**204** — Sello quitado (sin cuerpo)
+
+**400** — El identificador del sello no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del sello no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El sello no existe o no es del usuario
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sello_no_encontrado` | El sello no existe |
 
 **500** — Error interno del servidor
 
