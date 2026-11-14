@@ -2,6 +2,7 @@ const { afterEach, describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const viajeService = require('../src/services/viajeService');
 const viajeController = require('../src/controllers/viajeController');
+const votacionesSocket = require('../src/sockets/votacionesSocket');
 
 const VIAJE_ID = '123e4567-e89b-12d3-a456-426614174000';
 const USUARIO = { id: 'df77cba6-4be5-4cbc-814b-1e228dd73dcc' };
@@ -364,5 +365,66 @@ describe('POST /viajes (crear) tras separar los validadores', () => {
       fechaInicio: null,
       fechaFin: null,
     });
+  });
+});
+
+describe('POST /viajes/:viajeId/abandonar', () => {
+  it('responde 204 sin cuerpo y avisa a las votaciones abiertas de que han cambiado los miembros', async () => {
+    const abandonar = simular('abandonar', async () => ({ estado: 'ok' }));
+    const avisar = mock.method(votacionesSocket, 'avisarCambio', () => {});
+
+    const res = await llamar('abandonar');
+
+    assert.equal(res.codigo, 204);
+    assert.equal(res.cuerpo, undefined);
+    assert.deepEqual(abandonar.mock.calls[0].arguments.slice(1), [VIAJE_ID]);
+    assert.deepEqual(avisar.mock.calls[0].arguments, [VIAJE_ID, { motivo: 'miembros' }]);
+  });
+
+  it('con saldo pendiente responde 409 con el saldo y no avisa a nadie', async () => {
+    const avisar = mock.method(votacionesSocket, 'avisarCambio', () => {});
+    simular('abandonar', async () => ({ estado: 'saldo_pendiente', saldo: 12.5 }));
+
+    const res = await llamar('abandonar');
+
+    assert.equal(res.codigo, 409);
+    assert.equal(res.cuerpo.error.codigo, 'saldo_pendiente');
+    assert.equal(res.cuerpo.error.mensaje, 'Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de 12.50 €');
+    assert.equal(avisar.mock.calls.length, 0);
+  });
+
+  it('responde 403 si es el creador, 409 si el viaje ya no está activo y 404 si no es miembro', async () => {
+    simular('abandonar', async () => ({ estado: 'es_creador' }));
+    const creador = await llamar('abandonar');
+    assert.equal(creador.codigo, 403);
+    assert.equal(creador.cuerpo.error.codigo, 'es_creador');
+
+    mock.restoreAll();
+    simular('abandonar', async () => ({ estado: 'no_activo' }));
+    const finalizado = await llamar('abandonar');
+    assert.equal(finalizado.codigo, 409);
+    assert.equal(finalizado.cuerpo.error.codigo, 'viaje_no_activo');
+
+    mock.restoreAll();
+    simular('abandonar', async () => ({ estado: 'no_miembro' }));
+    assert.equal((await llamar('abandonar')).codigo, 404);
+  });
+
+  it('rechaza un identificador inválido, responde 502 si falla Supabase y 500 si hay una excepción', async () => {
+    const avisar = mock.method(votacionesSocket, 'avisarCambio', () => {});
+    assert.equal((await llamar('abandonar', { viajeId: 'x' })).codigo, 400);
+
+    simular('abandonar', async () => ({ error: { code: 'PGRST000' } }));
+    const fallo = await llamar('abandonar');
+    assert.equal(fallo.codigo, 502);
+    assert.equal(fallo.cuerpo.error.mensaje, 'No se ha podido abandonar el viaje');
+
+    mock.restoreAll();
+    mock.method(votacionesSocket, 'avisarCambio', () => {});
+    simular('abandonar', async () => {
+      throw new Error('fallo inesperado');
+    });
+    assert.equal((await llamar('abandonar')).codigo, 500);
+    assert.equal(avisar.mock.calls.length, 0);
   });
 });

@@ -485,3 +485,33 @@ describe('viajeService.eliminar', () => {
     assert.ok((await viajeService.eliminar(vacia, USUARIO, VIAJE_ID)).error);
   });
 });
+
+describe('viajeService.abandonar', () => {
+  it('llama a abandonar_viaje con el viaje y devuelve ok', async () => {
+    const cliente = clienteFalso([{ data: { estado: 'ok' }, error: null }]);
+
+    assert.deepEqual(await viajeService.abandonar(cliente, VIAJE_ID), { estado: 'ok' });
+    assert.deepEqual(cliente.llamadasRpc, [['abandonar_viaje', { p_viaje_id: VIAJE_ID }]]);
+  });
+
+  it('devuelve el saldo cuando no está a cero', async () => {
+    const cliente = clienteFalso([{ data: { estado: 'saldo_pendiente', saldo: -12.5 }, error: null }]);
+
+    assert.deepEqual(await viajeService.abandonar(cliente, VIAJE_ID), { estado: 'saldo_pendiente', saldo: -12.5 });
+  });
+
+  it('pasa tal cual los motivos de la función SQL: no_miembro, es_creador y no_activo', async () => {
+    for (const estado of ['no_miembro', 'es_creador', 'no_activo']) {
+      const cliente = clienteFalso([{ data: { estado }, error: null }]);
+      assert.deepEqual(await viajeService.abandonar(cliente, VIAJE_ID), { estado });
+    }
+  });
+
+  it('devuelve el error si falla la función o si no responde nada útil', async () => {
+    const falla = clienteFalso([{ data: null, error: { code: 'PGRST000' } }]);
+    assert.deepEqual((await viajeService.abandonar(falla, VIAJE_ID)).error, { code: 'PGRST000' });
+
+    const vacia = clienteFalso([{ data: null, error: null }]);
+    assert.ok((await viajeService.abandonar(vacia, VIAJE_ID)).error);
+  });
+});
