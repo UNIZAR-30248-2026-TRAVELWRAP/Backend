@@ -11,5 +11,6 @@ router.delete('/:viajeId', requiereSesion, viajeController.eliminar);
 router.post('/:viajeId/finalizar', requiereSesion, viajeController.finalizar);
 router.post('/:viajeId/archivar', requiereSesion, viajeController.archivar);
 router.post('/:viajeId/desarchivar', requiereSesion, viajeController.desarchivar);
+router.post('/:viajeId/abandonar', requiereSesion, viajeController.abandonar);
 
 module.exports = router;

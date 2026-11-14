@@ -1,4 +1,5 @@
 const viajeService = require('../services/viajeService');
+const votacionesSocket = require('../sockets/votacionesSocket');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
 const ESTADOS = ['activo', 'finalizado'];
@@ -124,6 +125,8 @@ const ERRORES_GESTION = {
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
   no_estaba_archivado: [409, 'viaje_no_archivado', 'El viaje no está archivado'],
+  no_miembro: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
+  es_creador: [403, 'es_creador', 'El creador no puede abandonar el viaje: puede finalizarlo'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -268,6 +271,34 @@ const desarchivar = async (req, res) => {
   }
 };
 
+const abandonar = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  try {
+    const resultado = await viajeService.abandonar(req.supabase, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido abandonar el viaje');
+    switch (resultado.estado) {
+      case 'ok':
+        // Al salir cambian los miembros que pueden votar: se avisa a las votaciones abiertas
+        votacionesSocket.avisarCambio(viajeId, { motivo: 'miembros' });
+        return res.status(204).end();
+      case 'saldo_pendiente':
+        return responderError(
+          res,
+          409,
+          'saldo_pendiente',
+          `Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de ${resultado.saldo.toFixed(2)} €`,
+        );
+      default:
+        return responderMotivo(res, resultado.estado, 'No se ha podido abandonar el viaje');
+    }
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
 const eliminar = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
@@ -283,4 +314,4 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar };
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar, abandonar };

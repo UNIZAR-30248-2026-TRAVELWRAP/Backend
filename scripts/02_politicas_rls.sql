@@ -984,6 +984,63 @@ BEGIN
 END;
 $$;
 
+-- Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
+-- aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca
+-- de cada gasto). Devuelve:
+--   { "estado": "no_miembro" } o { "estado": "es_creador" }  sin cambios
+--   { "estado": "saldo_pendiente", "saldo": n }  sin cambios
+--   { "estado": "ok" }  ya no es miembro del viaje
+CREATE OR REPLACE FUNCTION public.abandonar_viaje(p_viaje_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_saldo numeric(12,2);
+BEGIN
+  -- Bloquea el viaje para que dos cambios a la vez no se crucen con el saldo
+  PERFORM 1 FROM public.viajes WHERE id = p_viaje_id FOR UPDATE;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.miembros_viaje
+    WHERE viaje_id = p_viaje_id
+      AND usuario_id = auth.uid()
+      AND abandonado_en IS NULL
+      AND eliminado_en IS NULL
+  ) THEN
+    RETURN jsonb_build_object('estado', 'no_miembro');
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.miembros_viaje
+    WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid() AND rol = 'creador'
+  ) THEN
+    RETURN jsonb_build_object('estado', 'es_creador');
+  END IF;
+
+  SELECT
+    coalesce((SELECT sum(g.importe) FROM public.gastos g
+              WHERE g.viaje_id = p_viaje_id AND g.pagado_por = auth.uid()), 0)
+    - coalesce((SELECT sum(r.importe) FROM public.repartos_gasto r
+                WHERE r.viaje_id = p_viaje_id AND r.usuario_id = auth.uid()), 0)
+  INTO v_saldo;
+
+  IF v_saldo <> 0 THEN
+    RETURN jsonb_build_object('estado', 'saldo_pendiente', 'saldo', v_saldo);
+  END IF;
+
+  UPDATE public.miembros_viaje
+  SET abandonado_en = now()
+  WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid();
+
+  RETURN jsonb_build_object('estado', 'ok');
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.abandonar_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.abandonar_viaje(uuid) TO authenticated;
+
 REVOKE ALL ON FUNCTION public.es_ultimo_miembro(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.es_ultimo_miembro(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.archivar_viaje(uuid) FROM PUBLIC, anon;

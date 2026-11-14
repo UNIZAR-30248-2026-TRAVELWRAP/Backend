@@ -181,4 +181,16 @@ const eliminar = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok' };
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar };
+// Abandona el viaje: el usuario deja de ser miembro, pero sus gastos y repartos se conservan. Solo puede hacerlo
+// si no es el creador y tiene el saldo a cero. Se usa la función SQL abandonar_viaje porque nadie puede modificar
+// directamente su fila de miembros_viaje
+// Devuelve { error } | { estado: no_miembro | es_creador | ok } | { estado: saldo_pendiente, saldo }
+const abandonar = async (cliente, viajeId) => {
+  const { data, error } = await cliente.rpc('abandonar_viaje', { p_viaje_id: viajeId });
+  if (error) return { error };
+  if (!data || typeof data.estado !== 'string') return { error: { code: 'respuesta_vacia' } };
+
+  return data.estado === 'saldo_pendiente' ? { estado: data.estado, saldo: data.saldo } : { estado: data.estado };
+};
+
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar, abandonar };
