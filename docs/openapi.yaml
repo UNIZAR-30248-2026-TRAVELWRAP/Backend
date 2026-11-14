@@ -3016,6 +3016,203 @@ paths:
                   codigo: error_tarea
                   mensaje: No se ha podido eliminar la tarea
 
+  /viajes/{viajeId}/sello:
+    get:
+      tags:
+        - Sello
+      summary: Consulta el sello que el usuario ha elegido para el viaje
+      description: |
+        Devuelve el sello del usuario con sesión en este viaje, o `sello: null` si no ha elegido ninguno. Cada
+        usuario solo ve el suyo. Un viaje activo todavía no tiene sello: responde `null`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Sello del usuario (`null` si no tiene)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sello:
+                    allOf:
+                      - $ref: '#/components/schemas/Sello'
+                    nullable: true
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o lo ha eliminado (las políticas RLS no permiten distinguir los dos primeros casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_sello
+                  mensaje: No se ha podido obtener el sello
+    put:
+      tags:
+        - Sello
+      summary: Elige o cambia el sello del viaje
+      description: |
+        Guarda el diseño elegido por el usuario para este viaje, o sustituye el que tenía. El destino (el del
+        viaje o, si no tiene, su nombre) y el año (el de la fecha de inicio, o el de la finalización o la creación)
+        se guardan en este momento y no cambian después. Cualquier miembro puede hacerlo, tanto si ha archivado el
+        viaje como si no, pero solo cuando el viaje ya ha terminado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ElegirSello'
+      responses:
+        '200':
+          description: Sello guardado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sello:
+                    $ref: '#/components/schemas/Sello'
+        '400':
+          description: El identificador del viaje no es un UUID (`datos_invalidos`) o el diseño no es uno de los cuatro (`diseno_invalido`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viaje:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El identificador del viaje no es válido
+                diseno:
+                  value:
+                    error:
+                      codigo: diseno_invalido
+                      mensaje: 'El diseño debe ser uno de: chincheta, mapa, ruta, avion'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o lo ha eliminado (las políticas RLS no permiten distinguir los dos primeros casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje todavía está activo: el sello se elige al terminarlo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_terminado
+                  mensaje: El viaje todavía no ha terminado
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_sello
+                  mensaje: No se ha podido guardar el sello
+    delete:
+      tags:
+        - Sello
+      summary: Quita el sello del viaje
+      description: |
+        Quita el sello del usuario en este viaje. Si no tenía ninguno, también responde 204. No afecta a los
+        sellos de los demás miembros.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '204':
+          description: Sello quitado (sin cuerpo)
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe, el usuario no es miembro o lo ha eliminado (las políticas RLS no permiten distinguir los dos primeros casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje todavía está activo: el sello se elige al terminarlo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_terminado
+                  mensaje: El viaje todavía no ha terminado
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_sello
+                  mensaje: No se ha podido quitar el sello
+
   /viajes/{viajeId}/fotos:
     get:
       tags:
@@ -5247,6 +5444,46 @@ components:
           type: boolean
           description: true marca la tarea como hecha y false la desmarca
           example: true
+
+    Sello:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f
+        viaje_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Viaje al que pertenece el sello (null si el viaje se ha borrado del todo)
+          example: 0e6d7f1a-3b2c-4d5e-9f80-a1b2c3d4e5f6
+        diseno:
+          type: string
+          enum: [chincheta, mapa, ruta, avion]
+          example: mapa
+        destino:
+          type: string
+          description: Destino del viaje cuando se eligió el sello
+          example: Roma
+        anio:
+          type: integer
+          description: Año del viaje cuando se eligió el sello
+          example: 2027
+        elegido_en:
+          type: string
+          format: date-time
+          example: '2026-11-15T10:00:00Z'
+
+    ElegirSello:
+      type: object
+      required:
+        - diseno
+      properties:
+        diseno:
+          type: string
+          enum: [chincheta, mapa, ruta, avion]
+          example: mapa
 
     PerfilActualizado:
       type: object
