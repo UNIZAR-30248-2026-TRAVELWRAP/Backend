@@ -20,6 +20,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [documentos](#documentos) | 8 | Activada | 3 |
 | [fotos](#fotos) | 8 | Activada | 2 |
 | [tareas](#tareas) | 8 | Activada | 4 |
+| [sellos](#sellos) | 7 | Activada | 4 |
 
 ## Relaciones
 
@@ -51,6 +52,8 @@ erDiagram
     viajes ||--o{ tareas : "viaje_id"
     miembros_viaje ||--o{ tareas : "responsable_id"
     perfiles |o--o{ tareas : "creada_por"
+    perfiles ||--o{ sellos : "usuario_id"
+    viajes |o--o{ sellos : "viaje_id"
 ```
 
 ## Tipos enumerados
@@ -351,6 +354,30 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 
 - `tareas_viaje_idx` sobre (viaje_id, creado_en) — Lista de tareas del viaje, de la más antigua a la más reciente
 
+### sellos
+
+Sello que cada usuario elige al terminar un viaje (uno por viaje y usuario). Es autónomo: guarda una copia del destino y del año, así que sobrevive a que el viaje se elimine o se borre
+
+**Seguridad por filas (RLS):** activada, 4 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `usuario_id` | `uuid` | Sí | FK → perfiles.id (ON DELETE CASCADE) |  |  |
+| `viaje_id` | `uuid` | No | FK → viajes.id (ON DELETE SET NULL) |  | Null cuando el viaje se ha borrado del todo: el sello se conserva en el pasaporte |
+| `diseno` | `text` | Sí |  |  | Debe cumplir: `diseno IN ('chincheta', 'mapa', 'ruta', 'avion')` |
+| `destino` | `text` | Sí |  |  | Destino y año del viaje al elegir el sello; no se actualizan después<br>Debe cumplir: `char_length(btrim(destino)) BETWEEN 1 AND 100` |
+| `anio` | `smallint` | Sí |  |  |  |
+| `elegido_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Restricciones**
+
+- `sellos_un_sello_por_viaje`: `UNIQUE (usuario_id, viaje_id)` — Un sello por viaje y usuario; los sellos de viajes borrados (viaje_id nulo) no se estorban entre sí
+
+**Índices**
+
+- `sellos_usuario_idx` sobre (usuario_id, anio DESC, elegido_en) — Pasaporte del usuario, del año más reciente al más antiguo
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -361,6 +388,7 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 | `es_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_creador` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  |  |
 | `es_editable` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje solo admite contenido nuevo mientras está activo: al finalizarlo queda de solo lectura. Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura |
+| `es_terminado` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje ha terminado cuando está finalizado (archivarlo o no es personal y no cambia su estado). Solo entonces se puede elegir un sello |
 | `es_ultimo_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Verdadera si el viaje está finalizado, quien llama lo tiene archivado (y no eliminado ni abandonado) y ningún otro miembro lo conserva (todos los demás lo han eliminado o abandonado). La usan eliminar_viaje, borrar_viaje y las políticas de Storage que dejan al último miembro borrar los archivos del viaje |
 | `viaje_de_ruta` | `p_ruta text` | `uuid` | quien la llama |  | Viaje al que pertenece un archivo de los buckets «documentos» y «fotos», sacado de la primera carpeta de su ruta. Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage) |
 | `viaje_de_votacion` | `p_votacion_id uuid` | `uuid` | su propietario (SECURITY DEFINER) |  | Viaje al que pertenece una votación (lo usan las políticas de opciones y votos) |
@@ -478,6 +506,15 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 | `tareas_insert` | INSERT | authenticated |  | `creada_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `tareas_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `tareas_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
+#### sellos
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `sellos_select` | SELECT | authenticated | `usuario_id = auth.uid()` |  |
+| `sellos_insert` | INSERT | authenticated |  | `usuario_id = auth.uid() AND viaje_id IS NOT NULL AND public.es_miembro(viaje_id) AND public.es_terminado(viaje_id)` |
+| `sellos_update` | UPDATE | authenticated | `usuario_id = auth.uid()` | `usuario_id = auth.uid()` |
+| `sellos_delete` | DELETE | authenticated | `usuario_id = auth.uid()` |  |
 
 ## Almacenamiento de archivos (Supabase Storage)
 

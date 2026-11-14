@@ -34,6 +34,19 @@ AS $$
   );
 $$;
 
+-- Un viaje ha terminado cuando está finalizado (archivarlo o no es personal y no cambia su estado). Solo entonces
+-- se puede elegir un sello
+CREATE OR REPLACE FUNCTION public.es_terminado(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $
+  SELECT EXISTS (
+    SELECT 1 FROM public.viajes
+    WHERE id = p_viaje_id AND estado = 'finalizado'
+  );
+$;
+
 -- Verdadera si el viaje está finalizado, quien llama lo tiene archivado (y no eliminado ni abandonado) y ningún otro
 -- miembro lo conserva (todos los demás lo han eliminado o abandonado). La usan eliminar_viaje, borrar_viaje y las
 -- políticas de Storage que dejan al último miembro borrar los archivos del viaje
@@ -134,6 +147,7 @@ ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tareas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sellos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -331,6 +345,33 @@ CREATE POLICY tareas_update ON public.tareas FOR UPDATE TO authenticated
 DROP POLICY IF EXISTS tareas_delete ON public.tareas;
 CREATE POLICY tareas_delete ON public.tareas FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS SELLOS
+-- Cada usuario ve solo sus sellos
+DROP POLICY IF EXISTS sellos_select ON public.sellos;
+CREATE POLICY sellos_select ON public.sellos FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid());
+
+-- Solo se elige sello de un viaje del que eres miembro y que ya ha terminado
+DROP POLICY IF EXISTS sellos_insert ON public.sellos;
+CREATE POLICY sellos_insert ON public.sellos FOR INSERT TO authenticated
+  WITH CHECK (
+    usuario_id = auth.uid()
+    AND viaje_id IS NOT NULL
+    AND public.es_miembro(viaje_id)
+    AND public.es_terminado(viaje_id)
+  );
+
+-- Cada usuario cambia sus propios sellos, también los de viajes que ya no existen (viaje_id nulo)
+DROP POLICY IF EXISTS sellos_update ON public.sellos;
+CREATE POLICY sellos_update ON public.sellos FOR UPDATE TO authenticated
+  USING (usuario_id = auth.uid())
+  WITH CHECK (usuario_id = auth.uid());
+
+-- Cada usuario quita sus propios sellos
+DROP POLICY IF EXISTS sellos_delete ON public.sellos;
+CREATE POLICY sellos_delete ON public.sellos FOR DELETE TO authenticated
+  USING (usuario_id = auth.uid());
 
 -- Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada)
 -- y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo

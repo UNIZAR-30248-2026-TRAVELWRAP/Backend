@@ -296,6 +296,22 @@ CREATE TABLE IF NOT EXISTS public.tareas (
   CONSTRAINT tareas_hecha_coherente CHECK (hecha = (hecha_en IS NOT NULL))
 );
 
+-- Sello que cada usuario elige al terminar un viaje (uno por viaje y usuario). Es autónomo: guarda una copia del
+-- destino y del año, así que sobrevive a que el viaje se elimine o se borre
+CREATE TABLE IF NOT EXISTS public.sellos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_id uuid NOT NULL REFERENCES public.perfiles (id) ON DELETE CASCADE,
+  -- Null cuando el viaje se ha borrado del todo: el sello se conserva en el pasaporte
+  viaje_id uuid REFERENCES public.viajes (id) ON DELETE SET NULL,
+  diseno text NOT NULL CHECK (diseno IN ('chincheta', 'mapa', 'ruta', 'avion')),
+  -- Destino y año del viaje al elegir el sello; no se actualizan después
+  destino text NOT NULL CHECK (char_length(btrim(destino)) BETWEEN 1 AND 100),
+  anio smallint NOT NULL,
+  elegido_en timestamptz NOT NULL DEFAULT now(),
+  -- Un sello por viaje y usuario; los sellos de viajes borrados (viaje_id nulo) no se estorban entre sí
+  CONSTRAINT sellos_un_sello_por_viaje UNIQUE (usuario_id, viaje_id)
+);
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -314,3 +330,5 @@ CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, 
 CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);
 -- Lista de tareas del viaje, de la más antigua a la más reciente
 CREATE INDEX IF NOT EXISTS tareas_viaje_idx ON public.tareas (viaje_id, creado_en);
+-- Pasaporte del usuario, del año más reciente al más antiguo
+CREATE INDEX IF NOT EXISTS sellos_usuario_idx ON public.sellos (usuario_id, anio DESC, elegido_en);

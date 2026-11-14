@@ -58,6 +58,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/tareas`](#post-viajesviajeidtareas) | Añade una tarea a la lista del viaje | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/tareas/{tareaId}`](#patch-viajesviajeidtareastareaid) | Edita o marca una tarea | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/tareas/{tareaId}`](#delete-viajesviajeidtareastareaid) | Borra una tarea de la lista del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/sello`](#get-viajesviajeidsello) | Consulta el sello que el usuario ha elegido para el viaje | Token de sesión |
+| PUT | [`/viajes/{viajeId}/sello`](#put-viajesviajeidsello) | Elige o cambia el sello del viaje | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/sello`](#delete-viajesviajeidsello) | Quita el sello del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/fotos`](#get-viajesviajeidfotos) | Lista las fotos de la galería del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto a la galería del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/resumen`](#get-viajesviajeidresumen) | Resumen «Fin de viaje» (Wrap) del viaje | Token de sesión |
@@ -3334,6 +3337,197 @@ tarea, y solo mientras el viaje esté activo.
 | Código de error | Mensaje |
 | --- | --- |
 | `error_tarea` | No se ha podido eliminar la tarea |
+
+## Sello
+
+### GET /viajes/{viajeId}/sello
+
+**Consulta el sello que el usuario ha elegido para el viaje**
+
+Devuelve el sello del usuario con sesión en este viaje, o `sello: null` si no ha elegido ninguno. Cada
+usuario solo ve el suyo. Un viaje activo todavía no tiene sello: responde `null`.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Sello del usuario (`null` si no tiene)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `sello` | \| null | No |  |  |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o lo ha eliminado (las políticas RLS no permiten distinguir los dos primeros casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_sello` | No se ha podido obtener el sello |
+
+### PUT /viajes/{viajeId}/sello
+
+**Elige o cambia el sello del viaje**
+
+Guarda el diseño elegido por el usuario para este viaje, o sustituye el que tenía. El destino (el del
+viaje o, si no tiene, su nombre) y el año (el de la fecha de inicio, o el de la finalización o la creación)
+se guardan en este momento y no cambian después. Cualquier miembro puede hacerlo, tanto si ha archivado el
+viaje como si no, pero solo cuando el viaje ya ha terminado.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `diseno` | enum (chincheta, mapa, ruta, avion) | Sí |  | `mapa` |
+
+**Respuestas**
+
+**200** — Sello guardado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `sello` | Sello | No |  |  |
+| `sello.id` | string (uuid) | No |  | `7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f` |
+| `sello.viaje_id` | string (uuid) \| null | No | Viaje al que pertenece el sello (null si el viaje se ha borrado del todo) | `0e6d7f1a-3b2c-4d5e-9f80-a1b2c3d4e5f6` |
+| `sello.diseno` | enum (chincheta, mapa, ruta, avion) | No |  | `mapa` |
+| `sello.destino` | string | No | Destino del viaje cuando se eligió el sello | `Roma` |
+| `sello.anio` | integer | No | Año del viaje cuando se eligió el sello | `2027` |
+| `sello.elegido_en` | string (date-time) | No |  | `2026-11-15T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID (`datos_invalidos`) o el diseño no es uno de los cuatro (`diseno_invalido`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+| `diseno_invalido` | El diseño debe ser uno de: chincheta, mapa, ruta, avion |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o lo ha eliminado (las políticas RLS no permiten distinguir los dos primeros casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje todavía está activo: el sello se elige al terminarlo
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_terminado` | El viaje todavía no ha terminado |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_sello` | No se ha podido guardar el sello |
+
+### DELETE /viajes/{viajeId}/sello
+
+**Quita el sello del viaje**
+
+Quita el sello del usuario en este viaje. Si no tenía ninguno, también responde 204. No afecta a los
+sellos de los demás miembros.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**204** — Sello quitado (sin cuerpo)
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe, el usuario no es miembro o lo ha eliminado (las políticas RLS no permiten distinguir los dos primeros casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje todavía está activo: el sello se elige al terminarlo
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_terminado` | El viaje todavía no ha terminado |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_sello` | No se ha podido quitar el sello |
 
 ## Fotos
 
