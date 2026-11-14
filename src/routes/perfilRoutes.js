@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const router = express.Router();
 const perfilController = require('../controllers/perfilController');
+const selloController = require('../controllers/selloController');
 const { requiereSesion } = require('../middleware/authMiddleware');
 const { responderError } = require('../utils/validacion');
 
@@ -32,6 +33,11 @@ const recibirAvatar = (req, res, next) => {
 router.patch('/', requiereSesion, perfilController.actualizarNombre);
 router.put('/avatar', requiereSesion, recibirAvatar, perfilController.cambiarAvatar);
 router.delete('/avatar', requiereSesion, perfilController.quitarAvatar);
+
+// Sellos del usuario con sesión (pasaporte de viajes): por id de sello, siempre filtrado por su usuario
+router.get('/sellos', requiereSesion, selloController.listarMios);
+router.patch('/sellos/:selloId', requiereSesion, selloController.cambiarDiseno);
+router.delete('/sellos/:selloId', requiereSesion, selloController.quitarPorId);
 
 module.exports = router;
 module.exports.recibirAvatar = recibirAvatar;

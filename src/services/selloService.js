@@ -69,4 +69,50 @@ const quitar = async (cliente, usuarioId, viajeId) => {
   return { estado: 'ok' };
 };
 
-module.exports = { obtener, elegir, quitar };
+// Todos los sellos del usuario, leídos solo de «sellos»: siguen estando aunque el viaje se haya archivado,
+// eliminado o borrado. Por año descendente y luego por fecha de elección
+// Devuelve { error } | { estado: ok, sellos }
+const listarMios = async (cliente, usuarioId) => {
+  const { data, error } = await cliente
+    .from('sellos')
+    .select(CAMPOS_SELLO)
+    .eq('usuario_id', usuarioId)
+    .order('anio', { ascending: false })
+    .order('elegido_en', { ascending: true });
+  if (error) return { error };
+
+  return { estado: 'ok', sellos: data ?? [] };
+};
+
+// Cambia el diseño de un sello propio (también si su viaje ya no existe)
+// Devuelve { error } | { estado: sello_no_existe | ok (con sello) }
+const cambiarDiseno = async (cliente, usuarioId, selloId, diseno) => {
+  const { data, error } = await cliente
+    .from('sellos')
+    .update({ diseno })
+    .eq('id', selloId)
+    .eq('usuario_id', usuarioId)
+    .select(CAMPOS_SELLO)
+    .maybeSingle();
+  if (error) return { error };
+  if (!data) return { estado: 'sello_no_existe' };
+
+  return { estado: 'ok', sello: data };
+};
+
+// Quita un sello propio por su id
+// Devuelve { error } | { estado: sello_no_existe | ok }
+const quitarPorId = async (cliente, usuarioId, selloId) => {
+  const { data, error } = await cliente
+    .from('sellos')
+    .delete()
+    .eq('id', selloId)
+    .eq('usuario_id', usuarioId)
+    .select('id');
+  if (error) return { error };
+  if (!data || data.length === 0) return { estado: 'sello_no_existe' };
+
+  return { estado: 'ok' };
+};
+
+module.exports = { obtener, elegir, quitar, listarMios, cambiarDiseno, quitarPorId };
