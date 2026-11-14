@@ -133,6 +133,7 @@ ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tareas ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
 DROP POLICY IF EXISTS perfiles_select ON public.perfiles;
@@ -307,6 +308,28 @@ CREATE POLICY documentos_insert ON public.documentos FOR INSERT TO authenticated
 -- Cualquier miembro elimina documentos de la cartera mientras el viaje está activo, no solo quien los subió
 DROP POLICY IF EXISTS documentos_delete ON public.documentos;
 CREATE POLICY documentos_delete ON public.documentos FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS TAREAS
+-- Los miembros ven todas las tareas de su viaje, también en viajes finalizados
+DROP POLICY IF EXISTS tareas_select ON public.tareas;
+CREATE POLICY tareas_select ON public.tareas FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro añade tareas mientras el viaje está activo; queda como quien la ha creado
+DROP POLICY IF EXISTS tareas_insert ON public.tareas;
+CREATE POLICY tareas_insert ON public.tareas FOR INSERT TO authenticated
+  WITH CHECK (creada_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Cualquier miembro edita o marca cualquier tarea mientras el viaje está activo, no solo su responsable
+DROP POLICY IF EXISTS tareas_update ON public.tareas;
+CREATE POLICY tareas_update ON public.tareas FOR UPDATE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Cualquier miembro borra tareas mientras el viaje está activo
+DROP POLICY IF EXISTS tareas_delete ON public.tareas;
+CREATE POLICY tareas_delete ON public.tareas FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada)

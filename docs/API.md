@@ -53,6 +53,10 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | DELETE | [`/viajes/{viajeId}/gastos/{gastoId}`](#delete-viajesviajeidgastosgastoid) | Borra un gasto y sus repartos | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos`](#get-viajesviajeiddocumentos) | Lista los documentos de la cartera del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/documentos`](#post-viajesviajeiddocumentos) | Sube un documento a la cartera del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/tareas`](#get-viajesviajeidtareas) | Lista las tareas del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/tareas`](#post-viajesviajeidtareas) | Añade una tarea a la lista del viaje | Token de sesión |
+| PATCH | [`/viajes/{viajeId}/tareas/{tareaId}`](#patch-viajesviajeidtareastareaid) | Edita o marca una tarea | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/tareas/{tareaId}`](#delete-viajesviajeidtareastareaid) | Borra una tarea de la lista del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/fotos`](#get-viajesviajeidfotos) | Lista las fotos de la galería del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto a la galería del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/resumen`](#get-viajesviajeidresumen) | Resumen «Fin de viaje» (Wrap) del viaje | Token de sesión |
@@ -2979,6 +2983,294 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_documento` | No se ha podido obtener el enlace del documento |
+
+## Tareas
+
+### GET /viajes/{viajeId}/tareas
+
+**Lista las tareas del viaje**
+
+Devuelve la lista de tareas colaborativa del viaje, de la más antigua a la más reciente, cada una con su
+responsable (nombre y avatar). Solo lo pueden pedir los miembros del viaje. También funciona en viajes
+finalizados, porque solo lee.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Tareas del viaje (lista vacía si aún no tiene ninguna)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `tareas` | array<Tarea> | No | Tareas del viaje, de la más antigua a la más reciente |  |
+| `tareas[].id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `tareas[].texto` | string | No |  | `Reservar mesa para la cena del sábado` |
+| `tareas[].hecha` | boolean | No |  | `false` |
+| `tareas[].hecha_en` | string (date-time) \| null | No | Cuándo se marcó como hecha (null mientras está pendiente) | `null` |
+| `tareas[].creado_en` | string (date-time) | No |  | `2026-11-14T10:00:00Z` |
+| `tareas[].responsable` | object | No | Miembro a quien se asigna la tarea |  |
+| `tareas[].responsable.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `tareas[].responsable.nombre` | string \| null | No | Null si el responsable ya no es miembro del viaje | `Berta` |
+| `tareas[].responsable.avatar_url` | string \| null | No |  | `null` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_tarea` | No se han podido obtener las tareas |
+
+### POST /viajes/{viajeId}/tareas
+
+**Añade una tarea a la lista del viaje**
+
+Crea una tarea pendiente con su texto (de 1 a 200 caracteres, sin espacios al principio ni al final) y su
+responsable, que tiene que ser miembro del viaje. Cualquier miembro puede añadir tareas, y solo mientras
+el viaje esté activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `texto` | string | Sí | Texto de la tarea (se recortan los espacios de los extremos) | `Reservar mesa para la cena del sábado` |
+| `responsable_id` | string (uuid) | Sí | Miembro del viaje a quien se asigna | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+
+**Respuestas**
+
+**201** — Tarea creada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `texto` | string | No |  | `Reservar mesa para la cena del sábado` |
+| `hecha` | boolean | No |  | `false` |
+| `hecha_en` | string (date-time) \| null | No | Cuándo se marcó como hecha (null mientras está pendiente) | `null` |
+| `creado_en` | string (date-time) | No |  | `2026-11-14T10:00:00Z` |
+| `responsable` | object | No | Miembro a quien se asigna la tarea |  |
+| `responsable.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `responsable.nombre` | string \| null | No | Null si el responsable ya no es miembro del viaje | `Berta` |
+| `responsable.avatar_url` | string \| null | No |  | `null` |
+
+**400** — El identificador del viaje no es un UUID, el texto está vacío o supera los 200 caracteres, o el responsable no es un UUID válido ni miembro del viaje
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El texto debe tener entre 1 y 200 caracteres |
+| `datos_invalidos` | El responsable tiene que ser miembro del viaje |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_tarea` | No se ha podido crear la tarea |
+
+### PATCH /viajes/{viajeId}/tareas/{tareaId}
+
+**Edita o marca una tarea**
+
+Cambia solo los campos que se envían: el texto, el responsable (miembro del viaje) o si está hecha. Hay que
+enviar al menos uno. Al marcarla (`hecha: true`) se guarda cuándo se hizo en `hecha_en`; al desmarcarla,
+`hecha_en` vuelve a `null`. Cualquier miembro puede editar o marcar cualquier tarea, y solo mientras el
+viaje esté activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `tareaId` | path | Sí | string (uuid) | Identificador de la tarea | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `texto` | string | No |  | `Reservar mesa para el domingo` |
+| `responsable_id` | string (uuid) | No | Nuevo responsable, miembro del viaje | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `hecha` | boolean | No | true marca la tarea como hecha y false la desmarca | `true` |
+
+**Respuestas**
+
+**200** — Tarea actualizada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+| `texto` | string | No |  | `Reservar mesa para la cena del sábado` |
+| `hecha` | boolean | No |  | `false` |
+| `hecha_en` | string (date-time) \| null | No | Cuándo se marcó como hecha (null mientras está pendiente) | `null` |
+| `creado_en` | string (date-time) | No |  | `2026-11-14T10:00:00Z` |
+| `responsable` | object | No | Miembro a quien se asigna la tarea |  |
+| `responsable.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `responsable.nombre` | string \| null | No | Null si el responsable ya no es miembro del viaje | `Berta` |
+| `responsable.avatar_url` | string \| null | No |  | `null` |
+
+**400** — Algún identificador no es un UUID, no se envía ningún campo, o el texto, el responsable o `hecha` no son válidos (incluido un responsable que no es miembro del viaje)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Indica al menos un campo que cambiar: texto, responsable_id o hecha |
+| `datos_invalidos` | El campo hecha debe ser verdadero o falso |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o la tarea no existe en este viaje, por ejemplo porque otro miembro ya la borró (`tarea_no_encontrada`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `tarea_no_encontrada` | La tarea no existe en este viaje |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_tarea` | No se ha podido actualizar la tarea |
+
+### DELETE /viajes/{viajeId}/tareas/{tareaId}
+
+**Borra una tarea de la lista del viaje**
+
+Borra la tarea para todos los miembros. No se puede deshacer. Cualquier miembro puede borrar cualquier
+tarea, y solo mientras el viaje esté activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `tareaId` | path | Sí | string (uuid) | Identificador de la tarea | `5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e` |
+
+**Respuestas**
+
+**204** — Tarea borrada (sin cuerpo)
+
+**400** — El identificador del viaje o de la tarea no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador de la tarea no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o la tarea no existe en este viaje (`tarea_no_encontrada`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `tarea_no_encontrada` | La tarea no existe en este viaje |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_tarea` | No se ha podido eliminar la tarea |
 
 ## Fotos
 

@@ -276,6 +276,26 @@ CREATE TABLE IF NOT EXISTS public.fotos (
   CONSTRAINT fotos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
 );
 
+-- Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca y borra mientras el viaje está activo
+CREATE TABLE IF NOT EXISTS public.tareas (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Al eliminar el viaje se borran sus tareas
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  texto text NOT NULL CHECK (char_length(btrim(texto)) BETWEEN 1 AND 200),
+  -- Miembro del viaje al que se asigna la tarea
+  responsable_id uuid NOT NULL,
+  hecha boolean NOT NULL DEFAULT false,
+  -- Cuándo se marcó como hecha; null mientras está pendiente
+  hecha_en timestamptz,
+  creada_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- Solo se asigna a miembros del viaje
+  CONSTRAINT tareas_responsable_miembro FOREIGN KEY (viaje_id, responsable_id)
+    REFERENCES public.miembros_viaje (viaje_id, usuario_id),
+  -- hecha y hecha_en van siempre a la par
+  CONSTRAINT tareas_hecha_coherente CHECK (hecha = (hecha_en IS NOT NULL))
+);
+
 -- 3. ÍNDICES
 CREATE INDEX IF NOT EXISTS miembros_viaje_usuario_idx ON public.miembros_viaje (usuario_id);
 CREATE INDEX IF NOT EXISTS votaciones_viaje_idx ON public.votaciones (viaje_id);
@@ -292,3 +312,5 @@ CREATE INDEX IF NOT EXISTS repartos_gasto_miembro_idx ON public.repartos_gasto (
 CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);
 -- Galería del viaje, de la foto más reciente a la más antigua
 CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);
+-- Lista de tareas del viaje, de la más antigua a la más reciente
+CREATE INDEX IF NOT EXISTS tareas_viaje_idx ON public.tareas (viaje_id, creado_en);

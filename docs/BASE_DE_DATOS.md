@@ -19,6 +19,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
 | [documentos](#documentos) | 8 | Activada | 3 |
 | [fotos](#fotos) | 8 | Activada | 2 |
+| [tareas](#tareas) | 8 | Activada | 4 |
 
 ## Relaciones
 
@@ -47,6 +48,9 @@ erDiagram
     perfiles |o--o{ documentos : "subido_por"
     viajes ||--o{ fotos : "viaje_id"
     perfiles |o--o{ fotos : "subido_por"
+    viajes ||--o{ tareas : "viaje_id"
+    miembros_viaje ||--o{ tareas : "responsable_id"
+    perfiles |o--o{ tareas : "creada_por"
 ```
 
 ## Tipos enumerados
@@ -321,6 +325,32 @@ Fotos de la galería compartida del viaje. El archivo se guarda en el bucket pri
 
 - `fotos_viaje_idx` sobre (viaje_id, creado_en DESC) — Galería del viaje, de la foto más reciente a la más antigua
 
+### tareas
+
+Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca y borra mientras el viaje está activo
+
+**Seguridad por filas (RLS):** activada, 4 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus tareas |
+| `texto` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(texto)) BETWEEN 1 AND 200` |
+| `responsable_id` | `uuid` | Sí | FK → miembros_viaje.usuario_id |  | Miembro del viaje al que se asigna la tarea |
+| `hecha` | `boolean` | Sí |  | `false` |  |
+| `hecha_en` | `timestamptz` | No |  |  | Cuándo se marcó como hecha; null mientras está pendiente |
+| `creada_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Restricciones**
+
+- `tareas_responsable_miembro`: `FOREIGN KEY (viaje_id, responsable_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo se asigna a miembros del viaje
+- `tareas_hecha_coherente`: `CHECK (hecha = (hecha_en IS NOT NULL))` — hecha y hecha_en van siempre a la par
+
+**Índices**
+
+- `tareas_viaje_idx` sobre (viaje_id, creado_en) — Lista de tareas del viaje, de la más antigua a la más reciente
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -438,6 +468,15 @@ Fotos de la galería compartida del viaje. El archivo se guarda en el bucket pri
 | --- | --- | --- | --- | --- |
 | `fotos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `fotos_insert` | INSERT | authenticated |  | `subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+
+#### tareas
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `tareas_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `tareas_insert` | INSERT | authenticated |  | `creada_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `tareas_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `tareas_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 ## Almacenamiento de archivos (Supabase Storage)
 
