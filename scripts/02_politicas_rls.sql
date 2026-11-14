@@ -40,12 +40,12 @@ CREATE OR REPLACE FUNCTION public.es_terminado(p_viaje_id uuid)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.viajes
     WHERE id = p_viaje_id AND estado = 'finalizado'
   );
-$;
+$$;
 
 -- Verdadera si el viaje está finalizado, quien llama lo tiene archivado (y no eliminado ni abandonado) y ningún otro
 -- miembro lo conserva (todos los demás lo han eliminado o abandonado). La usan eliminar_viaje, borrar_viaje y las
