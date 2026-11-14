@@ -118,6 +118,18 @@
       "value": ""
     },
     {
+      "key": "viajeIdTarea",
+      "value": ""
+    },
+    {
+      "key": "usuarioIdTarea",
+      "value": ""
+    },
+    {
+      "key": "tareaId",
+      "value": ""
+    },
+    {
       "key": "viajeIdFoto",
       "value": ""
     },
@@ -2284,7 +2296,7 @@
     },
     {
       "name": "Gestión de viajes",
-      "description": "Editar, archivar y eliminar un viaje (PB-10, PB-12 y PB-13). Requiere haber ejecutado antes «Login correcto». Crea su propio viaje ({{viajeIdGestion}}) para no archivar el que usan las otras carpetas. Las peticiones dependen unas de otras: ejecútala completa y en orden.",
+      "description": "Editar, finalizar, archivar, desarchivar y eliminar un viaje (PB-10, PB-12, PB-13, PB-51 y MEJ-12). Requiere haber ejecutado antes «Login correcto». Crea su propio viaje ({{viajeIdGestion}}) para no finalizar el que usan las otras carpetas. Archivar y eliminar son personales: solo cambian lo que ve quien los hace. Las peticiones dependen unas de otras: ejecútala completa y en orden.",
       "item": [
         {
           "name": "Crear viaje para gestionar",
@@ -2531,7 +2543,7 @@
           ]
         },
         {
-          "name": "Eliminar un viaje sin archivar",
+          "name": "Eliminar un viaje sin archivarlo antes",
           "request": {
             "method": "DELETE",
             "header": [
@@ -2558,34 +2570,7 @@
           ]
         },
         {
-          "name": "Archivar el viaje",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/archivar"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
-                  "pm.test('El viaje queda archivado', () => {",
-                  "  pm.expect(pm.response.json().estado).to.eql('archivado');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Archivar un viaje ya archivado",
+          "name": "Archivar un viaje que sigue activo",
           "request": {
             "method": "POST",
             "header": [
@@ -2603,8 +2588,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
-                  "pm.test('Código viaje_archivado', () => {",
-                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_archivado');",
+                  "pm.test('Código viaje_no_finalizado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_finalizado');",
                   "});"
                 ]
               }
@@ -2612,7 +2597,63 @@
           ]
         },
         {
-          "name": "Editar un viaje archivado (solo lectura)",
+          "name": "Finalizar el viaje",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/finalizar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const viaje = pm.response.json();",
+                  "pm.test('Estado finalizado y archivado false', () => {",
+                  "  pm.expect(viaje.estado).to.eql('finalizado');",
+                  "  pm.expect(viaje.archivado).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar un viaje ya finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/finalizar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_finalizado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_finalizado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar un viaje finalizado (solo lectura)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2647,7 +2688,119 @@
           ]
         },
         {
+          "name": "Archivar el viaje",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const viaje = pm.response.json();",
+                  "pm.test('Estado finalizado y archivado true', () => {",
+                  "  pm.expect(viaje.estado).to.eql('finalizado');",
+                  "  pm.expect(viaje.archivado).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar un viaje ya archivado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_archivado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Listar los viajes archivados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes?archivados=true"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye el viaje archivado', () => {",
+                  "  const ids = pm.response.json().viajes.map((v) => v.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('viajeIdGestion'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los viajes sin archivados no incluye el archivado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('No incluye el viaje archivado', () => {",
+                  "  const ids = pm.response.json().viajes.map((v) => v.id);",
+                  "  pm.expect(ids).to.not.include(pm.collectionVariables.get('viajeIdGestion'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar viajes con el estado archivado (ya no existe)",
           "request": {
             "method": "GET",
             "header": [
@@ -2664,10 +2817,94 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desarchivar el viaje (sigue finalizado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/desarchivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Incluye el viaje archivado', () => {",
-                  "  const ids = pm.response.json().viajes.map((v) => v.id);",
-                  "  pm.expect(ids).to.include(pm.collectionVariables.get('viajeIdGestion'));",
+                  "const viaje = pm.response.json();",
+                  "pm.test('Estado finalizado y archivado false', () => {",
+                  "  pm.expect(viaje.estado).to.eql('finalizado');",
+                  "  pm.expect(viaje.archivado).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desarchivar un viaje que no está archivado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/desarchivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_archivado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_archivado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar el viaje otra vez",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const viaje = pm.response.json();",
+                  "pm.test('Estado finalizado y archivado true', () => {",
+                  "  pm.expect(viaje.estado).to.eql('finalizado');",
+                  "  pm.expect(viaje.archivado).to.eql(true);",
                   "});"
                 ]
               }
@@ -5482,7 +5719,7 @@
           ]
         },
         {
-          "name": "Archivar el viaje",
+          "name": "Finalizar el viaje",
           "request": {
             "method": "POST",
             "header": [
@@ -5491,7 +5728,7 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/archivar"
+            "url": "{{baseUrl}}/viajes/{{viajeIdActividad}}/finalizar"
           },
           "event": [
             {
@@ -5506,7 +5743,7 @@
           ]
         },
         {
-          "name": "Crear una actividad en un viaje archivado",
+          "name": "Crear una actividad en un viaje finalizado",
           "request": {
             "method": "POST",
             "header": [
@@ -5541,7 +5778,7 @@
           ]
         },
         {
-          "name": "Modificar una actividad de un viaje archivado",
+          "name": "Modificar una actividad de un viaje finalizado",
           "request": {
             "method": "PATCH",
             "header": [
@@ -5576,7 +5813,7 @@
           ]
         },
         {
-          "name": "Eliminar una actividad de un viaje archivado",
+          "name": "Eliminar una actividad de un viaje finalizado",
           "request": {
             "method": "DELETE",
             "header": [
@@ -5603,7 +5840,7 @@
           ]
         },
         {
-          "name": "Reordenar las actividades de un viaje archivado",
+          "name": "Reordenar las actividades de un viaje finalizado",
           "request": {
             "method": "PUT",
             "header": [
@@ -5636,7 +5873,7 @@
           ]
         },
         {
-          "name": "Listar las actividades de un viaje archivado",
+          "name": "Listar las actividades de un viaje finalizado",
           "request": {
             "method": "GET",
             "header": [
@@ -6796,7 +7033,7 @@
           ]
         },
         {
-          "name": "Archivar el viaje de los gastos",
+          "name": "Finalizar el viaje de los gastos",
           "request": {
             "method": "POST",
             "header": [
@@ -6805,7 +7042,7 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/archivar"
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/finalizar"
           },
           "event": [
             {
@@ -6814,8 +7051,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
-                  "pm.test('El viaje queda archivado', () => {",
-                  "  pm.expect(pm.response.json().estado).to.eql('archivado');",
+                  "pm.test('El viaje queda finalizado', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('finalizado');",
                   "});"
                 ]
               }
@@ -6823,7 +7060,7 @@
           ]
         },
         {
-          "name": "Registrar un gasto en un viaje archivado",
+          "name": "Registrar un gasto en un viaje finalizado",
           "request": {
             "method": "POST",
             "header": [
@@ -6858,7 +7095,7 @@
           ]
         },
         {
-          "name": "Listar los gastos de un viaje archivado (solo lectura)",
+          "name": "Listar los gastos de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [
@@ -6894,7 +7131,7 @@
           ]
         },
         {
-          "name": "Ver el balance de un viaje archivado (solo lectura)",
+          "name": "Ver el balance de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [
@@ -6933,7 +7170,7 @@
           ]
         },
         {
-          "name": "Ver la liquidación de un viaje saldado (también archivado)",
+          "name": "Ver la liquidación de un viaje saldado (también finalizado)",
           "request": {
             "method": "GET",
             "header": [
@@ -7036,7 +7273,7 @@
           ]
         },
         {
-          "name": "Ver el detalle de un gasto de un viaje archivado (solo lectura)",
+          "name": "Ver el detalle de un gasto de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [
@@ -7061,7 +7298,7 @@
           ]
         },
         {
-          "name": "Editar un gasto de un viaje archivado",
+          "name": "Editar un gasto de un viaje finalizado",
           "request": {
             "method": "PATCH",
             "header": [
@@ -7096,7 +7333,7 @@
           ]
         },
         {
-          "name": "Borrar un gasto de un viaje archivado",
+          "name": "Borrar un gasto de un viaje finalizado",
           "request": {
             "method": "DELETE",
             "header": [
@@ -7924,7 +8161,7 @@
           ]
         },
         {
-          "name": "Archivar el viaje de los documentos",
+          "name": "Finalizar el viaje de los documentos",
           "request": {
             "method": "POST",
             "header": [
@@ -7933,7 +8170,7 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/archivar"
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/finalizar"
           },
           "event": [
             {
@@ -7942,8 +8179,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
-                  "pm.test('El viaje queda archivado', () => {",
-                  "  pm.expect(pm.response.json().estado).to.eql('archivado');",
+                  "pm.test('El viaje queda finalizado', () => {",
+                  "  pm.expect(pm.response.json().estado).to.eql('finalizado');",
                   "});"
                 ]
               }
@@ -7951,7 +8188,7 @@
           ]
         },
         {
-          "name": "Subir un documento a un viaje archivado",
+          "name": "Subir un documento a un viaje finalizado",
           "request": {
             "method": "POST",
             "header": [
@@ -7988,7 +8225,7 @@
           ]
         },
         {
-          "name": "Listar los documentos de un viaje archivado (solo lectura)",
+          "name": "Listar los documentos de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [
@@ -8013,7 +8250,7 @@
           ]
         },
         {
-          "name": "Abrir un documento de un viaje archivado (solo lectura)",
+          "name": "Abrir un documento de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [
@@ -8032,6 +8269,922 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Devuelve el enlace', () => pm.expect(pm.response.json().url).to.match(/^https?:\\/\\//));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tareas",
+      "item": [
+        {
+          "name": "Crear viaje para las tareas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Tareas de Roma\",\n  \"presupuesto\": 600,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('viajeIdTarea', body.id);",
+                  "const yo = body.miembros.find((m) => m.rol === 'creador');",
+                  "pm.collectionVariables.set('usuarioIdTarea', yo.usuario_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las tareas de un viaje sin tareas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('La lista está vacía', () => pm.expect(pm.response.json().tareas).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir una tarea",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"  Reservar mesa para la cena  \",\n  \"responsable_id\": \"{{usuarioIdTarea}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Tarea pendiente con su responsable', () => {",
+                  "  pm.expect(body.texto).to.eql('Reservar mesa para la cena');",
+                  "  pm.expect(body.hecha).to.eql(false);",
+                  "  pm.expect(body.hecha_en).to.eql(null);",
+                  "  pm.expect(body.responsable.usuario_id).to.eql(pm.collectionVariables.get('usuarioIdTarea'));",
+                  "});",
+                  "pm.collectionVariables.set('tareaId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las tareas del viaje",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye la tarea creada', () => {",
+                  "  const tareas = pm.response.json().tareas;",
+                  "  pm.expect(tareas).to.have.lengthOf(1);",
+                  "  pm.expect(tareas[0].id).to.eql(pm.collectionVariables.get('tareaId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir una tarea con el texto vacío",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"   \",\n  \"responsable_id\": \"{{usuarioIdTarea}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir una tarea con un texto de más de 200 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"responsable_id\": \"{{usuarioIdTarea}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir una tarea con un responsable que no es miembro",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Tarea sin dueño\",\n  \"responsable_id\": \"00000000-0000-4000-8000-000000000000\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir una tarea con un responsable no válido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Tarea sin dueño\",\n  \"responsable_id\": \"no-es-un-uuid\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar una tarea como hecha",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hecha\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Queda hecha y con fecha', () => {",
+                  "  pm.expect(body.hecha).to.eql(true);",
+                  "  pm.expect(body.hecha_en).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desmarcar una tarea",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hecha\": false\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Vuelve a pendiente', () => {",
+                  "  pm.expect(pm.response.json().hecha).to.eql(false);",
+                  "  pm.expect(pm.response.json().hecha_en).to.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar el texto y el responsable de una tarea",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Reservar mesa para el domingo\",\n  \"responsable_id\": \"{{usuarioIdTarea}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Texto nuevo y responsable asignado', () => {",
+                  "  pm.expect(pm.response.json().texto).to.eql('Reservar mesa para el domingo');",
+                  "  pm.expect(pm.response.json().responsable.usuario_id).to.eql(pm.collectionVariables.get('usuarioIdTarea'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar una tarea sin indicar ningún campo",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar una tarea con hecha que no es verdadero o falso",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hecha\": \"si\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar una tarea con un responsable que no es miembro",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responsable_id\": \"00000000-0000-4000-8000-000000000000\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar una tarea que no existe",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/00000000-0000-4000-8000-000000000000",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hecha\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código tarea_no_encontrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('tarea_no_encontrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Editar una tarea con un identificador no válido",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/no-es-un-uuid",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hecha\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las tareas sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las tareas con un identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/tareas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las tareas de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/tareas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una tarea sin sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una tarea con un identificador no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/no-es-un-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una tarea",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));",
+                  "pm.test('No devuelve cuerpo', () => pm.expect(pm.response.text()).to.eql(''));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar otra vez la misma tarea",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código tarea_no_encontrada', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('tarea_no_encontrada');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir otra tarea antes de finalizar el viaje",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Imprimir los billetes\",\n  \"responsable_id\": \"{{usuarioIdTarea}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('tareaId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar el viaje de las tareas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/finalizar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El viaje queda finalizado', () => pm.expect(pm.response.json().estado).to.eql('finalizado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar las tareas de un viaje finalizado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Conserva la tarea', () => pm.expect(pm.response.json().tareas).to.have.lengthOf(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir una tarea en un viaje finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Llega tarde\",\n  \"responsable_id\": \"{{usuarioIdTarea}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar una tarea de un viaje finalizado",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hecha\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una tarea de un viaje finalizado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdTarea}}/tareas/{{tareaId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
                 ]
               }
             }
@@ -8563,7 +9716,7 @@
           ]
         },
         {
-          "name": "Archivar el viaje de las fotos",
+          "name": "Finalizar el viaje de las fotos",
           "request": {
             "method": "POST",
             "header": [
@@ -8572,7 +9725,7 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/archivar"
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/finalizar"
           },
           "event": [
             {
@@ -8587,7 +9740,7 @@
           ]
         },
         {
-          "name": "Subir una foto a un viaje archivado",
+          "name": "Subir una foto a un viaje finalizado",
           "request": {
             "method": "POST",
             "header": [
@@ -8622,7 +9775,7 @@
           ]
         },
         {
-          "name": "Listar las fotos de un viaje archivado (solo lectura)",
+          "name": "Listar las fotos de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [
@@ -9058,7 +10211,7 @@
           ]
         },
         {
-          "name": "Archivar el viaje del resumen",
+          "name": "Finalizar el viaje del resumen",
           "request": {
             "method": "POST",
             "header": [
@@ -9067,7 +10220,7 @@
                 "value": "Bearer {{token}}"
               }
             ],
-            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/archivar"
+            "url": "{{baseUrl}}/viajes/{{viajeIdResumen}}/finalizar"
           },
           "event": [
             {
@@ -9082,7 +10235,7 @@
           ]
         },
         {
-          "name": "Resumen de un viaje archivado (solo lectura)",
+          "name": "Resumen de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
             "header": [

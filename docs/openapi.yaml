@@ -2648,6 +2648,290 @@ paths:
                   codigo: error_documento
                   mensaje: No se ha podido subir el documento
 
+  /viajes/{viajeId}/tareas:
+    get:
+      tags:
+        - Tareas
+      summary: Lista las tareas del viaje
+      description: |
+        Devuelve la lista de tareas colaborativa del viaje, de la más antigua a la más reciente, cada una con su
+        responsable (nombre y avatar). Solo lo pueden pedir los miembros del viaje. También funciona en viajes
+        finalizados, porque solo lee.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Tareas del viaje (lista vacía si aún no tiene ninguna)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaTareas'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_tarea
+                  mensaje: No se han podido obtener las tareas
+    post:
+      tags:
+        - Tareas
+      summary: Añade una tarea a la lista del viaje
+      description: |
+        Crea una tarea pendiente con su texto (de 1 a 200 caracteres, sin espacios al principio ni al final) y su
+        responsable, que tiene que ser miembro del viaje. Cualquier miembro puede añadir tareas, y solo mientras
+        el viaje esté activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaTarea'
+      responses:
+        '201':
+          description: Tarea creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tarea'
+        '400':
+          description: El identificador del viaje no es un UUID, el texto está vacío o supera los 200 caracteres, o el responsable no es un UUID válido ni miembro del viaje
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                texto:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El texto debe tener entre 1 y 200 caracteres
+                responsableNoMiembro:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El responsable tiene que ser miembro del viaje
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_tarea
+                  mensaje: No se ha podido crear la tarea
+
+  /viajes/{viajeId}/tareas/{tareaId}:
+    patch:
+      tags:
+        - Tareas
+      summary: Edita o marca una tarea
+      description: |
+        Cambia solo los campos que se envían: el texto, el responsable (miembro del viaje) o si está hecha. Hay que
+        enviar al menos uno. Al marcarla (`hecha: true`) se guarda cuándo se hizo en `hecha_en`; al desmarcarla,
+        `hecha_en` vuelve a `null`. Cualquier miembro puede editar o marcar cualquier tarea, y solo mientras el
+        viaje esté activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/TareaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosTarea'
+      responses:
+        '200':
+          description: Tarea actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tarea'
+        '400':
+          description: Algún identificador no es un UUID, no se envía ningún campo, o el texto, el responsable o `hecha` no son válidos (incluido un responsable que no es miembro del viaje)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinCampos:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: 'Indica al menos un campo que cambiar: texto, responsable_id o hecha'
+                hechaNoBooleana:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: El campo hecha debe ser verdadero o falso
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o la tarea no existe en este viaje, por ejemplo porque otro miembro ya la borró (`tarea_no_encontrada`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viaje:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                tarea:
+                  value:
+                    error:
+                      codigo: tarea_no_encontrada
+                      mensaje: La tarea no existe en este viaje
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_tarea
+                  mensaje: No se ha podido actualizar la tarea
+    delete:
+      tags:
+        - Tareas
+      summary: Borra una tarea de la lista del viaje
+      description: |
+        Borra la tarea para todos los miembros. No se puede deshacer. Cualquier miembro puede borrar cualquier
+        tarea, y solo mientras el viaje esté activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - $ref: '#/components/parameters/TareaId'
+      responses:
+        '204':
+          description: Tarea borrada (sin cuerpo)
+        '400':
+          description: El identificador del viaje o de la tarea no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador de la tarea no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o la tarea no existe en este viaje (`tarea_no_encontrada`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                viaje:
+                  value:
+                    error:
+                      codigo: viaje_no_encontrado
+                      mensaje: El viaje no existe o no perteneces a él
+                tarea:
+                  value:
+                    error:
+                      codigo: tarea_no_encontrada
+                      mensaje: La tarea no existe en este viaje
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_tarea
+                  mensaje: No se ha podido eliminar la tarea
+
   /viajes/{viajeId}/fotos:
     get:
       tags:
@@ -3349,6 +3633,15 @@ components:
         type: string
         format: uuid
       example: 4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d
+    TareaId:
+      name: tareaId
+      in: path
+      required: true
+      description: Identificador de la tarea
+      schema:
+        type: string
+        format: uuid
+      example: 5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e
   responses:
     SinSesion:
       description: Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
@@ -4782,6 +5075,94 @@ components:
           type: string
           format: binary
           description: JPEG o PNG de 2 MB (2.000.000 bytes) como máximo. Un solo archivo por petición
+
+    Tarea:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 5b8c0d3e-2f4a-4b6c-9d7e-8f9a0b1c2d3e
+        texto:
+          type: string
+          example: Reservar mesa para la cena del sábado
+        hecha:
+          type: boolean
+          example: false
+        hecha_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: Cuándo se marcó como hecha (null mientras está pendiente)
+          example: null
+        creado_en:
+          type: string
+          format: date-time
+          example: '2026-11-14T10:00:00Z'
+        responsable:
+          type: object
+          description: Miembro a quien se asigna la tarea
+          properties:
+            usuario_id:
+              type: string
+              format: uuid
+              example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+            nombre:
+              type: string
+              nullable: true
+              description: Null si el responsable ya no es miembro del viaje
+              example: Berta
+            avatar_url:
+              type: string
+              nullable: true
+              example: null
+
+    ListaTareas:
+      type: object
+      properties:
+        tareas:
+          type: array
+          description: Tareas del viaje, de la más antigua a la más reciente
+          items:
+            $ref: '#/components/schemas/Tarea'
+
+    NuevaTarea:
+      type: object
+      required:
+        - texto
+        - responsable_id
+      properties:
+        texto:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Texto de la tarea (se recortan los espacios de los extremos)
+          example: Reservar mesa para la cena del sábado
+        responsable_id:
+          type: string
+          format: uuid
+          description: Miembro del viaje a quien se asigna
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+
+    CambiosTarea:
+      type: object
+      minProperties: 1
+      description: Se envía al menos uno de los campos; los que no se envían no cambian
+      properties:
+        texto:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Reservar mesa para el domingo
+        responsable_id:
+          type: string
+          format: uuid
+          description: Nuevo responsable, miembro del viaje
+          example: df77cba6-4be5-4cbc-814b-1e228dd73dcc
+        hecha:
+          type: boolean
+          description: true marca la tarea como hecha y false la desmarca
+          example: true
 
     PerfilActualizado:
       type: object
