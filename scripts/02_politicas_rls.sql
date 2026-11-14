@@ -987,7 +987,7 @@ $$;
 -- Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
 -- aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca
 -- de cada gasto). Devuelve:
---   { "estado": "no_miembro" } o { "estado": "es_creador" }  sin cambios
+--   { "estado": "no_miembro" }, { "estado": "es_creador" } o { "estado": "no_activo" }  sin cambios
 --   { "estado": "saldo_pendiente", "saldo": n }  sin cambios
 --   { "estado": "ok" }  ya no es miembro del viaje
 CREATE OR REPLACE FUNCTION public.abandonar_viaje(p_viaje_id uuid)
@@ -1017,6 +1017,10 @@ BEGIN
     WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid() AND rol = 'creador'
   ) THEN
     RETURN jsonb_build_object('estado', 'es_creador');
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.viajes WHERE id = p_viaje_id AND estado <> 'activo') THEN
+    RETURN jsonb_build_object('estado', 'no_activo');
   END IF;
 
   SELECT
