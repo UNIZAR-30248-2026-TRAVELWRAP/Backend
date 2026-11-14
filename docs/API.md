@@ -29,6 +29,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/finalizar`](#post-viajesviajeidfinalizar) | Finaliza un viaje sin archivarlo | Token de sesión |
 | POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Archiva un viaje, solo para ti | Token de sesión |
 | POST | [`/viajes/{viajeId}/desarchivar`](#post-viajesviajeiddesarchivar) | Desarchiva un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/abandonar`](#post-viajesviajeidabandonar) | Abandona el viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 | GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
@@ -947,6 +948,68 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido desarchivar el viaje |
+
+### POST /viajes/{viajeId}/abandonar
+
+**Abandona el viaje**
+
+Deja el viaje **para quien lo pide**: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
+aparece como «Antiguo miembro»). Solo puede hacerlo un miembro que no es el creador, con el viaje activo y con su
+saldo a cero (lo que ha pagado menos lo que le toca de cada gasto). El creador tiene «Finalizar viaje».
+Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que las votaciones abiertas se actualicen.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**204** — Viaje abandonado (sin cuerpo)
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**403** — El usuario es el creador del viaje, que no puede abandonarlo (tiene «Finalizar viaje»)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `es_creador` | El creador no puede abandonar el viaje: puede finalizarlo |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir los casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — Dos casos. Con el viaje finalizado (`viaje_no_activo`). Con el saldo del usuario distinto de 0
+(`saldo_pendiente`), con su saldo en el mensaje.
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `saldo_pendiente` | Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de 12.50 € |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido abandonar el viaje |
 
 ## Invitaciones
 

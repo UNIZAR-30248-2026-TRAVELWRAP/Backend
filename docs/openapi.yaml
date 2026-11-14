@@ -1022,6 +1022,90 @@ paths:
                   codigo: error_viaje
                   mensaje: No se ha podido desarchivar el viaje
 
+  /viajes/{viajeId}/abandonar:
+    post:
+      tags:
+        - Viajes
+      summary: Abandona el viaje
+      description: |
+        Deja el viaje **para quien lo pide**: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
+        aparece como «Antiguo miembro»). Solo puede hacerlo un miembro que no es el creador, con el viaje activo y con su
+        saldo a cero (lo que ha pagado menos lo que le toca de cada gasto). El creador tiene «Finalizar viaje».
+        Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que las votaciones abiertas se actualicen.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '204':
+          description: Viaje abandonado (sin cuerpo)
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '403':
+          description: El usuario es el creador del viaje, que no puede abandonarlo (tiene «Finalizar viaje»)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: es_creador
+                  mensaje: El creador no puede abandonar el viaje: puede finalizarlo
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir los casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: |
+            Dos casos. Con el viaje finalizado (`viaje_no_activo`). Con el saldo del usuario distinto de 0
+            (`saldo_pendiente`), con su saldo en el mensaje.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: saldo_pendiente
+                  mensaje: 'Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de 12.50 €'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido abandonar el viaje
   /viajes/{viajeId}/invitacion:
     get:
       tags:
