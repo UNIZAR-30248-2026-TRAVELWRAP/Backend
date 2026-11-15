@@ -12,5 +12,8 @@ router.get('/:gastoId', requiereSesion, gastoController.detalle);
 router.post('/', requiereSesion, gastoController.crear);
 router.patch('/:gastoId', requiereSesion, gastoController.editar);
 router.delete('/:gastoId', requiereSesion, gastoController.eliminar);
+// Deudas saldadas: marcar la transferencia de un miembro y deshacerla (solo quien recibe el dinero)
+router.post('/saldadas', requiereSesion, gastoController.marcarSaldada);
+router.delete('/saldadas/:deudorId', requiereSesion, gastoController.desmarcarSaldada);
 
 module.exports = router;

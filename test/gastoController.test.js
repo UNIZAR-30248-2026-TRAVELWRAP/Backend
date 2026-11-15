@@ -33,6 +33,9 @@ const crearRes = () => ({
     this.cuerpo = cuerpo;
     return this;
   },
+  end() {
+    return this;
+  },
 });
 
 // Llama al controlador como lo haría Express tras pasar por requiereSesion
@@ -724,5 +727,91 @@ describe('DELETE /viajes/:viajeId/gastos/:gastoId (eliminar)', () => {
     const res = await llamarEliminar();
 
     esperarError(res, 500, 'error_interno');
+  });
+});
+
+// Marcar y deshacer deudas saldadas: validación del cuerpo y traducción de los resultados del servicio
+describe('POST /viajes/:viajeId/gastos/saldadas (marcarSaldada)', () => {
+  afterEach(() => mock.restoreAll());
+
+  const llamarMarcar = async (body) => {
+    const res = crearRes();
+    await gastoController.marcarSaldada({ params: { viajeId: VIAJE_ID }, body, usuario: USUARIO, supabase: {} }, res);
+    return res;
+  };
+
+  it('responde 204 y pasa el deudor y el importe al servicio', async () => {
+    const marcar = mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'ok' }));
+
+    const res = await llamarMarcar({ de_usuario_id: BERTA, importe: 12.5 });
+
+    assert.equal(res.codigo, 204);
+    assert.deepEqual(marcar.mock.calls[0].arguments.slice(1), [ADRIANA, VIAJE_ID, BERTA, 12.5]);
+  });
+
+  it('rechaza un deudor que no es un UUID o un importe que no es válido, sin llamar al servicio', async () => {
+    const marcar = mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'ok' }));
+
+    assert.equal((await llamarMarcar({ importe: 5 })).codigo, 400);
+    assert.equal((await llamarMarcar({ de_usuario_id: 'no-es-uuid', importe: 5 })).codigo, 400);
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 0 })).codigo, 400);
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: -3 })).codigo, 400);
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 1.005 })).codigo, 400);
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: '5' })).codigo, 400);
+    assert.equal(marcar.mock.calls.length, 0);
+  });
+
+  it('si la liquidación ha cambiado responde 409 deuda_cambiada', async () => {
+    mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'no_coincide' }));
+
+    const res = await llamarMarcar({ de_usuario_id: BERTA, importe: 5 });
+
+    assert.equal(res.codigo, 409);
+    assert.equal(res.cuerpo.error.codigo, 'deuda_cambiada');
+  });
+
+  it('con el viaje finalizado responde 409, con el viaje inexistente 404 y si falla Supabase 502', async () => {
+    mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'no_activo' }));
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 5 })).codigo, 409);
+
+    mock.restoreAll();
+    mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'no_existe' }));
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 5 })).codigo, 404);
+
+    mock.restoreAll();
+    mock.method(gastoService, 'marcarSaldada', async () => ({ error: { code: 'PGRST000' } }));
+    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 5 })).codigo, 502);
+  });
+});
+
+describe('DELETE /viajes/:viajeId/gastos/saldadas/:deudorId (desmarcarSaldada)', () => {
+  afterEach(() => mock.restoreAll());
+
+  const llamarDesmarcar = async (deudorId) => {
+    const res = crearRes();
+    await gastoController.desmarcarSaldada(
+      { params: { viajeId: VIAJE_ID, deudorId }, usuario: USUARIO, supabase: {} },
+      res,
+    );
+    return res;
+  };
+
+  it('responde 204 al deshacer la marca', async () => {
+    const desmarcar = mock.method(gastoService, 'desmarcarSaldada', async () => ({ estado: 'ok' }));
+
+    const res = await llamarDesmarcar(BERTA);
+
+    assert.equal(res.codigo, 204);
+    assert.deepEqual(desmarcar.mock.calls[0].arguments.slice(1), [ADRIANA, VIAJE_ID, BERTA]);
+  });
+
+  it('responde 404 si no hay ninguna deuda saldada que deshacer y 400 si el deudor no es un UUID', async () => {
+    mock.method(gastoService, 'desmarcarSaldada', async () => ({ estado: 'sin_deuda' }));
+
+    const sinDeuda = await llamarDesmarcar(BERTA);
+    assert.equal(sinDeuda.codigo, 404);
+    assert.equal(sinDeuda.cuerpo.error.codigo, 'deuda_no_encontrada');
+
+    assert.equal((await llamarDesmarcar('no-es-uuid')).codigo, 400);
   });
 });

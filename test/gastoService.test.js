@@ -24,7 +24,8 @@ const clienteFalso = ({ respuestaRpc, respuestas = [] } = {}) => {
       {
         get: (_, metodo) => {
           if (metodo === 'then') {
-            const respuesta = respuestas.shift();
+            // Sin respuesta preparada, la consulta devuelve una lista vacía (p. ej. ninguna deuda saldada)
+            const respuesta = respuestas.shift() ?? { data: [], error: null };
             return (resolver, rechazar) => Promise.resolve(respuesta).then(resolver, rechazar);
           }
           return (...args) => {
@@ -774,5 +775,176 @@ describe('gastoService.eliminar', () => {
     const cliente = clienteFalso({ respuestas: [{ data: null, error }] });
 
     assert.deepEqual(await gastoService.eliminar(cliente, ADRIANA, VIAJE_ID, GASTO_ID), { error });
+  });
+});
+
+// Deudas saldadas (PB-41 y siguientes): cuentan como un pago de quien debe y como una parte de quien recibe
+describe('gastoService.balance con deudas saldadas', () => {
+  afterEach(() => mock.restoreAll());
+
+  const MIEMBROS = [
+    { usuario_id: ADRIANA, nombre: 'Adriana' },
+    { usuario_id: BERTA, nombre: 'Berta' },
+  ];
+  // Adriana paga 10 entre las dos: a cada una le toca 5
+  const GASTO_DE_10 = {
+    data: [{
+      importe: '10.00',
+      pagado_por: ADRIANA,
+      repartos: [{ usuario_id: ADRIANA, importe: '5.00' }, { usuario_id: BERTA, importe: '5.00' }],
+    }],
+    error: null,
+  };
+
+  it('una deuda saldada cuenta como un pago: quien debe sube su saldo y quien recibe lo baja', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, miembros: MIEMBROS } }));
+    const cliente = clienteFalso({
+      respuestas: [GASTO_DE_10, { data: [{ de_usuario_id: BERTA, a_usuario_id: ADRIANA, importe: '5.00' }], error: null }],
+    });
+
+    const resultado = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(resultado.saldos.map((s) => s.saldo), [0, 0]);
+    assert.deepEqual(cliente.consultas[1].operaciones, [['select', 'de_usuario_id, a_usuario_id, importe'], ['eq', 'viaje_id', VIAJE_ID]]);
+    assert.equal(cliente.consultas[1].tabla, 'deudas_saldadas');
+  });
+
+  it('una deuda saldada parcial deja el resto pendiente', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, miembros: MIEMBROS } }));
+    const cliente = clienteFalso({
+      respuestas: [GASTO_DE_10, { data: [{ de_usuario_id: BERTA, a_usuario_id: ADRIANA, importe: '2.00' }], error: null }],
+    });
+
+    const resultado = await gastoService.balance(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(resultado.saldos.map((s) => s.saldo), [3, -3]);
+  });
+
+  it('devuelve el error si falla la lectura de las deudas saldadas', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, miembros: MIEMBROS } }));
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [GASTO_DE_10, { data: null, error }] });
+
+    assert.deepEqual(await gastoService.balance(cliente, ADRIANA, VIAJE_ID), { error });
+  });
+});
+
+// Marcar como saldada: solo quien recibe el dinero, por el importe que aún le debe, con el viaje activo
+describe('gastoService.marcarSaldada', () => {
+  afterEach(() => mock.restoreAll());
+
+  const MIEMBROS = [
+    { usuario_id: ADRIANA, nombre: 'Adriana' },
+    { usuario_id: BERTA, nombre: 'Berta' },
+  ];
+  const GASTO_DE_10 = {
+    data: [{
+      importe: '10.00',
+      pagado_por: ADRIANA,
+      repartos: [{ usuario_id: ADRIANA, importe: '5.00' }, { usuario_id: BERTA, importe: '5.00' }],
+    }],
+    error: null,
+  };
+  const sinDeudasSaldadas = { data: [], error: null };
+  const conViaje = (estado = 'activo') =>
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado, miembros: MIEMBROS } }));
+
+  it('inserta la deuda saldada con el importe que debe quien paga a quien recibe', async () => {
+    conViaje();
+    const cliente = clienteFalso({
+      respuestas: [GASTO_DE_10, sinDeudasSaldadas, { data: null, error: null }, { error: null }],
+    });
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA, 5), { estado: 'ok' });
+    assert.deepEqual(cliente.consultas[3].operaciones, [[
+      'insert',
+      { viaje_id: VIAJE_ID, de_usuario_id: BERTA, a_usuario_id: ADRIANA, importe: 5 },
+    ]]);
+  });
+
+  it('si ya había una deuda saldada de ese deudor, suma el importe en lugar de insertar otra fila', async () => {
+    conViaje();
+    const cliente = clienteFalso({
+      respuestas: [
+        GASTO_DE_10,
+        { data: [{ de_usuario_id: BERTA, a_usuario_id: ADRIANA, importe: '2.00' }], error: null },
+        { data: { importe: '2.00' }, error: null },
+        { error: null },
+      ],
+    });
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA, 3), { estado: 'ok' });
+    assert.deepEqual(cliente.consultas[3].operaciones[0], ['update', { importe: 5 }]);
+  });
+
+  it('si el importe ya no es el que se debe, responde no_coincide y no escribe nada', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [GASTO_DE_10, sinDeudasSaldadas] });
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA, 4), { estado: 'no_coincide' });
+    assert.equal(cliente.consultas.length, 2);
+  });
+
+  it('solo quien recibe el dinero puede marcarla: quien debe no tiene transferencia que marcar', async () => {
+    conViaje();
+    const cliente = clienteFalso({ respuestas: [GASTO_DE_10, sinDeudasSaldadas] });
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, BERTA, VIAJE_ID, ADRIANA, 5), { estado: 'no_coincide' });
+  });
+
+  it('con el viaje finalizado responde no_activo sin leer nada', async () => {
+    conViaje('finalizado');
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA, 5), { estado: 'no_activo' });
+    assert.equal(cliente.consultas.length, 0);
+  });
+
+  it('si el viaje no existe o no se es miembro responde no_existe', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA, 5), { estado: 'no_existe' });
+  });
+
+  it('devuelve el error si falla la escritura', async () => {
+    conViaje();
+    const error = { code: 'PGRST301' };
+    const cliente = clienteFalso({ respuestas: [GASTO_DE_10, sinDeudasSaldadas, { data: null, error: null }, { error }] });
+
+    assert.deepEqual(await gastoService.marcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA, 5), { error });
+  });
+});
+
+// Deshacer una marca: solo quien la marcó (quien recibe el dinero) puede borrarla
+describe('gastoService.desmarcarSaldada', () => {
+  afterEach(() => mock.restoreAll());
+
+  it('borra la deuda saldada de ese deudor hacia quien usa la app', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'activo' } }));
+    const cliente = clienteFalso({ respuestas: [{ data: [{ viaje_id: VIAJE_ID }], error: null }] });
+
+    assert.deepEqual(await gastoService.desmarcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA), { estado: 'ok' });
+    assert.deepEqual(cliente.consultas[0].operaciones.slice(0, 4), [
+      ['delete'],
+      ['eq', 'viaje_id', VIAJE_ID],
+      ['eq', 'de_usuario_id', BERTA],
+      ['eq', 'a_usuario_id', ADRIANA],
+    ]);
+  });
+
+  it('si no hay ninguna marca que borrar responde sin_deuda', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'activo' } }));
+    const cliente = clienteFalso({ respuestas: [{ data: [], error: null }] });
+
+    assert.deepEqual(await gastoService.desmarcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA), { estado: 'sin_deuda' });
+  });
+
+  it('con el viaje finalizado no se deshace nada', async () => {
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
+    const cliente = clienteFalso();
+
+    assert.deepEqual(await gastoService.desmarcarSaldada(cliente, ADRIANA, VIAJE_ID, BERTA), { estado: 'no_activo' });
+    assert.equal(cliente.consultas.length, 0);
   });
 });

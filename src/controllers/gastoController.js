@@ -92,6 +92,7 @@ const ERRORES = {
   no_miembro: [400, 'datos_invalidos', 'Quien paga y los participantes tienen que ser miembros del viaje'],
   no_encontrado: [404, 'gasto_no_encontrado', 'El gasto no existe o no pertenece a este viaje'],
   sin_permiso: [403, 'sin_permiso', 'Solo puede editar el gasto quien lo registró o el creador del viaje'],
+  sin_deuda: [404, 'deuda_no_encontrada', 'No hay ninguna deuda saldada que deshacer'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {
@@ -236,4 +237,52 @@ const crear = async (req, res) => {
   }
 };
 
-module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar };
+// Marcar como saldada la transferencia que le deben a quien usa la app. El cuerpo indica el deudor y el importe
+const marcarSaldada = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  const { de_usuario_id: deudorId, importe } = req.body ?? {};
+  if (typeof deudorId !== 'string' || !UUID_REGEX.test(deudorId)) {
+    return responderError(res, 400, 'datos_invalidos', 'Indica qué miembro del viaje tiene que pagar');
+  }
+  // Importe en euros con dos decimales como máximo, mayor que 0
+  const enCentimos = typeof importe === 'number' && Number.isFinite(importe) ? importe * 100 : NaN;
+  if (!(enCentimos > 0) || Math.abs(enCentimos - Math.round(enCentimos)) > 1e-6) {
+    return responderError(res, 400, 'datos_invalidos', 'El importe debe ser un número mayor que 0 con dos decimales como máximo');
+  }
+
+  try {
+    const resultado = await gastoService.marcarSaldada(req.supabase, req.usuario.id, viajeId, deudorId, importe);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido marcar la deuda como saldada');
+    if (resultado.estado === 'no_coincide') {
+      return responderError(res, 409, 'deuda_cambiada', 'La deuda ha cambiado: actualiza la liquidación antes de marcarla');
+    }
+    if (resultado.estado !== 'ok') {
+      return responderMotivo(res, resultado.estado, 'No se ha podido marcar la deuda como saldada');
+    }
+    return res.status(204).end();
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+// Deshacer la marca de saldado de la deuda de un miembro (solo quien la marcó)
+const desmarcarSaldada = async (req, res) => {
+  const { viajeId, deudorId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(deudorId)) return responderError(res, 400, 'datos_invalidos', 'El miembro no es válido');
+
+  try {
+    const resultado = await gastoService.desmarcarSaldada(req.supabase, req.usuario.id, viajeId, deudorId);
+
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido deshacer la marca');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido deshacer la marca');
+    return res.status(204).end();
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar, marcarSaldada, desmarcarSaldada };

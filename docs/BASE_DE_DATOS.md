@@ -21,6 +21,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [fotos](#fotos) | 8 | Activada | 2 |
 | [tareas](#tareas) | 8 | Activada | 4 |
 | [sellos](#sellos) | 7 | Activada | 4 |
+| [deudas_saldadas](#deudas_saldadas) | 4 | Activada | 4 |
 
 ## Relaciones
 
@@ -54,6 +55,9 @@ erDiagram
     perfiles |o--o{ tareas : "creada_por"
     perfiles ||--o{ sellos : "usuario_id"
     viajes |o--o{ sellos : "viaje_id"
+    viajes ||--o{ deudas_saldadas : "viaje_id"
+    miembros_viaje ||--o{ deudas_saldadas : "de_usuario_id"
+    miembros_viaje ||--o{ deudas_saldadas : "a_usuario_id"
 ```
 
 ## Tipos enumerados
@@ -378,6 +382,25 @@ Sello que cada usuario elige al terminar un viaje (uno por viaje y usuario). Es 
 
 - `sellos_usuario_idx` sobre (usuario_id, anio DESC, elegido_en) — Pasaporte del usuario, del año más reciente al más antiguo
 
+### deudas_saldadas
+
+Deudas saldadas: quien recibe el dinero marca una transferencia de la liquidación como saldada. Cada fila es el importe que ya se considera pagado de quien debe (de_usuario_id) a quien recibe (a_usuario_id). No es un gasto: no sale en el historial, pero el balance y la liquidación cuentan el importe como si se hubiera pagado
+
+**Seguridad por filas (RLS):** activada, 4 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `viaje_id` | `uuid` | Sí | PK, FK → viajes.id (ON DELETE CASCADE) |  |  |
+| `de_usuario_id` | `uuid` | Sí | PK, FK → miembros_viaje.usuario_id |  |  |
+| `a_usuario_id` | `uuid` | Sí | PK, FK → miembros_viaje.usuario_id |  |  |
+| `importe` | `numeric(12,2)` | Sí |  |  | Debe cumplir: `importe > 0` |
+
+**Restricciones**
+
+- `deudas_saldadas_distintos`: `CHECK (de_usuario_id <> a_usuario_id)`
+- `deudas_saldadas_de_un_miembro`: `FOREIGN KEY (viaje_id, de_usuario_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)`
+- `deudas_saldadas_a_un_miembro`: `FOREIGN KEY (viaje_id, a_usuario_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)`
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -515,6 +538,15 @@ Sello que cada usuario elige al terminar un viaje (uno por viaje y usuario). Es 
 | `sellos_insert` | INSERT | authenticated |  | `usuario_id = auth.uid() AND viaje_id IS NOT NULL AND public.es_miembro(viaje_id) AND public.es_terminado(viaje_id)` |
 | `sellos_update` | UPDATE | authenticated | `usuario_id = auth.uid()` | `usuario_id = auth.uid()` |
 | `sellos_delete` | DELETE | authenticated | `usuario_id = auth.uid()` |  |
+
+#### deudas_saldadas
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `deudas_saldadas_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `deudas_saldadas_insert` | INSERT | authenticated |  | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `deudas_saldadas_update` | UPDATE | authenticated | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `deudas_saldadas_delete` | DELETE | authenticated | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 ## Almacenamiento de archivos (Supabase Storage)
 

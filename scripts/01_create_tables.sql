@@ -324,6 +324,22 @@ CREATE INDEX IF NOT EXISTS actividades_viaje_fecha_idx ON public.actividades (vi
 -- Historial de gastos del viaje, del más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS gastos_viaje_fecha_idx ON public.gastos (viaje_id, fecha DESC, creado_en DESC);
 CREATE INDEX IF NOT EXISTS repartos_gasto_miembro_idx ON public.repartos_gasto (viaje_id, usuario_id);
+
+-- Deudas saldadas: quien recibe el dinero marca una transferencia de la liquidación como saldada. Cada fila es
+-- el importe que ya se considera pagado de quien debe (de_usuario_id) a quien recibe (a_usuario_id). No es un gasto:
+-- no sale en el historial, pero el balance y la liquidación cuentan el importe como si se hubiera pagado
+CREATE TABLE IF NOT EXISTS public.deudas_saldadas (
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  de_usuario_id uuid NOT NULL,
+  a_usuario_id uuid NOT NULL,
+  importe numeric(12,2) NOT NULL CHECK (importe > 0),
+  PRIMARY KEY (viaje_id, de_usuario_id, a_usuario_id),
+  CONSTRAINT deudas_saldadas_distintos CHECK (de_usuario_id <> a_usuario_id),
+  CONSTRAINT deudas_saldadas_de_un_miembro FOREIGN KEY (viaje_id, de_usuario_id)
+    REFERENCES public.miembros_viaje (viaje_id, usuario_id),
+  CONSTRAINT deudas_saldadas_a_un_miembro FOREIGN KEY (viaje_id, a_usuario_id)
+    REFERENCES public.miembros_viaje (viaje_id, usuario_id)
+);
 -- Cartera del viaje, del documento más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);
 -- Galería del viaje, de la foto más reciente a la más antigua

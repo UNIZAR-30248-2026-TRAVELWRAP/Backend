@@ -76,6 +76,18 @@ const balance = async (cliente, usuarioId, viajeId) => {
     for (const reparto of gasto.repartos ?? []) cuentaDe(reparto.usuario_id).parte += aCentimos(reparto.importe);
   }
 
+  // Deudas saldadas: cuentan como un pago de quien debe y como una parte de quien recibe, así que el saldo se
+  // recalcula sin que haya un gasto de por medio
+  const { data: saldadas, error: errorSaldadas } = await cliente
+    .from('deudas_saldadas')
+    .select('de_usuario_id, a_usuario_id, importe')
+    .eq('viaje_id', viajeId);
+  if (errorSaldadas) return { error: errorSaldadas };
+  for (const deuda of saldadas ?? []) {
+    cuentaDe(deuda.de_usuario_id).pagado += aCentimos(deuda.importe);
+    cuentaDe(deuda.a_usuario_id).parte += aCentimos(deuda.importe);
+  }
+
   const saldos = [...cuentas].map(([id, { nombre, pagado, parte }]) => ({
     usuario_id: id,
     nombre,
@@ -215,4 +227,75 @@ const crear = async (cliente, viajeId, datos) => {
   return creado;
 };
 
-module.exports = { obtener, listar, balance, planDeTransferencias, liquidacion, detalle, crear, editar, eliminar };
+// Comprueba que el viaje existe, que el usuario es miembro y que está activo (solo entonces se pueden saldar deudas)
+// Devuelve { error } | { estado: no_existe | no_activo | ok }
+const comprobarViajeActivo = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+  return { estado: 'ok' };
+};
+
+// Marca como saldada la transferencia de deudorId a quien usa la app, por el importe que todavía debe. Solo lo puede
+// hacer quien recibe el dinero. Si ya había una deuda saldada de ese deudor, se suma. Como el importe tiene que ser
+// el que se debe ahora, una liquidación desactualizada responde no_coincide y no se marca nada.
+// Devuelve { error } | { estado: no_existe | no_activo | no_coincide | ok }
+const marcarSaldada = async (cliente, usuarioId, viajeId, deudorId, importe) => {
+  const activo = await comprobarViajeActivo(cliente, usuarioId, viajeId);
+  if (activo.estado !== 'ok') return activo;
+
+  const resultado = await balance(cliente, usuarioId, viajeId);
+  if (resultado.error || resultado.estado !== 'ok') return resultado;
+
+  const transferencia = planDeTransferencias(resultado.saldos).find((t) => t.de === deudorId && t.a === usuarioId);
+  if (!transferencia || aCentimos(transferencia.importe) !== aCentimos(importe)) return { estado: 'no_coincide' };
+
+  const filtro = (consulta) =>
+    consulta.eq('viaje_id', viajeId).eq('de_usuario_id', deudorId).eq('a_usuario_id', usuarioId);
+  const { data: existente, error: errorLectura } = await filtro(
+    cliente.from('deudas_saldadas').select('importe'),
+  ).maybeSingle();
+  if (errorLectura) return { error: errorLectura };
+
+  const error = existente
+    ? (await filtro(cliente.from('deudas_saldadas').update({ importe: (aCentimos(existente.importe) + aCentimos(importe)) / 100 }))).error
+    : (await cliente.from('deudas_saldadas').insert({
+        viaje_id: viajeId,
+        de_usuario_id: deudorId,
+        a_usuario_id: usuarioId,
+        importe,
+      })).error;
+  return error ? { error } : { estado: 'ok' };
+};
+
+// Deshace la marca de saldado de deudorId. Solo quien la marcó (quien recibe el dinero) puede deshacerla
+// Devuelve { error } | { estado: no_existe | no_activo | sin_deuda | ok }
+const desmarcarSaldada = async (cliente, usuarioId, viajeId, deudorId) => {
+  const activo = await comprobarViajeActivo(cliente, usuarioId, viajeId);
+  if (activo.estado !== 'ok') return activo;
+
+  const { data, error } = await cliente
+    .from('deudas_saldadas')
+    .delete()
+    .eq('viaje_id', viajeId)
+    .eq('de_usuario_id', deudorId)
+    .eq('a_usuario_id', usuarioId)
+    .select('viaje_id');
+  if (error) return { error };
+  return data && data.length > 0 ? { estado: 'ok' } : { estado: 'sin_deuda' };
+};
+
+module.exports = {
+  obtener,
+  listar,
+  balance,
+  planDeTransferencias,
+  liquidacion,
+  detalle,
+  crear,
+  editar,
+  eliminar,
+  marcarSaldada,
+  desmarcarSaldada,
+};

@@ -144,6 +144,7 @@ ALTER TABLE public.votos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.actividades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.gastos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.deudas_saldadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tareas ENABLE ROW LEVEL SECURITY;
@@ -307,6 +308,25 @@ CREATE POLICY repartos_gasto_update ON public.repartos_gasto FOR UPDATE TO authe
 DROP POLICY IF EXISTS repartos_gasto_delete ON public.repartos_gasto;
 CREATE POLICY repartos_gasto_delete ON public.repartos_gasto FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Deudas saldadas: las leen los miembros; solo quien recibe el dinero (a_usuario_id) las marca o las deshace,
+-- y solo con el viaje activo
+DROP POLICY IF EXISTS deudas_saldadas_select ON public.deudas_saldadas;
+CREATE POLICY deudas_saldadas_select ON public.deudas_saldadas FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+DROP POLICY IF EXISTS deudas_saldadas_insert ON public.deudas_saldadas;
+CREATE POLICY deudas_saldadas_insert ON public.deudas_saldadas FOR INSERT TO authenticated
+  WITH CHECK (a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS deudas_saldadas_update ON public.deudas_saldadas;
+CREATE POLICY deudas_saldadas_update ON public.deudas_saldadas FOR UPDATE TO authenticated
+  USING (a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
+  WITH CHECK (a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+DROP POLICY IF EXISTS deudas_saldadas_delete ON public.deudas_saldadas;
+CREATE POLICY deudas_saldadas_delete ON public.deudas_saldadas FOR DELETE TO authenticated
+  USING (a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- POLÍTICAS DOCUMENTOS
 -- Los miembros ven todos los documentos de la cartera de su viaje, también en viajes finalizados o archivados
