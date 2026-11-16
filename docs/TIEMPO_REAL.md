@@ -7,8 +7,59 @@ El servidor usa Socket.io 4 en el mismo puerto que la API (`http://localhost:300
 | Namespace | Estado | Uso |
 | --- | --- | --- |
 | `/votaciones` | Implementado | Cambios en las votaciones de un viaje |
-| `/chat` | Esqueleto | Mensajes del chat del grupo |
+| `/chat` | Implementado | Mensajes nuevos del chat del grupo |
 | `/notificaciones` | Esqueleto | Notificaciones al usuario |
+
+## `/chat`
+
+### Conexión
+
+Igual que `/votaciones`, con el mismo `token` de sesión:
+
+```js
+const socket = io("http://localhost:3000/chat", {
+  auth: { token },
+  transports: ["websocket"],
+})
+```
+
+Los errores de conexión son los mismos que en `/votaciones`.
+
+### Eventos que envía el cliente
+
+| Evento | Datos | Respuesta (acknowledgement, opcional) | Qué hace |
+| --- | --- | --- | --- |
+| `unirse_viaje` | `{ viaje_id }` | `{ ok: true }` o `{ error: { codigo, mensaje } }` | Empieza a recibir los mensajes del viaje. Solo para sus miembros activos: si no lo es, responde `viaje_no_encontrado`. |
+| `salir_viaje` | `{ viaje_id }` | — | Deja de recibir los mensajes de ese viaje. |
+
+Al reconectarse hay que volver a emitir `unirse_viaje`.
+
+### Eventos que envía el servidor
+
+**`mensaje`**: se ha guardado un mensaje nuevo en el viaje. Se envía a todos los miembros unidos a la sala, incluido quien lo escribió (que así no necesita añadirlo a mano). El mensaje tiene el mismo formato que la respuesta de `POST /viajes/{viajeId}/mensajes`:
+
+```json
+{
+  "viaje_id": "…",
+  "mensaje": {
+    "id": "…",
+    "texto": "¿A qué hora quedamos?",
+    "creado_en": "2026-05-12T10:00:00Z",
+    "autor": { "usuario_id": "…", "nombre": "Adriana", "avatar_url": null }
+  }
+}
+```
+
+El mensaje se envía solo después de guardarse en la base de datos. Escribir sigue siendo solo por la API REST: por el socket no se envían mensajes.
+
+### Seguridad
+
+- Solo se aceptan conexiones con una sesión válida, y solo se une a la sala de un viaje quien es miembro activo.
+- Los mensajes salen únicamente a los miembros del viaje, porque cada sala es de un viaje.
+
+### Código
+
+- Servidor: `src/sockets/chatSocket.js`, configurado en `src/index.js`. `mensajeController.js` avisa después de cada mensaje guardado.
 
 ## `/votaciones`
 

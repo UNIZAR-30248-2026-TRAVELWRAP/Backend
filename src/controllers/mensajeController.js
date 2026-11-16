@@ -1,4 +1,5 @@
 const mensajeService = require('../services/mensajeService');
+const chatSocket = require('../sockets/chatSocket');
 const { UUID_REGEX, responderError } = require('../utils/validacion');
 
 const MAX_TEXTO = 1000;
@@ -65,6 +66,8 @@ const crear = async (req, res) => {
 
     if (resultado.error) return responderError(res, 502, 'error_mensaje', 'No se ha podido enviar el mensaje');
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido enviar el mensaje');
+    // Solo después de guardarlo: los miembros conectados lo reciben con el mismo formato que la respuesta
+    chatSocket.avisarMensaje(viajeId, resultado.mensaje);
     return res.status(201).json(resultado.mensaje);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');

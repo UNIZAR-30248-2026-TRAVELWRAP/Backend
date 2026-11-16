@@ -13,6 +13,7 @@ const rutaRoutes = require('./routes/rutaRoutes');
 const fotoRoutes = require('./routes/fotoRoutes');
 const resumenRoutes = require('./routes/resumenRoutes');
 const votacionesSocket = require('./sockets/votacionesSocket');
+const chatSocket = require('./sockets/chatSocket');
 const { comprobarToken } = require('./middleware/authMiddleware');
 const viajeService = require('./services/viajeService');
 const gastoRoutes = require('./routes/gastoRoutes');
@@ -45,24 +46,18 @@ const chatNamespace = io.of('/chat');
 const votacionesNamespace = io.of('/votaciones');
 const notificacionesNamespace = io.of('/notificaciones');
 
-// Lógica básica para el chat
-chatNamespace.on('connection', (socket) => {
-  console.log(`Usuario conectado al namespace /chat [ID: ${socket.id}]`);
-  
-  socket.on('disconnect', () => {
-    console.log(`Usuario desconectado del /chat [ID: ${socket.id}]`);
-  });
-});
+// Solo los miembros activos del viaje se unen a sus salas de tiempo real
+const esMiembroDelViaje = async (cliente, usuarioId, viajeId) => {
+  const { viaje, error } = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (error) throw new Error('No se ha podido comprobar el viaje');
+  return Boolean(viaje);
+};
+
+// Chat del viaje: avisa a los miembros conectados de cada mensaje nuevo
+chatSocket.configurar(chatNamespace, { comprobarToken, esMiembro: esMiembroDelViaje });
 
 // Votaciones en tiempo real: avisa a los miembros de un viaje cuando cambia una de sus votaciones
-votacionesSocket.configurar(votacionesNamespace, {
-  comprobarToken,
-  esMiembro: async (cliente, usuarioId, viajeId) => {
-    const { viaje, error } = await viajeService.obtener(cliente, usuarioId, viajeId);
-    if (error) throw new Error('No se ha podido comprobar el viaje');
-    return Boolean(viaje);
-  },
-});
+votacionesSocket.configurar(votacionesNamespace, { comprobarToken, esMiembro: esMiembroDelViaje });
 
 // Lógica básica para las notificaciones
 notificacionesNamespace.on('connection', (socket) => {
