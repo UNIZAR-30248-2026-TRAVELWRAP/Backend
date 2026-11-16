@@ -95,7 +95,15 @@ const balance = async (cliente, usuarioId, viajeId) => {
     parte: parte / 100,
     saldo: (pagado - parte) / 100,
   }));
-  return { estado: 'ok', saldos };
+  return {
+    estado: 'ok',
+    saldos,
+    saldadas: (saldadas ?? []).map((deuda) => ({
+      de: deuda.de_usuario_id,
+      a: deuda.a_usuario_id,
+      importe: Number(deuda.importe),
+    })),
+  };
 };
 
 // Transferencias para dejar todos los saldos a 0, en céntimos. Primero se emparejan los saldos iguales de signo
@@ -138,10 +146,20 @@ const planDeTransferencias = (saldos) => {
 
 // Plan mínimo de transferencias para saldar las cuentas del viaje, a partir del balance
 // Devuelve { error } | { estado: no_existe | ok (con transferencias) }
+// Además, lista las deudas marcadas como saldadas (con el importe marcado), para poder deshacer la marca
 const liquidacion = async (cliente, usuarioId, viajeId) => {
   const resultado = await balance(cliente, usuarioId, viajeId);
   if (resultado.error || resultado.estado !== 'ok') return resultado;
-  return { estado: 'ok', transferencias: planDeTransferencias(resultado.saldos) };
+
+  const nombres = new Map(resultado.saldos.map((s) => [s.usuario_id, s.nombre]));
+  const saldadas = resultado.saldadas.map((deuda) => ({
+    de: deuda.de,
+    de_nombre: nombres.get(deuda.de) ?? null,
+    a: deuda.a,
+    a_nombre: nombres.get(deuda.a) ?? null,
+    importe: deuda.importe,
+  }));
+  return { estado: 'ok', transferencias: planDeTransferencias(resultado.saldos), saldadas };
 };
 
 // Detalle de un gasto del viaje: cada reparto con el nombre de su miembro. Quien ya abandonó el viaje sale sin

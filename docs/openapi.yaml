@@ -2344,6 +2344,7 @@ paths:
         mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
         Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
         viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
+        Las deudas marcadas como saldadas (`POST /gastos/saldadas`) cuentan como pagadas, así que ya no aparecen aquí.
         Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados, porque solo lee.
       security:
         - bearerAuth: []
@@ -2391,6 +2392,164 @@ paths:
                   codigo: error_gasto
                   mensaje: No se ha podido calcular la liquidación
 
+  /viajes/{viajeId}/gastos/saldadas:
+    post:
+      tags:
+        - Gastos
+      summary: Marca como saldada la deuda que un miembro tiene con quien usa la app
+      description: |
+        Solo lo puede hacer quien recibe el dinero: marca como saldada la transferencia de `de_usuario_id` a quien hace la
+        petición, por el `importe` que todavía debe según la liquidación. No crea ningún gasto ni aparece en el historial:
+        el balance y la liquidación cuentan el importe como si se hubiera pagado. Si ya había una deuda saldada de ese
+        miembro, se suma. Solo con el viaje activo.
+        Si el importe ya no coincide con la deuda actual (por ejemplo, porque se ha registrado otro gasto), responde 409
+        `deuda_cambiada` y no cambia nada: hay que volver a pedir la liquidación.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - de_usuario_id
+                - importe
+              properties:
+                de_usuario_id:
+                  type: string
+                  format: uuid
+                  description: Miembro que debe el dinero
+                importe:
+                  type: number
+                  exclusiveMinimum: 0
+                  description: Importe de la deuda en euros, con dos decimales como máximo
+            example:
+              de_usuario_id: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
+              importe: 12.5
+      responses:
+        '204':
+          description: Deuda marcada como saldada (sin cuerpo)
+        '400':
+          description: Falta el miembro o el importe no es válido (mayor que 0 y con dos decimales como máximo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El importe debe ser un número mayor que 0 con dos decimales como máximo
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje no está activo (`viaje_no_activo`) o el importe ya no es la deuda actual (`deuda_cambiada`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: deuda_cambiada
+                  mensaje: La deuda ha cambiado: actualiza la liquidación antes de marcarla
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido marcar la deuda como saldada
+  /viajes/{viajeId}/gastos/saldadas/{deudorId}:
+    delete:
+      tags:
+        - Gastos
+      summary: Deshace la marca de saldado de una deuda
+      description: |
+        Solo la puede deshacer quien la marcó (quien recibe el dinero), con el viaje activo. Los saldos y la liquidación
+        vuelven a contar la deuda por el importe que quedaba.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - name: deudorId
+          in: path
+          required: true
+          description: Miembro que debe el dinero
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Marca deshecha (sin cuerpo)
+        '400':
+          description: El identificador del viaje o del miembro no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El miembro no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o no hay ninguna deuda saldada de ese miembro que deshacer (`deuda_no_encontrada`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: deuda_no_encontrada
+                  mensaje: No hay ninguna deuda saldada que deshacer
+        '409':
+          description: El viaje no está activo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_gasto
+                  mensaje: No se ha podido deshacer la marca
   /viajes/{viajeId}/gastos/{gastoId}:
     get:
       tags:
@@ -5156,6 +5315,31 @@ components:
           description: Transferencias para dejar todos los saldos a 0; vacía si el viaje ya está saldado
           items:
             $ref: '#/components/schemas/Transferencia'
+        saldadas:
+          type: array
+          description: Deudas marcadas como saldadas (el importe ya cuenta como pagado). Quien recibe el dinero puede deshacer la marca
+          items:
+            type: object
+            properties:
+              de:
+                type: string
+                format: uuid
+                description: Miembro que debía el dinero
+              de_nombre:
+                type: string
+                nullable: true
+                description: Nombre del miembro (null si ya abandonó el viaje)
+              a:
+                type: string
+                format: uuid
+                description: Miembro que recibía el dinero
+              a_nombre:
+                type: string
+                nullable: true
+                description: Nombre del miembro (null si ya abandonó el viaje)
+              importe:
+                type: number
+                description: Importe marcado como saldado, en euros
           example:
             - de: 5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f
               de_nombre: Berta

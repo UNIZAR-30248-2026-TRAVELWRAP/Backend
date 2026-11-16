@@ -49,6 +49,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/liquidacion`](#get-viajesviajeidgastosliquidacion) | Transferencias para saldar las cuentas del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/gastos/saldadas`](#post-viajesviajeidgastossaldadas) | Marca como saldada la deuda que un miembro tiene con quien usa la app | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/gastos/saldadas/{deudorId}`](#delete-viajesviajeidgastossaldadasdeudorid) | Deshace la marca de saldado de una deuda | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/{gastoId}`](#get-viajesviajeidgastosgastoid) | Detalle de un gasto con la parte de cada miembro | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/gastos/{gastoId}`](#patch-viajesviajeidgastosgastoid) | Edita un gasto y recalcula su reparto | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/gastos/{gastoId}`](#delete-viajesviajeidgastosgastoid) | Borra un gasto y sus repartos | Token de sesión |
@@ -2489,6 +2491,7 @@ a partir del balance: primero empareja los saldos iguales de signo contrario y d
 mayor saldo a favor, así que salen como mucho n − 1 transferencias para n miembros con saldo.
 Cada transferencia indica quién paga, a quién y cuánto, con los nombres de los miembros; quien ya abandonó el
 viaje aparece sin nombre. Con todo saldado devuelve una lista vacía.
+Las deudas marcadas como saldadas (`POST /gastos/saldadas`) cuentan como pagadas, así que ya no aparecen aquí.
 Solo lo pueden pedir los miembros del viaje; también funciona en viajes finalizados, porque solo lee.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -2507,12 +2510,18 @@ Cuerpo (`application/json`):
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
-| `transferencias` | array<Transferencia> | No | Transferencias para dejar todos los saldos a 0; vacía si el viaje ya está saldado | `[{"de":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","de_nombre":"Berta","a":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","a_nombre":"Adriana","importe":0.33},{"de":"8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f","de_nombre":"Daniel","a":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","a_nombre":"Adriana","importe":3.33}]` |
+| `transferencias` | array<Transferencia> | No | Transferencias para dejar todos los saldos a 0; vacía si el viaje ya está saldado |  |
 | `transferencias[].de` | string (uuid) | No | Miembro que paga | `5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f` |
 | `transferencias[].de_nombre` | string \| null | No | Nombre de quien paga (null si ya abandonó el viaje) | `Berta` |
 | `transferencias[].a` | string (uuid) | No | Miembro que recibe | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `transferencias[].a_nombre` | string \| null | No | Nombre de quien recibe (null si ya abandonó el viaje) | `Adriana` |
 | `transferencias[].importe` | number | No | Cuánto paga, en euros con dos decimales | `6.34` |
+| `saldadas` | array<object> | No | Deudas marcadas como saldadas (el importe ya cuenta como pagado). Quien recibe el dinero puede deshacer la marca | `[{"de":"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f","de_nombre":"Berta","a":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","a_nombre":"Adriana","importe":0.33},{"de":"8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f","de_nombre":"Daniel","a":"df77cba6-4be5-4cbc-814b-1e228dd73dcc","a_nombre":"Adriana","importe":3.33}]` |
+| `saldadas[].de` | string (uuid) | No | Miembro que debía el dinero |  |
+| `saldadas[].de_nombre` | string \| null | No | Nombre del miembro (null si ya abandonó el viaje) |  |
+| `saldadas[].a` | string (uuid) | No | Miembro que recibía el dinero |  |
+| `saldadas[].a_nombre` | string \| null | No | Nombre del miembro (null si ya abandonó el viaje) |  |
+| `saldadas[].importe` | number | No | Importe marcado como saldado, en euros |  |
 
 **400** — El identificador del viaje no es un UUID
 
@@ -2544,6 +2553,122 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_gasto` | No se ha podido calcular la liquidación |
+
+### POST /viajes/{viajeId}/gastos/saldadas
+
+**Marca como saldada la deuda que un miembro tiene con quien usa la app**
+
+Solo lo puede hacer quien recibe el dinero: marca como saldada la transferencia de `de_usuario_id` a quien hace la
+petición, por el `importe` que todavía debe según la liquidación. No crea ningún gasto ni aparece en el historial:
+el balance y la liquidación cuentan el importe como si se hubiera pagado. Si ya había una deuda saldada de ese
+miembro, se suma. Solo con el viaje activo.
+Si el importe ya no coincide con la deuda actual (por ejemplo, porque se ha registrado otro gasto), responde 409
+`deuda_cambiada` y no cambia nada: hay que volver a pedir la liquidación.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `de_usuario_id` | string (uuid) | Sí | Miembro que debe el dinero |  |
+| `importe` | number | Sí | Importe de la deuda en euros, con dos decimales como máximo |  |
+
+**Respuestas**
+
+**204** — Deuda marcada como saldada (sin cuerpo)
+
+**400** — Falta el miembro o el importe no es válido (mayor que 0 y con dos decimales como máximo)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El importe debe ser un número mayor que 0 con dos decimales como máximo |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje no está activo (`viaje_no_activo`) o el importe ya no es la deuda actual (`deuda_cambiada`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `deuda_cambiada` | La deuda ha cambiado: actualiza la liquidación antes de marcarla |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido marcar la deuda como saldada |
+
+### DELETE /viajes/{viajeId}/gastos/saldadas/{deudorId}
+
+**Deshace la marca de saldado de una deuda**
+
+Solo la puede deshacer quien la marcó (quien recibe el dinero), con el viaje activo. Los saldos y la liquidación
+vuelven a contar la deuda por el importe que quedaba.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `deudorId` | path | Sí | string (uuid) | Miembro que debe el dinero |  |
+
+**Respuestas**
+
+**204** — Marca deshecha (sin cuerpo)
+
+**400** — El identificador del viaje o del miembro no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El miembro no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o no hay ninguna deuda saldada de ese miembro que deshacer (`deuda_no_encontrada`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `deuda_no_encontrada` | No hay ninguna deuda saldada que deshacer |
+
+**409** — El viaje no está activo
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_gasto` | No se ha podido deshacer la marca |
 
 ### GET /viajes/{viajeId}/gastos/{gastoId}
 

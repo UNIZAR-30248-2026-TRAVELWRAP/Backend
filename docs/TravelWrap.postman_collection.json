@@ -7469,6 +7469,196 @@
               }
             }
           ]
+        },
+        {
+          "name": "Marcar una deuda saldada con un importe no válido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/saldadas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"de_usuario_id\": \"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f\",\n  \"importe\": 0\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar una deuda saldada en un viaje que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/gastos/saldadas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"de_usuario_id\": \"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f\",\n  \"importe\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar una deuda saldada en un viaje finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/saldadas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"de_usuario_id\": \"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f\",\n  \"importe\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Marcar una deuda saldada sin sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/saldadas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"de_usuario_id\": \"5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f\",\n  \"importe\": 5\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deshacer una deuda saldada en un viaje finalizado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/saldadas/5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deshacer una deuda saldada con un miembro que no es un UUID",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/saldadas/no-es-un-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },

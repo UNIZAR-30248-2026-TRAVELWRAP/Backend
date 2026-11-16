@@ -368,24 +368,24 @@ const simularLiquidacion = (implementacion) => mock.method(gastoService, 'liquid
 describe('GET /viajes/:viajeId/gastos/liquidacion (liquidacion)', () => {
   it('devuelve las transferencias para saldar el viaje con 200', async () => {
     const transferencias = [{ de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 30 }];
-    const liquidacion = simularLiquidacion(async () => ({ estado: 'ok', transferencias }));
+    const liquidacion = simularLiquidacion(async () => ({ estado: 'ok', transferencias, saldadas: [] }));
 
     const res = await llamarLiquidacion();
 
     assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { transferencias });
+    assert.deepEqual(res.cuerpo, { transferencias, saldadas: [] });
     const [, usuarioId, viajeId] = liquidacion.mock.calls[0].arguments;
     assert.equal(usuarioId, ADRIANA);
     assert.equal(viajeId, VIAJE_ID);
   });
 
   it('devuelve una lista vacía con 200 si todo está saldado', async () => {
-    simularLiquidacion(async () => ({ estado: 'ok', transferencias: [] }));
+    simularLiquidacion(async () => ({ estado: 'ok', transferencias: [], saldadas: [] }));
 
     const res = await llamarLiquidacion();
 
     assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { transferencias: [] });
+    assert.deepEqual(res.cuerpo, { transferencias: [], saldadas: [] });
   });
 
   it('rechaza un identificador de viaje que no es un UUID sin llamar al servicio', async () => {

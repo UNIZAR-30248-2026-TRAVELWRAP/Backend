@@ -308,6 +308,7 @@ describe('gastoService.balance', () => {
         { usuario_id: BERTA, nombre: 'Berta', pagado: 6, parte: 6.33, saldo: -0.33 },
         { usuario_id: DANIEL, nombre: 'Daniel', pagado: 0, parte: 3.33, saldo: -3.33 },
       ],
+      saldadas: [],
     });
     assert.equal(sumaDeSaldos(resultado.saldos), 0);
   });
@@ -542,14 +543,34 @@ describe('gastoService.liquidacion', () => {
     assert.deepEqual(resultado, {
       estado: 'ok',
       transferencias: [{ de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 5 }],
+      saldadas: [],
     });
+  });
+
+  it('lista las deudas saldadas con los nombres y el importe marcado', async () => {
+    conMiembros();
+    const cliente = clienteFalso({
+      respuestas: [
+        { data: [gastoDe(ADRIANA, '10.00', [[ADRIANA, '5.00'], [BERTA, '5.00']])], error: null },
+        { data: [{ de_usuario_id: BERTA, a_usuario_id: ADRIANA, importe: '2.00' }], error: null },
+      ],
+    });
+
+    const resultado = await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID);
+
+    assert.deepEqual(resultado.saldadas, [{ de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 2 }]);
+    assert.deepEqual(resultado.transferencias, [{ de: BERTA, de_nombre: 'Berta', a: ADRIANA, a_nombre: 'Adriana', importe: 3 }]);
   });
 
   it('sin gastos devuelve una lista vacía', async () => {
     conMiembros();
     const cliente = clienteFalso({ respuestas: [{ data: [], error: null }] });
 
-    assert.deepEqual(await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID), { estado: 'ok', transferencias: [] });
+    assert.deepEqual(await gastoService.liquidacion(cliente, ADRIANA, VIAJE_ID), {
+      estado: 'ok',
+      transferencias: [],
+      saldadas: [],
+    });
   });
 
   it('incluye al antiguo miembro sin nombre', async () => {

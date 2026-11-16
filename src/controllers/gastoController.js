@@ -144,7 +144,7 @@ const liquidacion = async (req, res) => {
     if (resultado.estado !== 'ok') {
       return responderMotivo(res, resultado.estado, 'No se ha podido calcular la liquidación');
     }
-    return res.status(200).json({ transferencias: resultado.transferencias });
+    return res.status(200).json({ transferencias: resultado.transferencias, saldadas: resultado.saldadas });
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
   }
