@@ -148,6 +148,7 @@ ALTER TABLE public.deudas_saldadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tareas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mensajes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sellos ENABLE ROW LEVEL SECURITY;
 
 -- 3. POLÍTICAS PERFILES
@@ -365,6 +366,17 @@ CREATE POLICY tareas_update ON public.tareas FOR UPDATE TO authenticated
 DROP POLICY IF EXISTS tareas_delete ON public.tareas;
 CREATE POLICY tareas_delete ON public.tareas FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS MENSAJES
+-- Los miembros leen todos los mensajes de su viaje, también en viajes finalizados
+DROP POLICY IF EXISTS mensajes_select ON public.mensajes;
+CREATE POLICY mensajes_select ON public.mensajes FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro escribe mientras el viaje está activo, siempre como él mismo
+DROP POLICY IF EXISTS mensajes_insert ON public.mensajes;
+CREATE POLICY mensajes_insert ON public.mensajes FOR INSERT TO authenticated
+  WITH CHECK (autor_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- POLÍTICAS SELLOS
 -- Cada usuario ve solo sus sellos

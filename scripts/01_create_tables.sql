@@ -346,5 +346,18 @@ CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, 
 CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);
 -- Lista de tareas del viaje, de la más antigua a la más reciente
 CREATE INDEX IF NOT EXISTS tareas_viaje_idx ON public.tareas (viaje_id, creado_en);
+
+-- Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borran. Al eliminar el viaje se borran
+CREATE TABLE IF NOT EXISTS public.mensajes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  autor_id uuid NOT NULL,
+  texto text NOT NULL CHECK (char_length(btrim(texto)) BETWEEN 1 AND 1000),
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- Solo escribe un miembro del viaje (quien abandona el viaje conserva sus mensajes)
+  CONSTRAINT mensajes_autor_miembro FOREIGN KEY (viaje_id, autor_id)
+    REFERENCES public.miembros_viaje (viaje_id, usuario_id)
+);
+CREATE INDEX IF NOT EXISTS mensajes_viaje_idx ON public.mensajes (viaje_id, creado_en);
 -- Pasaporte del usuario, del año más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS sellos_usuario_idx ON public.sellos (usuario_id, anio DESC, elegido_en);

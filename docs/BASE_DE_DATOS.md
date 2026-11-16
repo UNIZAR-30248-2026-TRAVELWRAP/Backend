@@ -22,6 +22,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [tareas](#tareas) | 8 | Activada | 4 |
 | [sellos](#sellos) | 7 | Activada | 4 |
 | [deudas_saldadas](#deudas_saldadas) | 4 | Activada | 4 |
+| [mensajes](#mensajes) | 5 | Activada | 2 |
 
 ## Relaciones
 
@@ -58,6 +59,8 @@ erDiagram
     viajes ||--o{ deudas_saldadas : "viaje_id"
     miembros_viaje ||--o{ deudas_saldadas : "de_usuario_id"
     miembros_viaje ||--o{ deudas_saldadas : "a_usuario_id"
+    viajes ||--o{ mensajes : "viaje_id"
+    miembros_viaje ||--o{ mensajes : "autor_id"
 ```
 
 ## Tipos enumerados
@@ -401,6 +404,28 @@ Deudas saldadas: quien recibe el dinero marca una transferencia de la liquidaci�
 - `deudas_saldadas_de_un_miembro`: `FOREIGN KEY (viaje_id, de_usuario_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)`
 - `deudas_saldadas_a_un_miembro`: `FOREIGN KEY (viaje_id, a_usuario_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)`
 
+### mensajes
+
+Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borran. Al eliminar el viaje se borran
+
+**Seguridad por filas (RLS):** activada, 2 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  |  |
+| `autor_id` | `uuid` | Sí | FK → miembros_viaje.usuario_id |  |  |
+| `texto` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(texto)) BETWEEN 1 AND 1000` |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Restricciones**
+
+- `mensajes_autor_miembro`: `FOREIGN KEY (viaje_id, autor_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo escribe un miembro del viaje (quien abandona el viaje conserva sus mensajes)
+
+**Índices**
+
+- `mensajes_viaje_idx` sobre (viaje_id, creado_en)
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -547,6 +572,13 @@ Deudas saldadas: quien recibe el dinero marca una transferencia de la liquidaci�
 | `deudas_saldadas_insert` | INSERT | authenticated |  | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `deudas_saldadas_update` | UPDATE | authenticated | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `deudas_saldadas_delete` | DELETE | authenticated | `a_usuario_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
+#### mensajes
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `mensajes_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `mensajes_insert` | INSERT | authenticated |  | `autor_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 
 ## Almacenamiento de archivos (Supabase Storage)
 
