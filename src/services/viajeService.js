@@ -2,7 +2,10 @@
 
 const SELECCION =
   'id, nombre, destino, descripcion, fecha_inicio, fecha_fin, moneda, presupuesto, estado, creado_en, ' +
-  'miembros_viaje(usuario_id, rol, abandonado_en, archivado_en, eliminado_en, perfiles(nombre, avatar_url))';
+  // Se nombran las claves foráneas: con deudas_saldadas hay más de un camino entre viajes y miembros_viaje, y sin
+  // el nombre PostgREST no sabe cuál usar y responde 300 (embebido ambiguo)
+  'miembros_viaje!miembros_viaje_viaje_id_fkey(usuario_id, rol, abandonado_en, archivado_en, eliminado_en, ' +
+  'perfiles!miembros_viaje_usuario_id_fkey(nombre, avatar_url))';
 
 // Un viaje está pendiente de destino cuando está activo y todavía no lo tiene
 const conPendiente = (viaje) => ({
