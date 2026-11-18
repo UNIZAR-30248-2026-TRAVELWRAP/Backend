@@ -1106,6 +1106,150 @@ paths:
                 error:
                   codigo: error_viaje
                   mensaje: No se ha podido abandonar el viaje
+  /viajes/{viajeId}/mensajes:
+    get:
+      tags:
+        - Chat
+      summary: Historial del chat del viaje
+      description: |
+        Devuelve hasta 50 mensajes del viaje en orden cronológico (del más antiguo al más reciente), con el nombre y el avatar
+        de quien los escribió. Sin `antes` devuelve los más recientes; con `antes` (fecha ISO) devuelve los 50 anteriores a esa
+        fecha, para cargar más historial. Lo pueden leer los miembros del viaje, también en viajes finalizados.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - name: antes
+          in: query
+          required: false
+          description: Fecha ISO. Solo se devuelven los mensajes creados antes de ella
+          schema:
+            type: string
+            format: date-time
+          example: '2026-05-12T10:00:00Z'
+      responses:
+        '200':
+          description: Mensajes del viaje (lista vacía si no hay ninguno)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mensajes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Mensaje'
+        '400':
+          description: El identificador del viaje o la fecha de `antes` no son válidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: La fecha de antes no es válida
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_mensaje
+                  mensaje: No se han podido obtener los mensajes
+    post:
+      tags:
+        - Chat
+      summary: Envía un mensaje al chat del viaje
+      description: |
+        Guarda un mensaje del usuario en el chat del viaje. El texto se recorta de espacios sobrantes y tiene que tener entre
+        1 y 1000 caracteres. Solo con el viaje activo. Después se avisa a los miembros conectados por el namespace `/chat`
+        con el evento `mensaje` (ver [TIEMPO_REAL.md](TIEMPO_REAL.md)).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevoMensajeRequest'
+      responses:
+        '201':
+          description: Mensaje guardado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Mensaje'
+        '400':
+          description: El texto está vacío o tiene más de 1000 caracteres
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El mensaje debe tener entre 1 y 1000 caracteres
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje no está activo (está finalizado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_mensaje
+                  mensaje: No se ha podido enviar el mensaje
   /viajes/{viajeId}/invitacion:
     get:
       tags:
@@ -5307,6 +5451,42 @@ components:
           description: Cuánto paga, en euros con dos decimales
           example: 6.34
 
+    NuevoMensajeRequest:
+      type: object
+      required:
+        - texto
+      properties:
+        texto:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Texto del mensaje. Se recortan los espacios de los extremos
+          example: ¿A qué hora quedamos?
+    Mensaje:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        texto:
+          type: string
+          example: ¿A qué hora quedamos?
+        creado_en:
+          type: string
+          format: date-time
+        autor:
+          type: object
+          properties:
+            usuario_id:
+              type: string
+              format: uuid
+            nombre:
+              type: string
+              nullable: true
+              description: Nombre del autor (null si ya abandonó el viaje)
+            avatar_url:
+              type: string
+              nullable: true
     Liquidacion:
       type: object
       properties:

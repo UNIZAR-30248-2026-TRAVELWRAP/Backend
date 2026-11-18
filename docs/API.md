@@ -30,6 +30,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Archiva un viaje, solo para ti | Token de sesión |
 | POST | [`/viajes/{viajeId}/desarchivar`](#post-viajesviajeiddesarchivar) | Desarchiva un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/abandonar`](#post-viajesviajeidabandonar) | Abandona el viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/mensajes`](#get-viajesviajeidmensajes) | Historial del chat del viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/mensajes`](#post-viajesviajeidmensajes) | Envía un mensaje al chat del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
 | POST | [`/invitaciones/{token}/unirse`](#post-invitacionestokenunirse) | Une al usuario autenticado al viaje del enlace de invitación | Token de sesión |
 | GET | [`/viajes/{viajeId}/votaciones`](#get-viajesviajeidvotaciones) | Lista las votaciones de un viaje | Token de sesión |
@@ -1022,6 +1024,140 @@ Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que la
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido abandonar el viaje |
+
+## Chat
+
+### GET /viajes/{viajeId}/mensajes
+
+**Historial del chat del viaje**
+
+Devuelve hasta 50 mensajes del viaje en orden cronológico (del más antiguo al más reciente), con el nombre y el avatar
+de quien los escribió. Sin `antes` devuelve los más recientes; con `antes` (fecha ISO) devuelve los 50 anteriores a esa
+fecha, para cargar más historial. Lo pueden leer los miembros del viaje, también en viajes finalizados.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `antes` | query | No | string (date-time) | Fecha ISO. Solo se devuelven los mensajes creados antes de ella | `2026-05-12T10:00:00Z` |
+
+**Respuestas**
+
+**200** — Mensajes del viaje (lista vacía si no hay ninguno)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `mensajes` | array<Mensaje> | No |  |  |
+| `mensajes[].id` | string (uuid) | No |  |  |
+| `mensajes[].texto` | string | No |  | `¿A qué hora quedamos?` |
+| `mensajes[].creado_en` | string (date-time) | No |  |  |
+| `mensajes[].autor` | object | No |  |  |
+| `mensajes[].autor.usuario_id` | string (uuid) | No |  |  |
+| `mensajes[].autor.nombre` | string \| null | No | Nombre del autor (null si ya abandonó el viaje) |  |
+| `mensajes[].autor.avatar_url` | string \| null | No |  |  |
+
+**400** — El identificador del viaje o la fecha de `antes` no son válidos
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La fecha de antes no es válida |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_mensaje` | No se han podido obtener los mensajes |
+
+### POST /viajes/{viajeId}/mensajes
+
+**Envía un mensaje al chat del viaje**
+
+Guarda un mensaje del usuario en el chat del viaje. El texto se recorta de espacios sobrantes y tiene que tener entre
+1 y 1000 caracteres. Solo con el viaje activo. Después se avisa a los miembros conectados por el namespace `/chat`
+con el evento `mensaje` (ver [TIEMPO_REAL.md](TIEMPO_REAL.md)).
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `texto` | string | Sí | Texto del mensaje. Se recortan los espacios de los extremos | `¿A qué hora quedamos?` |
+
+**Respuestas**
+
+**201** — Mensaje guardado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  |  |
+| `texto` | string | No |  | `¿A qué hora quedamos?` |
+| `creado_en` | string (date-time) | No |  |  |
+| `autor` | object | No |  |  |
+| `autor.usuario_id` | string (uuid) | No |  |  |
+| `autor.nombre` | string \| null | No | Nombre del autor (null si ya abandonó el viaje) |  |
+| `autor.avatar_url` | string \| null | No |  |  |
+
+**400** — El texto está vacío o tiene más de 1000 caracteres
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El mensaje debe tener entre 1 y 1000 caracteres |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje no está activo (está finalizado)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_mensaje` | No se ha podido enviar el mensaje |
 
 ## Invitaciones
 
