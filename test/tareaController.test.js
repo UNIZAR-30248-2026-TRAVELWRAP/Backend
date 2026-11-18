@@ -93,9 +93,8 @@ describe('POST /viajes/:viajeId/tareas', () => {
     assert.equal(res.codigo, 201);
   });
 
-  it('un responsable que no es un UUID, o que falta, da 400', async () => {
+  it('un responsable que no es un UUID da 400', async () => {
     esperarError(await llamar('crear', { params, body: { texto: 'x', responsable_id: 'no-uuid' } }), 400, 'datos_invalidos');
-    esperarError(await llamar('crear', { params, body: { texto: 'x' } }), 400, 'datos_invalidos');
     esperarError(await llamar('crear', { params: { viajeId: 'x' }, body: { texto: 'x', responsable_id: RESPONSABLE_ID } }), 400, 'datos_invalidos');
   });
 

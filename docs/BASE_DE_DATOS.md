@@ -52,7 +52,7 @@ erDiagram
     viajes ||--o{ fotos : "viaje_id"
     perfiles |o--o{ fotos : "subido_por"
     viajes ||--o{ tareas : "viaje_id"
-    miembros_viaje ||--o{ tareas : "responsable_id"
+    miembros_viaje |o--o{ tareas : "responsable_id"
     perfiles |o--o{ tareas : "creada_por"
     perfiles ||--o{ sellos : "usuario_id"
     viajes |o--o{ sellos : "viaje_id"
@@ -346,7 +346,7 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 | `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
 | `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus tareas |
 | `texto` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(texto)) BETWEEN 1 AND 200` |
-| `responsable_id` | `uuid` | Sí | FK → miembros_viaje.usuario_id |  | Miembro del viaje al que se asigna la tarea |
+| `responsable_id` | `uuid` | No | FK → miembros_viaje.usuario_id |  | Miembro del viaje al que se asigna la tarea; null si está sin asignar (también si su responsable abandona el viaje) |
 | `hecha` | `boolean` | Sí |  | `false` |  |
 | `hecha_en` | `timestamptz` | No |  |  | Cuándo se marcó como hecha; null mientras está pendiente |
 | `creada_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
@@ -354,7 +354,7 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 
 **Restricciones**
 
-- `tareas_responsable_miembro`: `FOREIGN KEY (viaje_id, responsable_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo se asigna a miembros del viaje
+- `tareas_responsable_miembro`: `FOREIGN KEY (viaje_id, responsable_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo se asigna a miembros del viaje (con responsable_id null no se comprueba)
 - `tareas_hecha_coherente`: `CHECK (hecha = (hecha_en IS NOT NULL))` — hecha y hecha_en van siempre a la par
 
 **Índices**

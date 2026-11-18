@@ -1134,6 +1134,11 @@ BEGIN
   SET abandonado_en = now()
   WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid();
 
+  -- Sus tareas quedan sin asignar (MEJ-41)
+  UPDATE public.tareas
+  SET responsable_id = NULL
+  WHERE viaje_id = p_viaje_id AND responsable_id = auth.uid();
+
   RETURN jsonb_build_object('estado', 'ok');
 END;
 $$;

@@ -282,14 +282,14 @@ CREATE TABLE IF NOT EXISTS public.tareas (
   -- Al eliminar el viaje se borran sus tareas
   viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
   texto text NOT NULL CHECK (char_length(btrim(texto)) BETWEEN 1 AND 200),
-  -- Miembro del viaje al que se asigna la tarea
-  responsable_id uuid NOT NULL,
+  -- Miembro del viaje al que se asigna la tarea; null si está sin asignar (también si su responsable abandona el viaje)
+  responsable_id uuid,
   hecha boolean NOT NULL DEFAULT false,
   -- Cuándo se marcó como hecha; null mientras está pendiente
   hecha_en timestamptz,
   creada_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   creado_en timestamptz NOT NULL DEFAULT now(),
-  -- Solo se asigna a miembros del viaje
+  -- Solo se asigna a miembros del viaje (con responsable_id null no se comprueba)
   CONSTRAINT tareas_responsable_miembro FOREIGN KEY (viaje_id, responsable_id)
     REFERENCES public.miembros_viaje (viaje_id, usuario_id),
   -- hecha y hecha_en van siempre a la par

@@ -3346,7 +3346,7 @@ Cuerpo (`application/json`):
 | `tareas[].hecha` | boolean | No |  | `false` |
 | `tareas[].hecha_en` | string (date-time) \| null | No | Cuándo se marcó como hecha (null mientras está pendiente) | `null` |
 | `tareas[].creado_en` | string (date-time) | No |  | `2026-11-14T10:00:00Z` |
-| `tareas[].responsable` | object | No | Miembro a quien se asigna la tarea |  |
+| `tareas[].responsable` | object \| null | No | Miembro a quien se asigna la tarea; null si está sin asignar |  |
 | `tareas[].responsable.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `tareas[].responsable.nombre` | string \| null | No | Null si el responsable ya no es miembro del viaje | `Berta` |
 | `tareas[].responsable.avatar_url` | string \| null | No |  | `null` |
@@ -3387,7 +3387,7 @@ Cuerpo (`application/json`):
 **Añade una tarea a la lista del viaje**
 
 Crea una tarea pendiente con su texto (de 1 a 200 caracteres, sin espacios al principio ni al final) y su
-responsable, que tiene que ser miembro del viaje. Cualquier miembro puede añadir tareas, y solo mientras
+responsable, que tiene que ser miembro del viaje; sin responsable (o con `null`) la tarea queda sin asignar. Cualquier miembro puede añadir tareas, y solo mientras
 el viaje esté activo.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -3403,7 +3403,7 @@ el viaje esté activo.
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `texto` | string | Sí | Texto de la tarea (se recortan los espacios de los extremos) | `Reservar mesa para la cena del sábado` |
-| `responsable_id` | string (uuid) | Sí | Miembro del viaje a quien se asigna | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `responsable_id` | string (uuid) \| null | No | Miembro del viaje a quien se asigna; si falta o es null, la tarea se crea sin asignar | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 
 **Respuestas**
 
@@ -3418,7 +3418,7 @@ Cuerpo (`application/json`):
 | `hecha` | boolean | No |  | `false` |
 | `hecha_en` | string (date-time) \| null | No | Cuándo se marcó como hecha (null mientras está pendiente) | `null` |
 | `creado_en` | string (date-time) | No |  | `2026-11-14T10:00:00Z` |
-| `responsable` | object | No | Miembro a quien se asigna la tarea |  |
+| `responsable` | object \| null | No | Miembro a quien se asigna la tarea; null si está sin asignar |  |
 | `responsable.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `responsable.nombre` | string \| null | No | Null si el responsable ya no es miembro del viaje | `Berta` |
 | `responsable.avatar_url` | string \| null | No |  | `null` |
@@ -3465,7 +3465,7 @@ Cuerpo (`application/json`):
 
 **Edita o marca una tarea**
 
-Cambia solo los campos que se envían: el texto, el responsable (miembro del viaje) o si está hecha. Hay que
+Cambia solo los campos que se envían: el texto, el responsable (miembro del viaje, o `null` para dejarla sin asignar) o si está hecha. Hay que
 enviar al menos uno. Al marcarla (`hecha: true`) se guarda cuándo se hizo en `hecha_en`; al desmarcarla,
 `hecha_en` vuelve a `null`. Cualquier miembro puede editar o marcar cualquier tarea, y solo mientras el
 viaje esté activo.
@@ -3484,7 +3484,7 @@ viaje esté activo.
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `texto` | string | No |  | `Reservar mesa para el domingo` |
-| `responsable_id` | string (uuid) | No | Nuevo responsable, miembro del viaje | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `responsable_id` | string (uuid) \| null | No | Nuevo responsable, miembro del viaje; null deja la tarea sin asignar | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `hecha` | boolean | No | true marca la tarea como hecha y false la desmarca | `true` |
 
 **Respuestas**
@@ -3500,7 +3500,7 @@ Cuerpo (`application/json`):
 | `hecha` | boolean | No |  | `false` |
 | `hecha_en` | string (date-time) \| null | No | Cuándo se marcó como hecha (null mientras está pendiente) | `null` |
 | `creado_en` | string (date-time) | No |  | `2026-11-14T10:00:00Z` |
-| `responsable` | object | No | Miembro a quien se asigna la tarea |  |
+| `responsable` | object \| null | No | Miembro a quien se asigna la tarea; null si está sin asignar |  |
 | `responsable.usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `responsable.nombre` | string \| null | No | Null si el responsable ya no es miembro del viaje | `Berta` |
 | `responsable.avatar_url` | string \| null | No |  | `null` |

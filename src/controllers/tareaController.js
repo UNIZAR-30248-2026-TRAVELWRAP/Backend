@@ -31,8 +31,9 @@ const validarTexto = (texto) => {
   return { valor: recortado };
 };
 
+// null es válido: la tarea queda sin asignar
 const validarResponsable = (responsableId) =>
-  typeof responsableId === 'string' && UUID_REGEX.test(responsableId)
+  responsableId === null || (typeof responsableId === 'string' && UUID_REGEX.test(responsableId))
     ? { valor: responsableId }
     : { error: 'El responsable no es válido' };
 
@@ -82,7 +83,8 @@ const crear = async (req, res) => {
 
   const texto = validarTexto(req.body?.texto);
   if (texto.error) return responderError(res, 400, 'datos_invalidos', texto.error);
-  const responsable = validarResponsable(req.body?.responsable_id);
+  // Sin responsable_id (o null) la tarea se crea sin asignar
+  const responsable = validarResponsable(req.body?.responsable_id ?? null);
   if (responsable.error) return responderError(res, 400, 'datos_invalidos', responsable.error);
 
   try {
