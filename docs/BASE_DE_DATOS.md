@@ -18,7 +18,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [gastos](#gastos) | 10 | Activada | 4 |
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
 | [documentos](#documentos) | 8 | Activada | 3 |
-| [fotos](#fotos) | 8 | Activada | 2 |
+| [fotos](#fotos) | 8 | Activada | 3 |
 | [tareas](#tareas) | 8 | Activada | 4 |
 | [sellos](#sellos) | 7 | Activada | 4 |
 | [deudas_saldadas](#deudas_saldadas) | 4 | Activada | 4 |
@@ -316,9 +316,9 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 
 ### fotos
 
-Fotos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase Storage y esta fila guarda sus datos y dónde está
+Fotos y vídeos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase Storage y esta fila guarda sus datos y dónde está
 
-**Seguridad por filas (RLS):** activada, 2 políticas
+**Seguridad por filas (RLS):** activada, 3 políticas
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -326,8 +326,8 @@ Fotos de la galería compartida del viaje. El archivo se guarda en el bucket pri
 | `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus filas, pero no los archivos del bucket |
 | `nombre` | `text` | Sí |  |  | Nombre que ve el usuario (el del archivo original)<br>Debe cumplir: `char_length(btrim(nombre)) BETWEEN 1 AND 150` |
 | `ruta` | `text` | Sí | UNIQUE |  | Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original |
-| `tipo_mime` | `text` | Sí |  |  | Debe cumplir: `tipo_mime IN ('image/jpeg', 'image/png', 'image/webp')` |
-| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 8000000` |
+| `tipo_mime` | `text` | Sí |  |  | Debe cumplir: `tipo_mime IN ('image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime')` |
+| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 50 MB (50.000.000 bytes, el tope por archivo de Supabase Storage). El backend limita las fotos a 8 MB y el total del viaje a 200 MB<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 50000000` |
 | `subido_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
 
@@ -571,6 +571,7 @@ Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un 
 | --- | --- | --- | --- | --- |
 | `fotos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `fotos_insert` | INSERT | authenticated |  | `subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `fotos_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 #### tareas
 
@@ -622,7 +623,7 @@ Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un 
 | --- | --- | --- | --- | --- |
 | `documentos` | Privado | 8 MB (8.000.000 bytes) | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo |
 | `avatares` | Público | 2 MB (2.000.000 bytes) | `image/jpeg`, `image/png` | Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto, pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo |
-| `fotos` | Privado | 8 MB (8.000.000 bytes) | `image/jpeg`, `image/png`, `image/webp` | Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo las de más de 8 MB o de otro tipo |
+| `fotos` | Privado | 50 MB (50.000.000 bytes) | `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/webm`, `video/quicktime` | Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los archivos de más de 50 MB o de otro tipo (el backend limita las fotos a 8 MB) |
 | `portadas` | Privado | 5 MB (5.000.000 bytes) | `image/jpeg`, `image/png` | Bucket privado de las fotos de portada: una por viaje, en su carpeta, y solo se leen con la sesión de un miembro (o con una URL firmada). Storage rechaza por sí mismo las de más de 5 MB o de otro tipo |
 
 ### Políticas de `storage.objects`

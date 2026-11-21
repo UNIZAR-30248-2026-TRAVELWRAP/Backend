@@ -168,6 +168,14 @@
     {
       "key": "viajeIdPortada",
       "value": ""
+    },
+    {
+      "key": "fotoIdFoto",
+      "value": ""
+    },
+    {
+      "key": "fotoIdVideo",
+      "value": ""
     }
   ],
   "item": [
@@ -10727,7 +10735,8 @@
                   "  pm.expect(body.subido_por).to.be.a('string');",
                   "});",
                   "pm.test('Devuelve una URL firmada', () => pm.expect(body.url).to.match(/^https?:\\/\\//));",
-                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));"
+                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));",
+                  "pm.collectionVariables.set('fotoIdFoto', body.id);"
                 ]
               }
             }
@@ -10871,6 +10880,245 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Es una imagen', () => pm.expect(pm.response.headers.get('Content-Type')).to.match(/^image\\//));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un vídeo MP4",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/video.mp4"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Guarda el nombre y el tipo reconocido por su contenido', () => {",
+                  "  pm.expect(body.nombre).to.eql('video.mp4');",
+                  "  pm.expect(body.tipo_mime).to.eql('video/mp4');",
+                  "});",
+                  "pm.collectionVariables.set('fotoIdVideo', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El listado incluye el vídeo e indica el almacenamiento usado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { fotos, almacenamiento } = pm.response.json();",
+                  "pm.test('El vídeo es el más reciente', () => pm.expect(fotos[0].tipo_mime).to.eql('video/mp4'));",
+                  "pm.test('Indica el espacio usado y el límite', () => {",
+                  "  pm.expect(almacenamiento.usado_bytes).to.eql(fotos.reduce((total, f) => total + f.tamano_bytes, 0));",
+                  "  pm.expect(almacenamiento.limite_bytes).to.eql(200000000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar el vídeo",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdVideo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El vídeo borrado ya no sale en el listado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Quedan las tres fotos', () => pm.expect(pm.response.json().fotos).to.have.length(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un vídeo que ya no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdVideo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código foto_no_encontrada', () => pm.expect(pm.response.json().error.codigo).to.eql('foto_no_encontrada'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar con identificador de foto no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/no-es-un-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar con identificador de viaje no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una foto sin sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una foto de un viaje que no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
                 ]
               }
             }
@@ -11211,6 +11459,31 @@
           ]
         },
         {
+          "name": "Borrar una foto de un viaje finalizado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Listar las fotos de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
@@ -11236,7 +11509,31 @@
           ]
         },
         {
-          "name": "Eliminar el viaje de las fotos",
+          "name": "Archivar el viaje de las fotos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar el viaje de las fotos (el último miembro borra también los archivos)",
           "request": {
             "method": "DELETE",
             "header": [

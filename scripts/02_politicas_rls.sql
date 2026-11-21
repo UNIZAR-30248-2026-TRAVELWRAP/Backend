@@ -482,15 +482,26 @@ DROP POLICY IF EXISTS fotos_select ON public.fotos;
 CREATE POLICY fotos_select ON public.fotos FOR SELECT TO authenticated
   USING (public.es_miembro(viaje_id));
 
--- Cualquier miembro sube fotos mientras el viaje está activo; queda como quien la ha subido
+-- Cualquier miembro sube fotos y vídeos mientras el viaje está activo; queda como quien lo ha subido
 DROP POLICY IF EXISTS fotos_insert ON public.fotos;
 CREATE POLICY fotos_insert ON public.fotos FOR INSERT TO authenticated
   WITH CHECK (subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
+-- Cualquier miembro borra cualquier foto o vídeo de la galería, no solo quien lo subió, mientras el viaje está activo
+DROP POLICY IF EXISTS fotos_delete ON public.fotos;
+CREATE POLICY fotos_delete ON public.fotos FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
 -- Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada)
--- y Storage rechaza por sí mismo las de más de 8 MB o de otro tipo
+-- y Storage rechaza por sí mismo los archivos de más de 50 MB o de otro tipo (el backend limita las fotos a 8 MB)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('fotos', 'fotos', false, 8000000, ARRAY['image/jpeg', 'image/png', 'image/webp'])
+VALUES (
+  'fotos',
+  'fotos',
+  false,
+  50000000,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime']
+)
 ON CONFLICT (id) DO UPDATE SET
   public = EXCLUDED.public,
   file_size_limit = EXCLUDED.file_size_limit,

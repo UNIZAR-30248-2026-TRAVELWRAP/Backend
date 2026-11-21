@@ -267,7 +267,7 @@ ALTER TABLE public.documentos
   DROP CONSTRAINT IF EXISTS documentos_tamano_bytes_check,
   ADD CONSTRAINT documentos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000);
 
--- Fotos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase
+-- Fotos y vídeos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase
 -- Storage y esta fila guarda sus datos y dónde está
 CREATE TABLE IF NOT EXISTS public.fotos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -277,14 +277,26 @@ CREATE TABLE IF NOT EXISTS public.fotos (
   nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 150),
   -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
   ruta text NOT NULL UNIQUE,
-  tipo_mime text NOT NULL CHECK (tipo_mime IN ('image/jpeg', 'image/png', 'image/webp')),
-  -- Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)
-  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000),
+  tipo_mime text NOT NULL CHECK (
+    tipo_mime IN ('image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime')
+  ),
+  -- Tamaño del archivo, como máximo 50 MB (50.000.000 bytes, el tope por archivo de Supabase Storage). El backend
+  -- limita las fotos a 8 MB y el total del viaje a 200 MB
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 50000000),
   subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   creado_en timestamptz NOT NULL DEFAULT now(),
   -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
   CONSTRAINT fotos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
 );
+
+-- La tabla se creó solo para fotos de hasta 8 MB: en las bases de datos que ya la tienen, se admiten también los vídeos
+ALTER TABLE public.fotos
+  DROP CONSTRAINT IF EXISTS fotos_tipo_mime_check,
+  ADD CONSTRAINT fotos_tipo_mime_check CHECK (
+    tipo_mime IN ('image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime')
+  ),
+  DROP CONSTRAINT IF EXISTS fotos_tamano_bytes_check,
+  ADD CONSTRAINT fotos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 50000000);
 
 -- Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca y borra mientras el viaje está activo
 CREATE TABLE IF NOT EXISTS public.tareas (
