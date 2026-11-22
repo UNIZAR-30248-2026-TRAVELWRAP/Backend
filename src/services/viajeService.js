@@ -1,7 +1,20 @@
+const { randomUUID } = require('node:crypto');
+
 // Recibe el cliente de supabase del usuario (req.supabase) para que se apliquen las políticas RLS
 
+// Bucket privado de Supabase Storage con las fotos de portada (scripts/02_politicas_rls.sql)
+const BUCKET_PORTADAS = 'portadas';
+
+// Segundos que dura la URL firmada de una portada. La app pide los viajes cada vez que abre una pantalla
+const SEGUNDOS_DE_PORTADA = 3600;
+
+const EXTENSIONES = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
+
 const SELECCION =
-  'id, nombre, destino, descripcion, fecha_inicio, fecha_fin, moneda, presupuesto, estado, creado_en, ' +
+  'id, nombre, destino, descripcion, fecha_inicio, fecha_fin, moneda, presupuesto, estado, creado_en, portada_ruta, ' +
   // Se nombran las claves foráneas: con deudas_saldadas hay más de un camino entre viajes y miembros_viaje, y sin
   // el nombre PostgREST no sabe cuál usar y responde 300 (embebido ambiguo)
   'miembros_viaje!miembros_viaje_viaje_id_fkey(usuario_id, rol, abandonado_en, archivado_en, eliminado_en, ' +
@@ -34,6 +47,22 @@ const formatear = (fila, usuarioId) => {
   };
 };
 
+// Cambia la ruta de la portada (que no sale del servidor) por una URL firmada temporal, con una sola petición
+// a Storage para todos los viajes. Si no se puede firmar, el viaje se ve sin portada en lugar de fallar
+const conPortadas = async (cliente, viajes) => {
+  const rutas = viajes.map((viaje) => viaje.portada_ruta).filter(Boolean);
+  const urls = new Map();
+
+  if (rutas.length > 0) {
+    const { data } = await cliente.storage.from(BUCKET_PORTADAS).createSignedUrls(rutas, SEGUNDOS_DE_PORTADA);
+    (data ?? []).forEach((firmada) => {
+      if (!firmada.error && firmada.signedUrl) urls.set(firmada.path, firmada.signedUrl);
+    });
+  }
+
+  return viajes.map(({ portada_ruta: ruta, ...viaje }) => ({ ...viaje, portada_url: urls.get(ruta) ?? null }));
+};
+
 // Por defecto solo los viajes no archivados por el usuario; con archivados: true, solo los que ha archivado.
 // El archivado es personal (está en la fila del propio usuario), así que se filtra tras formatear
 const listar = async (cliente, usuarioId, { estado, archivados = false } = {}) => {
@@ -44,7 +73,7 @@ const listar = async (cliente, usuarioId, { estado, archivados = false } = {}) =
   if (error) return { error };
 
   const viajes = (data ?? []).map((fila) => formatear(fila, usuarioId)).filter(Boolean);
-  return { viajes: viajes.filter((viaje) => viaje.archivado === archivados) };
+  return { viajes: await conPortadas(cliente, viajes.filter((viaje) => viaje.archivado === archivados)) };
 };
 
 const obtener = async (cliente, usuarioId, viajeId) => {
@@ -52,7 +81,8 @@ const obtener = async (cliente, usuarioId, viajeId) => {
   if (error) return { error };
 
   // Sin fila: el viaje no existe o el usuario no es miembro (RLS no deja distinguirlo)
-  return { viaje: data ? formatear(data, usuarioId) : null };
+  const viaje = data ? formatear(data, usuarioId) : null;
+  return { viaje: viaje ? (await conPortadas(cliente, [viaje]))[0] : null };
 };
 
 const crear = async (cliente, datos) => {
@@ -65,7 +95,9 @@ const crear = async (cliente, datos) => {
   });
   if (error || !data) return { error: error ?? { code: 'respuesta_vacia' } };
 
-  return data.estado === 'ok' ? { estado: 'ok', viaje: conPendiente(data.viaje) } : { estado: data.estado };
+  return data.estado === 'ok'
+    ? { estado: 'ok', viaje: { ...conPendiente(data.viaje), portada_url: null } }
+    : { estado: data.estado };
 };
 
 // Antes de modificar un viaje se comprueba que existe y que el usuario es su creador, para poder
@@ -144,6 +176,78 @@ const cambiarArchivado = async (cliente, usuarioId, viajeId, funcion) => {
   return { estado: 'ok', viaje: resultado.viaje };
 };
 
+// Comprueba que el viaje existe, que el usuario es miembro y que está activo: la portada la puede cambiar cualquier
+// miembro. Devuelve { error } | { estado: no_existe | no_activo | ok }
+const viajeEditablePorMiembro = async (cliente, usuarioId, viajeId) => {
+  const previo = await obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+  if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
+  return { estado: 'ok' };
+};
+
+// Apunta la portada del viaje a esa ruta (o la quita con null) con la función SQL cambiar_portada, porque el
+// resto del viaje solo lo modifica el creador. Devuelve el viaje actualizado
+const guardarRutaDePortada = async (cliente, usuarioId, viajeId, ruta) => {
+  const { data, error } = await cliente.rpc('cambiar_portada', { p_viaje_id: viajeId, p_ruta: ruta });
+  if (error) return { error };
+  if (data !== true) return { error: { code: 'sin_filas' } };
+
+  const resultado = await obtener(cliente, usuarioId, viajeId);
+  if (resultado.error || !resultado.viaje) return { error: resultado.error ?? { code: 'sin_filas' } };
+  return { estado: 'ok', viaje: resultado.viaje };
+};
+
+// Sube la foto de portada del viaje y deja la anterior sin usar. Se guarda en la carpeta del viaje con un nombre
+// aleatorio y solo después se apunta en el viaje; si eso falla, se borra el archivo subido. El archivo anterior se
+// borra al final: si no se pudiera, solo queda un archivo sin usar y el viaje ya muestra la portada nueva
+// Devuelve { error } | { estado: no_existe | no_activo | ok (con viaje) }
+const subirPortada = async (cliente, usuarioId, viajeId, { buffer, tipoMime }) => {
+  const previo = await viajeEditablePorMiembro(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+
+  const ruta = `${viajeId}/${randomUUID()}.${EXTENSIONES[tipoMime]}`;
+  const almacen = cliente.storage.from(BUCKET_PORTADAS);
+  const subida = await almacen.upload(ruta, buffer, { contentType: tipoMime, upsert: false });
+  if (subida.error) return { error: subida.error };
+
+  const anterior = await rutaDePortada(cliente, viajeId);
+  const resultado = await guardarRutaDePortada(cliente, usuarioId, viajeId, ruta);
+  if (resultado.error) {
+    await almacen.remove([ruta]).catch(() => {});
+    return resultado;
+  }
+
+  if (anterior) await almacen.remove([anterior]).catch(() => {});
+  return resultado;
+};
+
+// Quita la portada del viaje: deja de apuntarla y borra su archivo. Si el viaje no tenía, no cambia nada
+// Devuelve { error } | { estado: no_existe | no_activo | ok (con viaje) }
+const quitarPortada = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeEditablePorMiembro(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+
+  const anterior = await rutaDePortada(cliente, viajeId);
+  // Sin portada no hay nada que quitar: se devuelve el viaje tal cual
+  if (!anterior) {
+    const actual = await obtener(cliente, usuarioId, viajeId);
+    return actual.error ? { error: actual.error } : { estado: 'ok', viaje: actual.viaje };
+  }
+
+  const resultado = await guardarRutaDePortada(cliente, usuarioId, viajeId, null);
+  if (resultado.error) return resultado;
+
+  await cliente.storage.from(BUCKET_PORTADAS).remove([anterior]).catch(() => {});
+  return resultado;
+};
+
+// Ruta que tiene ahora la portada en el bucket, o null (no sale de este servicio)
+const rutaDePortada = async (cliente, viajeId) => {
+  const { data } = await cliente.from('viajes').select('portada_ruta').eq('id', viajeId).maybeSingle();
+  return data?.portada_ruta ?? null;
+};
+
 const TAMANO_LOTE = 100;
 
 // Borra archivos de un bucket con el cliente del usuario, en lotes. Quitar uno que ya no existe no da error
@@ -172,7 +276,7 @@ const eliminar = async (cliente, usuarioId, viajeId) => {
   if (!data || data.estado !== 'ok') return { error: { code: 'no_permitido' } };
   if (!data.ultimo) return { estado: 'ok' };
 
-  for (const [bucket, rutas] of [['documentos', data.documentos], ['fotos', data.fotos]]) {
+  for (const [bucket, rutas] of [['documentos', data.documentos], ['fotos', data.fotos], ['portadas', data.portadas]]) {
     const borrado = await borrarArchivos(cliente, bucket, rutas);
     if (borrado.error) return { error: borrado.error };
   }
@@ -196,4 +300,4 @@ const abandonar = async (cliente, viajeId) => {
   return data.estado === 'saldo_pendiente' ? { estado: data.estado, saldo: data.saldo } : { estado: data.estado };
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar, abandonar };
+module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar, abandonar, subirPortada, quitarPortada };

@@ -3,6 +3,18 @@ const votacionesSocket = require('../sockets/votacionesSocket');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
 const ESTADOS = ['activo', 'finalizado'];
+
+// Tipos de portada admitidos, reconocidos por los primeros bytes del archivo (su «firma»): el tipo y la extensión
+// que manda el navegador los puede poner cualquiera, así que no bastan para saber qué es el archivo
+const FIRMAS_PORTADA = [
+  { tipoMime: 'image/jpeg', bytes: [0xff, 0xd8, 0xff] },
+  { tipoMime: 'image/png', bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+];
+
+// Tipo real del archivo según su contenido, o null si no es un JPEG o PNG
+const detectarTipoPortada = (buffer) =>
+  FIRMAS_PORTADA.find(({ bytes }) => buffer.length >= bytes.length && bytes.every((byte, i) => buffer[i] === byte))
+    ?.tipoMime ?? null;
 const MAX_TEXTO = 100;
 const MAX_PRESUPUESTO = 1e10; // numeric(12,2): 10 dígitos enteros
 
@@ -314,4 +326,61 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar, abandonar };
+// Llega tras el middleware de subida (viajeRoutes), que deja el archivo en req.file
+const subirPortada = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  const archivo = req.file;
+  if (!archivo?.buffer?.length) {
+    return responderError(res, 400, 'datos_invalidos', 'Adjunta la foto de portada en el campo «archivo»');
+  }
+
+  const tipoMime = detectarTipoPortada(archivo.buffer);
+  if (!tipoMime) {
+    return responderError(res, 400, 'tipo_no_permitido', 'La portada tiene que ser una imagen JPEG o PNG');
+  }
+
+  try {
+    const resultado = await viajeService.subirPortada(req.supabase, req.usuario.id, viajeId, {
+      buffer: archivo.buffer,
+      tipoMime,
+    });
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido guardar la portada');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido guardar la portada');
+    return res.status(200).json(resultado.viaje);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+const quitarPortada = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  try {
+    const resultado = await viajeService.quitarPortada(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido quitar la portada');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido quitar la portada');
+    return res.status(200).json(resultado.viaje);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = {
+  listar,
+  obtener,
+  crear,
+  editar,
+  finalizar,
+  archivar,
+  desarchivar,
+  eliminar,
+  abandonar,
+  subirPortada,
+  quitarPortada,
+  detectarTipoPortada,
+};

@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   fecha_inicio date,
   fecha_fin date,
   imagen_portada_url text,
+  -- Ruta de la foto de portada en el bucket privado «portadas» (carpeta del viaje). Null si no tiene portada
+  portada_ruta text,
   moneda char(3) NOT NULL DEFAULT 'EUR',
   -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
   presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
@@ -85,7 +87,9 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   -- Token del enlace/QR de invitación: uno por viaje, permanente
   token_invitacion text NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
   creado_en timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT viajes_fechas_validas CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)
+  CONSTRAINT viajes_fechas_validas CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio),
+  -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+  CONSTRAINT viajes_portada_del_viaje CHECK (portada_ruta IS NULL OR portada_ruta LIKE id::text || '/%')
 );
 
 CREATE TABLE IF NOT EXISTS public.miembros_viaje (
@@ -148,6 +152,12 @@ CREATE TABLE IF NOT EXISTS public.votos (
 
 -- Viajes creados antes de que existiera el nombre automático
 ALTER TABLE public.viajes ADD COLUMN IF NOT EXISTS nombre_automatico boolean NOT NULL DEFAULT false;
+
+-- Viajes creados antes de que existiera la foto de portada (PB-53)
+ALTER TABLE public.viajes ADD COLUMN IF NOT EXISTS portada_ruta text;
+ALTER TABLE public.viajes DROP CONSTRAINT IF EXISTS viajes_portada_del_viaje;
+ALTER TABLE public.viajes ADD CONSTRAINT viajes_portada_del_viaje
+  CHECK (portada_ruta IS NULL OR portada_ruta LIKE id::text || '/%');
 
 -- votaciones y opciones_votacion se referencian entre sí: la clave de la opción ganadora se añade al final
 ALTER TABLE public.votaciones DROP CONSTRAINT IF EXISTS votaciones_opcion_ganadora_fk;

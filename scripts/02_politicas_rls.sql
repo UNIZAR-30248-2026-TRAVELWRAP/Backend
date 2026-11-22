@@ -74,7 +74,7 @@ AS $$
   );
 $$;
 
--- Viaje al que pertenece un archivo de los buckets «documentos» y «fotos», sacado de la primera carpeta de su ruta.
+-- Viaje al que pertenece un archivo de los buckets «documentos», «fotos» y «portadas», sacado de la primera carpeta de su ruta.
 -- Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage)
 CREATE OR REPLACE FUNCTION public.viaje_de_ruta(p_ruta text)
 RETURNS uuid
@@ -528,6 +528,49 @@ CREATE POLICY fotos_storage_delete_huerfano ON storage.objects FOR DELETE TO aut
 DROP POLICY IF EXISTS fotos_storage_delete_ultimo ON storage.objects;
 CREATE POLICY fotos_storage_delete_ultimo ON storage.objects FOR DELETE TO authenticated
   USING (bucket_id = 'fotos' AND public.es_ultimo_miembro(public.viaje_de_ruta(name)));
+
+-- BUCKET PORTADAS
+
+-- Bucket privado de las fotos de portada: una por viaje, en su carpeta, y solo se leen con la sesión de un miembro
+-- (o con una URL firmada). Storage rechaza por sí mismo las de más de 5 MB o de otro tipo
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('portadas', 'portadas', false, 5000000, ARRAY['image/jpeg', 'image/png'])
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- POLÍTICAS STORAGE PORTADAS
+
+-- Los miembros leen la portada de su viaje (para generar URLs firmadas), también en viajes finalizados o archivados
+DROP POLICY IF EXISTS portadas_storage_select ON storage.objects;
+CREATE POLICY portadas_storage_select ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name)));
+
+-- Cualquier miembro sube la portada, mientras el viaje está activo
+DROP POLICY IF EXISTS portadas_storage_insert ON storage.objects;
+CREATE POLICY portadas_storage_insert ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'portadas'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+  );
+
+-- Cualquier miembro borra un archivo de portada (al cambiarla, al quitarla o para deshacer una subida fallida),
+-- mientras el viaje está activo
+DROP POLICY IF EXISTS portadas_storage_delete_creador ON storage.objects;
+DROP POLICY IF EXISTS portadas_storage_delete_miembro ON storage.objects;
+CREATE POLICY portadas_storage_delete_miembro ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'portadas'
+    AND public.es_miembro(public.viaje_de_ruta(name))
+    AND public.es_editable(public.viaje_de_ruta(name))
+  );
+
+-- El último miembro que elimina un viaje finalizado borra también su portada (igual que con los documentos)
+DROP POLICY IF EXISTS portadas_storage_delete_ultimo ON storage.objects;
+CREATE POLICY portadas_storage_delete_ultimo ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'portadas' AND public.es_ultimo_miembro(public.viaje_de_ruta(name)));
 
 -- 9.FUNCIÓN UNIRSE CON INVITACIÓN
 CREATE OR REPLACE FUNCTION public.unirse_con_invitacion(p_token text)
@@ -1001,7 +1044,7 @@ $$;
 -- Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve:
 --   { "estado": "no_permitido" }  sin cambios
 --   { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan
---   { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...] }  sin cambios todavía: es el último
+--   { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...], "portadas": [...] }  sin cambios todavía: es el último
 --     miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje.
 -- Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida
 CREATE OR REPLACE FUNCTION public.eliminar_viaje(p_viaje_id uuid)
@@ -1013,6 +1056,7 @@ AS $$
 DECLARE
   v_documentos text[];
   v_fotos text[];
+  v_portadas text[];
 BEGIN
   -- Bloquea el viaje: si dos últimos miembros eliminan a la vez, el segundo espera y ve el resultado del primero
   PERFORM 1 FROM public.viajes WHERE id = p_viaje_id FOR UPDATE;
@@ -1037,9 +1081,13 @@ BEGIN
     FROM storage.objects
     WHERE bucket_id = 'fotos' AND public.viaje_de_ruta(name) = p_viaje_id;
 
+    SELECT coalesce(array_agg(name), '{}') INTO v_portadas
+    FROM storage.objects
+    WHERE bucket_id = 'portadas' AND public.viaje_de_ruta(name) = p_viaje_id;
+
     RETURN jsonb_build_object(
       'estado', 'ok', 'ultimo', true,
-      'documentos', to_jsonb(v_documentos), 'fotos', to_jsonb(v_fotos)
+      'documentos', to_jsonb(v_documentos), 'fotos', to_jsonb(v_fotos), 'portadas', to_jsonb(v_portadas)
     );
   END IF;
 
@@ -1070,7 +1118,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM storage.objects
-    WHERE bucket_id IN ('documentos', 'fotos') AND public.viaje_de_ruta(name) = p_viaje_id
+    WHERE bucket_id IN ('documentos', 'fotos', 'portadas') AND public.viaje_de_ruta(name) = p_viaje_id
   ) THEN
     RETURN false;
   END IF;
@@ -1148,6 +1196,31 @@ GRANT EXECUTE ON FUNCTION public.abandonar_viaje(uuid) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.es_ultimo_miembro(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.es_ultimo_miembro(uuid) TO authenticated;
+-- Cambia la foto de portada del viaje (o la quita con null). La puede cambiar cualquier miembro mientras el viaje está
+-- activo, aunque no sea el creador (que es el único que modifica el resto de datos del viaje, por eso no basta
+-- viajes_update). La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada
+CREATE OR REPLACE FUNCTION public.cambiar_portada(p_viaje_id uuid, p_ruta text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.es_miembro(p_viaje_id) OR NOT public.es_editable(p_viaje_id) THEN
+    RETURN false;
+  END IF;
+
+  IF p_ruta IS NOT NULL AND p_ruta NOT LIKE p_viaje_id::text || '/%' THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.viajes SET portada_ruta = p_ruta WHERE id = p_viaje_id;
+  RETURN FOUND;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.cambiar_portada(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cambiar_portada(uuid, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.archivar_viaje(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.archivar_viaje(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.desarchivar_viaje_propio(uuid) FROM PUBLIC, anon;

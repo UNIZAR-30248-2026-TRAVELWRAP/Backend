@@ -9,7 +9,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | Tabla | Columnas | RLS | Políticas |
 | --- | --- | --- | --- |
 | [perfiles](#perfiles) | 5 | Activada | 3 |
-| [viajes](#viajes) | 15 | Activada | 3 |
+| [viajes](#viajes) | 16 | Activada | 3 |
 | [miembros_viaje](#miembros_viaje) | 7 | Activada | 2 |
 | [votaciones](#votaciones) | 10 | Activada | 3 |
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
@@ -102,6 +102,7 @@ erDiagram
 | `fecha_inicio` | `date` | No |  |  |  |
 | `fecha_fin` | `date` | No |  |  |  |
 | `imagen_portada_url` | `text` | No |  |  |  |
+| `portada_ruta` | `text` | No |  |  | Ruta de la foto de portada en el bucket privado «portadas» (carpeta del viaje). Null si no tiene portada |
 | `moneda` | `char(3)` | Sí |  | `'EUR'` |  |
 | `presupuesto` | `numeric(12,2)` | Sí |  |  | Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después<br>Debe cumplir: `presupuesto >= 0` |
 | `estado` | `estado_viaje` | Sí |  | `'activo'` | activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores»; no vuelve a activo. archivado: sin uso desde MEJ-12 (archivar y eliminar son personales: ver archivado_en y eliminado_en en miembros_viaje) |
@@ -112,6 +113,7 @@ erDiagram
 **Restricciones**
 
 - `viajes_fechas_validas`: `CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)`
+- `viajes_portada_del_viaje`: `CHECK (portada_ruta IS NULL OR portada_ruta LIKE id::text || '/%')` — El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
 
 ### miembros_viaje
 
@@ -438,7 +440,7 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `es_editable` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje solo admite contenido nuevo mientras está activo: al finalizarlo queda de solo lectura. Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura |
 | `es_terminado` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje ha terminado cuando está finalizado (archivarlo o no es personal y no cambia su estado). Solo entonces se puede elegir un sello |
 | `es_ultimo_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Verdadera si el viaje está finalizado, quien llama lo tiene archivado (y no eliminado ni abandonado) y ningún otro miembro lo conserva (todos los demás lo han eliminado o abandonado). La usan eliminar_viaje, borrar_viaje y las políticas de Storage que dejan al último miembro borrar los archivos del viaje |
-| `viaje_de_ruta` | `p_ruta text` | `uuid` | quien la llama |  | Viaje al que pertenece un archivo de los buckets «documentos» y «fotos», sacado de la primera carpeta de su ruta. Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage) |
+| `viaje_de_ruta` | `p_ruta text` | `uuid` | quien la llama |  | Viaje al que pertenece un archivo de los buckets «documentos», «fotos» y «portadas», sacado de la primera carpeta de su ruta. Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage) |
 | `viaje_de_votacion` | `p_votacion_id uuid` | `uuid` | su propietario (SECURITY DEFINER) |  | Viaje al que pertenece una votación (lo usan las políticas de opciones y votos) |
 | `puede_votar` | `p_votacion_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Se pueden proponer opciones y votar si eres miembro del viaje, el viaje está activo y la votación sigue abierta |
 | `nombre_por_defecto` | `p_destino text, p_inicio date, p_fin date` | `text` | quien la llama |  | Nombre por defecto de un viaje: su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino, uno temporal («Viaje sin destino 2027»). Como mucho 100 caracteres |
@@ -451,9 +453,10 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `viajes_nombre_automatico` |  | `trigger` | quien la llama |  | Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo sea, se vuelve a generar cada vez que cambian el destino o las fechas: así, al fijar el destino por votación (o al editarlo), el nombre temporal pasa a ser el del destino. En cuanto alguien escribe un nombre, se respeta |
 | `archivar_viaje` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Archiva el viaje para quien llama: solo si está finalizado y todavía no lo tenía archivado |
 | `desarchivar_viaje_propio` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Desarchiva el viaje para quien llama. No toca el estado del viaje: sigue finalizado y vuelve a «Viajes anteriores» |
-| `eliminar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve: { "estado": "no_permitido" }  sin cambios { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...] }  sin cambios todavía: es el último miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje. Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida |
+| `eliminar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve: { "estado": "no_permitido" }  sin cambios { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...], "portadas": [...] }  sin cambios todavía: es el último miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje. Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida |
 | `borrar_viaje` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Borra de verdad el viaje y todo lo suyo (en cascada: miembros, gastos, documentos, fotos, votaciones, tareas...; los sellos no, son de cada usuario). Solo lo puede hacer el último miembro y solo cuando ya no queda ningún archivo suyo en Storage: Storage no da error cuando una política le impide borrar (devuelve la lista vacía), y sin esta comprobación un borrado rechazado dejaría archivos huérfanos sin viaje. Devuelve false si no borra nada |
 | `abandonar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca de cada gasto). Devuelve: { "estado": "no_miembro" }, { "estado": "es_creador" } o { "estado": "no_activo" }  sin cambios { "estado": "saldo_pendiente", "saldo": n }  sin cambios { "estado": "ok" }  ya no es miembro del viaje |
+| `cambiar_portada` | `p_viaje_id uuid, p_ruta text` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Cambia la foto de portada del viaje (o la quita con null). La puede cambiar cualquier miembro mientras el viaje está activo, aunque no sea el creador (que es el único que modifica el resto de datos del viaje, por eso no basta viajes_update). La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada |
 
 ### Políticas por tabla
 
@@ -589,6 +592,7 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `documentos` | Privado | 8 MB (8.000.000 bytes) | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo |
 | `avatares` | Público | 2 MB (2.000.000 bytes) | `image/jpeg`, `image/png` | Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto, pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo |
 | `fotos` | Privado | 8 MB (8.000.000 bytes) | `image/jpeg`, `image/png`, `image/webp` | Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo las de más de 8 MB o de otro tipo |
+| `portadas` | Privado | 5 MB (5.000.000 bytes) | `image/jpeg`, `image/png` | Bucket privado de las fotos de portada: una por viaje, en su carpeta, y solo se leen con la sesión de un miembro (o con una URL firmada). Storage rechaza por sí mismo las de más de 5 MB o de otro tipo |
 
 ### Políticas de `storage.objects`
 
@@ -605,3 +609,7 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `fotos_storage_insert` | INSERT | authenticated |  | `bucket_id = 'fotos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Los miembros suben fotos a la carpeta de su viaje mientras está activo |
 | `fotos_storage_delete_huerfano` | DELETE | authenticated | `bucket_id = 'fotos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name)) AND NOT EXISTS (SELECT 1 FROM public.fotos f WHERE f.ruta = objects.name)` |  | Solo para deshacer una subida cuando falla el registro de la foto: se puede borrar un archivo de la carpeta de un viaje activo que todavía no tiene fila en fotos |
 | `fotos_storage_delete_ultimo` | DELETE | authenticated | `bucket_id = 'fotos' AND public.es_ultimo_miembro(public.viaje_de_ruta(name))` |  | El último miembro que elimina un viaje finalizado borra sus fotos (igual que con los documentos) |
+| `portadas_storage_select` | SELECT | authenticated | `bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name))` |  | Los miembros leen la portada de su viaje (para generar URLs firmadas), también en viajes finalizados o archivados |
+| `portadas_storage_insert` | INSERT | authenticated |  | `bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Cualquier miembro sube la portada, mientras el viaje está activo |
+| `portadas_storage_delete_miembro` | DELETE | authenticated | `bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` |  |  |
+| `portadas_storage_delete_ultimo` | DELETE | authenticated | `bucket_id = 'portadas' AND public.es_ultimo_miembro(public.viaje_de_ruta(name))` |  | El último miembro que elimina un viaje finalizado borra también su portada (igual que con los documentos) |

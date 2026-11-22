@@ -30,6 +30,8 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Archiva un viaje, solo para ti | Token de sesión |
 | POST | [`/viajes/{viajeId}/desarchivar`](#post-viajesviajeiddesarchivar) | Desarchiva un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/abandonar`](#post-viajesviajeidabandonar) | Abandona el viaje | Token de sesión |
+| PUT | [`/viajes/{viajeId}/portada`](#put-viajesviajeidportada) | Sube o cambia la foto de portada del viaje | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/portada`](#delete-viajesviajeidportada) | Quita la foto de portada del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/mensajes`](#get-viajesviajeidmensajes) | Historial del chat del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/mensajes`](#post-viajesviajeidmensajes) | Envía un mensaje al chat del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/invitacion`](#get-viajesviajeidinvitacion) | Obtiene el enlace de invitación de un viaje | Token de sesión |
@@ -479,6 +481,7 @@ Cuerpo (`application/json`):
 | `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
 
 **400** — Datos inválidos
 
@@ -537,6 +540,7 @@ Cuerpo (`application/json`):
 | `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
 | `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
@@ -618,6 +622,7 @@ Cuerpo (`application/json`):
 | `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
 | `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
@@ -762,6 +767,7 @@ Cuerpo (`application/json`):
 | `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
 | `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
@@ -845,6 +851,7 @@ Cuerpo (`application/json`):
 | `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
 | `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
@@ -922,6 +929,7 @@ Cuerpo (`application/json`):
 | `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
 | `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
 | `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
 | `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
@@ -1024,6 +1032,182 @@ Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que la
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido abandonar el viaje |
+
+### PUT /viajes/{viajeId}/portada
+
+**Sube o cambia la foto de portada del viaje**
+
+Sube una foto JPEG o PNG de 5 MB como máximo como portada del viaje. El archivo se guarda en el bucket privado
+`portadas` de Supabase Storage, en la carpeta del viaje y con un nombre aleatorio, y su ruta queda en
+`viajes.portada_ruta`. Si el viaje ya tenía portada, la nueva la sustituye y el archivo anterior se borra.
+Si no se puede registrar, el archivo subido se borra del bucket.
+
+El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el navegador.
+La puede cambiar cualquier miembro del viaje (no solo el creador) y solo con el viaje activo. Devuelve el viaje con `portada_url`, una URL
+firmada de 1 hora que pueden usar los miembros.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `archivo` | string (binary) | Sí | JPEG o PNG de 5 MB (5.000.000 bytes) como máximo. Un solo archivo por petición |  |
+
+**Respuestas**
+
+**200** — Portada guardada. Devuelve el viaje actualizado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — Falta el archivo o llega más de uno, el archivo no es un JPEG o PNG, ocupa más de 5 MB o el identificador
+del viaje no es un UUID
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta la foto de portada en el campo «archivo» |
+| `tipo_no_permitido` | La portada tiene que ser una imagen JPEG o PNG |
+| `archivo_demasiado_grande` | La portada no puede ocupar más de 5 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido guardar la portada |
+
+### DELETE /viajes/{viajeId}/portada
+
+**Quita la foto de portada del viaje**
+
+Quita la portada del viaje y borra su archivo del bucket `portadas`. El viaje vuelve a verse con su aspecto de
+siempre. Si no tenía portada, no cambia nada. La puede quitar cualquier miembro del viaje y solo con el viaje activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Portada quitada. Devuelve el viaje actualizado, con `portada_url` a null
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido quitar la portada |
 
 ## Chat
 
