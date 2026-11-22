@@ -89,23 +89,47 @@ describe('escanear (foto de un ticket)', () => {
     assert.equal(res.cuerpo.error.codigo, 'error_ocr');
   });
 
-  it('devuelve el concepto y el importe reconocidos sin guardar nada', async () => {
+  it('detecta un ticket y devuelve sus datos como gasto, sin guardar nada', async () => {
     viajeExiste();
-    mock.method(ocrService, 'reconocerTexto', async () => 'Bar Sol\nTOTAL 12,50 €');
+    const ocr = mock.method(ocrService, 'reconocerTexto', async () => 'Bar Sol\nTOTAL 12,50 €');
 
     const res = await escanear({ archivo: { buffer: JPEG } });
 
     assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { concepto: 'Bar Sol', importe: 12.5 });
+    assert.deepEqual(res.cuerpo, { tipo: 'gasto', datos: { concepto: 'Bar Sol', importe: 12.5 }, foto_ruta: null });
+    assert.equal(ocr.mock.callCount(), 1);
   });
 
-  it('devuelve null en los campos que no reconoce en lugar de fallar', async () => {
+  it('detecta una reserva y la devuelve como actividad', async () => {
+    viajeExiste();
+    mock.method(ocrService, 'reconocerTexto', async () => 'Reserva Airbnb Roma\nLlegada 12/05/2027 15:00');
+
+    const res = await escanear({ archivo: { buffer: PNG } });
+
+    assert.equal(res.codigo, 200);
+    assert.equal(res.cuerpo.tipo, 'actividad');
+    assert.equal(res.cuerpo.datos.fecha, '2027-05-12');
+    assert.equal(res.cuerpo.datos.hora_inicio, '15:00');
+  });
+
+  it('devuelve otro documento con su resumen cuando no es ni gasto ni actividad', async () => {
+    viajeExiste();
+    mock.method(ocrService, 'reconocerTexto', async () => 'Póliza de seguro\nCobertura total de viaje');
+
+    const res = await escanear({ archivo: { buffer: PNG } });
+
+    assert.equal(res.codigo, 200);
+    assert.equal(res.cuerpo.tipo, 'otro');
+    assert.match(res.cuerpo.datos.resumen, /Póliza de seguro/);
+  });
+
+  it('no falla si el OCR no reconoce nada: el documento es otro, con resumen vacío', async () => {
     viajeExiste();
     mock.method(ocrService, 'reconocerTexto', async () => '');
 
     const res = await escanear({ archivo: { buffer: PNG } });
 
     assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { concepto: null, importe: null });
+    assert.deepEqual(res.cuerpo, { tipo: 'otro', datos: { resumen: '' }, foto_ruta: null });
   });
 });

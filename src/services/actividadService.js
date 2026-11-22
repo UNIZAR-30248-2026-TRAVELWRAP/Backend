@@ -1,9 +1,18 @@
 const viajeService = require('./viajeService');
+const fotoEscaneoService = require('./fotoEscaneoService');
 const { ordenarAgenda, valoresDeOrden, horasEnOrden, siguienteOrden } = require('../utils/ordenActividades');
 
 const CAMPOS_ACTIVIDAD =
   'id, viaje_id, titulo, descripcion, fecha, hora_inicio, hora_fin, orden, ubicacion_nombre, latitud, longitud, ' +
-  'lugar_externo_id, categoria, creado_por, creado_en, actualizado_en';
+  'lugar_externo_id, categoria, creado_por, creado_en, actualizado_en, foto_ruta';
+
+// La ruta de la foto no sale de la API: se indica solo si la actividad tiene foto (la imagen se pide aparte)
+const aActividad = (actividad) => {
+  // Sin la columna en la fila (por ejemplo, en una respuesta sin ella) la actividad sale tal cual
+  if (!('foto_ruta' in actividad)) return actividad;
+  const { foto_ruta, ...resto } = actividad;
+  return { ...resto, tiene_foto: foto_ruta !== null };
+};
 
 const listar = async (cliente, usuarioId, viajeId, fecha) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
@@ -20,7 +29,7 @@ const listar = async (cliente, usuarioId, viajeId, fecha) => {
     .order('creado_en', { ascending: true });
   if (error) return { error };
 
-  return { estado: 'ok', actividades: ordenarAgenda(data ?? []) };
+  return { estado: 'ok', actividades: ordenarAgenda((data ?? []).map(aActividad)) };
 };
 
 const crear = async (cliente, usuarioId, viajeId, datos) => {
@@ -54,12 +63,14 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
       lugar_externo_id: datos.lugar_externo_id,
       orden: ultima.data ? siguienteOrden(ultima.data.orden) : 0,
       creado_por: usuarioId,
+      // Foto del documento escaneado, ya comprobada por el controlador (solo si la hay)
+      ...(datos.foto_ruta ? { foto_ruta: datos.foto_ruta } : {}),
     })
     .select(CAMPOS_ACTIVIDAD)
     .single();
   if (error) return { error };
 
-  return { estado: 'ok', actividad: data };
+  return { estado: 'ok', actividad: aActividad(data) };
 };
 
 const ultimoOrdenDelDia = async (cliente, viajeId, fecha) => {
@@ -84,7 +95,7 @@ const actividadDelViaje = async (cliente, viajeId, actividadId) => {
     .maybeSingle();
   if (error) return { error };
   if (!data) return { estado: 'no_encontrada' };
-  return { estado: 'ok', actividad: data };
+  return { estado: 'ok', actividad: aActividad(data) };
 };
 
 const viajeEditable = async (cliente, usuarioId, viajeId) => {
@@ -125,7 +136,7 @@ const editar = async (cliente, usuarioId, viajeId, actividadId, cambios) => {
   if (error) return { error };
   if (!data || data.length === 0) return { error: { code: 'sin_filas' } };
 
-  return { estado: 'ok', actividad: data[0] };
+  return { estado: 'ok', actividad: aActividad(data[0]) };
 };
 
 const eliminar = async (cliente, usuarioId, viajeId, actividadId) => {
@@ -189,4 +200,26 @@ const reordenar = async (cliente, usuarioId, viajeId, fecha, ids) => {
   };
 };
 
-module.exports = { listar, crear, editar, eliminar, reordenar };
+// Enlace temporal para ver la foto del documento escaneado de una actividad. Sirve también en viajes finalizados
+// Devuelve { error } | { estado: no_existe | no_encontrada | sin_foto | ok (con url y expira_en) }
+const obtenerFoto = async (cliente, usuarioId, viajeId, actividadId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  const { data, error } = await cliente
+    .from('actividades')
+    .select('foto_ruta')
+    .eq('id', actividadId)
+    .eq('viaje_id', viajeId)
+    .maybeSingle();
+  if (error) return { error };
+  if (!data) return { estado: 'no_encontrada' };
+  if (!data.foto_ruta) return { estado: 'sin_foto' };
+
+  const enlace = await fotoEscaneoService.urlFirmada(cliente, data.foto_ruta);
+  if (enlace.error) return { error: enlace.error };
+  return { estado: 'ok', url: enlace.url, expira_en: enlace.expira_en };
+};
+
+module.exports = { listar, crear, editar, eliminar, reordenar, obtenerFoto };

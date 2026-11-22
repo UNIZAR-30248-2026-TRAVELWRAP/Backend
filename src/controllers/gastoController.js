@@ -1,7 +1,8 @@
 const gastoService = require('../services/gastoService');
 const viajeService = require('../services/viajeService');
 const ocrService = require('../services/ocrService');
-const { extraerDatosTicket } = require('../utils/ticketOcr');
+const { clasificarDocumento } = require('../utils/ticketOcr');
+const fotoEscaneoService = require('../services/fotoEscaneoService');
 const { detectarTipo } = require('./documentoController');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
@@ -61,7 +62,16 @@ const validarParticipantes = (valor) => {
   return { valor: participantes };
 };
 
-const validarNuevoGasto = (cuerpo) => {
+// La foto del ticket es opcional, pero si llega tiene que ser una foto escaneada de este mismo viaje
+const validarFotoRuta = (valor, viajeId) => {
+  if (valor === undefined || valor === null) return { valor: null };
+  if (!fotoEscaneoService.rutaDeFotoValida(valor, viajeId)) {
+    return { error: 'La foto no pertenece a este viaje o no es una foto escaneada' };
+  }
+  return { valor };
+};
+
+const validarNuevoGasto = (cuerpo, viajeId) => {
   const datos = cuerpo !== null && typeof cuerpo === 'object' ? cuerpo : {};
 
   const concepto = validarConcepto(datos.concepto);
@@ -76,6 +86,8 @@ const validarNuevoGasto = (cuerpo) => {
   if (fecha.error) return fecha;
   const participantes = validarParticipantes(datos.participantes);
   if (participantes.error) return participantes;
+  const fotoRuta = validarFotoRuta(datos.foto_ruta, viajeId);
+  if (fotoRuta.error) return fotoRuta;
 
   return {
     datos: {
@@ -85,6 +97,8 @@ const validarNuevoGasto = (cuerpo) => {
       pagado_por: pagadoPor.valor.toLowerCase(),
       fecha: fecha.valor,
       participantes: participantes.valor,
+      // Solo si hay foto del ticket: sin ella el gasto se crea como antes
+      ...(fotoRuta.valor ? { foto_ruta: fotoRuta.valor } : {}),
     },
   };
 };
@@ -179,7 +193,7 @@ const editar = async (req, res) => {
     return responderError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
   }
 
-  const validacion = validarNuevoGasto(req.body);
+  const validacion = validarNuevoGasto(req.body, viajeId);
   if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
 
   try {
@@ -222,7 +236,7 @@ const crear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
 
-  const validacion = validarNuevoGasto(req.body);
+  const validacion = validarNuevoGasto(req.body, viajeId);
   if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
 
   try {
@@ -289,8 +303,9 @@ const desmarcarSaldada = async (req, res) => {
   }
 };
 
-// Lee la foto de un ticket (campo «archivo», tras el middleware de subida) y devuelve el concepto y el importe
-// que ha encontrado. Nada se guarda: el usuario revisa los datos y crea el gasto después
+// Lee la foto de un documento (campo «archivo», tras el middleware de subida), detecta si es un gasto, una
+// actividad u otro documento, y devuelve sus datos para la pantalla de confirmación. Nada se guarda aquí:
+// el usuario revisa y confirma después
 const escanear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
@@ -315,10 +330,54 @@ const escanear = async (req, res) => {
     } catch {
       return responderError(res, 502, 'error_ocr', 'No se ha podido leer el ticket');
     }
-    return res.status(200).json(extraerDatosTicket(texto));
+    const resultado = clasificarDocumento(texto);
+    const fotoRuta = await guardarFotoSiHaceFalta(req.supabase, viajeId, archivo.buffer, tipoMime, resultado.tipo);
+    return res.status(200).json({ ...resultado, foto_ruta: fotoRuta });
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
   }
 };
 
-module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar, marcarSaldada, desmarcarSaldada, escanear };
+// La foto se guarda solo si el documento es un gasto o una actividad: un resumen de texto no necesita imagen.
+// Si Supabase no la guarda, el escaneo sigue funcionando y el gasto o la actividad se crean sin foto
+const guardarFotoSiHaceFalta = async (cliente, viajeId, buffer, tipoMime, tipo) => {
+  if (tipo === 'otro') return null;
+  try {
+    const guardada = await fotoEscaneoService.guardar(cliente, viajeId, buffer, tipoMime);
+    return guardada.error ? null : guardada.ruta;
+  } catch {
+    return null;
+  }
+};
+
+// Enlace temporal para ver la foto del ticket de un gasto
+const fotoUrl = async (req, res) => {
+  const { viajeId, gastoId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+  if (!UUID_REGEX.test(gastoId)) return responderError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
+
+  try {
+    const resultado = await gastoService.obtenerFoto(req.supabase, req.usuario.id, viajeId, gastoId);
+    if (resultado.error) return responderError(res, 502, 'error_gasto', 'No se ha podido obtener la foto del gasto');
+    if (resultado.estado === 'no_existe') return responderError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
+    if (resultado.estado === 'no_encontrado') return responderError(res, 404, 'gasto_no_encontrado', 'El gasto no existe en este viaje');
+    if (resultado.estado === 'sin_foto') return responderError(res, 404, 'sin_foto', 'Este gasto no tiene foto del ticket');
+    return res.status(200).json({ url: resultado.url, expira_en: resultado.expira_en });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = {
+  listar,
+  balance,
+  liquidacion,
+  detalle,
+  crear,
+  editar,
+  eliminar,
+  marcarSaldada,
+  desmarcarSaldada,
+  escanear,
+  fotoUrl,
+};

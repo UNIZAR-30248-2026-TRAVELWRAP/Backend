@@ -12,6 +12,8 @@ router.get('/liquidacion', requiereSesion, gastoController.liquidacion);
 // Detalle de un gasto: va después de /balance y /liquidacion, o Express las tomaría por un gastoId
 router.get('/:gastoId', requiereSesion, gastoController.detalle);
 router.post('/', requiereSesion, gastoController.crear);
+// Enlace temporal para ver la foto del ticket del gasto (va antes de /:gastoId para no confundirse con él)
+router.get('/:gastoId/foto/url', requiereSesion, gastoController.fotoUrl);
 // Foto de un ticket: devuelve el concepto y el importe reconocidos, sin guardar nada
 router.post('/escaneo', requiereSesion, recibirArchivo, gastoController.escanear);
 router.patch('/:gastoId', requiereSesion, gastoController.editar);

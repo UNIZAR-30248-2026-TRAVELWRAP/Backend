@@ -1,15 +1,21 @@
 const viajeService = require('./viajeService');
+const fotoEscaneoService = require('./fotoEscaneoService');
 
 const CAMPOS_GASTO =
-  'id, viaje_id, concepto, importe, categoria, pagado_por, fecha, creado_por, creado_en, actualizado_en, ' +
+  'id, viaje_id, concepto, importe, categoria, pagado_por, fecha, creado_por, creado_en, actualizado_en, foto_ruta, ' +
   'repartos:repartos_gasto (usuario_id, importe)';
 
-// Postgres devuelve los numeric como texto para no perder precisión; en la API van como número
-const formatear = (gasto) => ({
-  ...gasto,
-  importe: Number(gasto.importe),
-  repartos: (gasto.repartos ?? []).map((r) => ({ usuario_id: r.usuario_id, importe: Number(r.importe) })),
-});
+// Postgres devuelve los numeric como texto para no perder precisión; en la API van como número.
+// La ruta de la foto no sale de la API: se indica solo si el gasto tiene foto (la imagen se pide aparte)
+const formatear = (gasto) => {
+  const { foto_ruta, ...resto } = gasto;
+  return {
+    ...resto,
+    tiene_foto: foto_ruta !== null && foto_ruta !== undefined,
+    importe: Number(gasto.importe),
+    repartos: (gasto.repartos ?? []).map((r) => ({ usuario_id: r.usuario_id, importe: Number(r.importe) })),
+  };
+};
 
 // Gasto del viaje con la parte de cada participante
 // Devuelve { error } | { estado: no_encontrado | ok (con gasto) }
@@ -240,6 +246,12 @@ const crear = async (cliente, viajeId, datos) => {
   if (error || !data) return { error: error ?? { code: 'respuesta_vacia' } };
   if (data.estado !== 'ok') return { estado: data.estado };
 
+  // La foto del ticket se enlaza después de crear el gasto (la comprobación de su ruta la hace el controlador)
+  if (datos.foto_ruta) {
+    const { error: errorFoto } = await cliente.from('gastos').update({ foto_ruta: datos.foto_ruta }).eq('id', data.gasto_id);
+    if (errorFoto) return { error: errorFoto };
+  }
+
   const creado = await obtener(cliente, viajeId, data.gasto_id);
   if (!creado.error && creado.estado !== 'ok') return { error: { code: 'sin_filas' } };
   return creado;
@@ -304,8 +316,31 @@ const desmarcarSaldada = async (cliente, usuarioId, viajeId, deudorId) => {
   return data && data.length > 0 ? { estado: 'ok' } : { estado: 'sin_deuda' };
 };
 
+// Enlace temporal para ver la foto del ticket de un gasto. Sirve también en viajes finalizados
+// Devuelve { error } | { estado: no_existe | no_encontrado | sin_foto | ok (con url y expira_en) }
+const obtenerFoto = async (cliente, usuarioId, viajeId, gastoId) => {
+  const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
+  if (previo.error) return { error: previo.error };
+  if (!previo.viaje) return { estado: 'no_existe' };
+
+  const { data, error } = await cliente
+    .from('gastos')
+    .select('foto_ruta')
+    .eq('id', gastoId)
+    .eq('viaje_id', viajeId)
+    .maybeSingle();
+  if (error) return { error };
+  if (!data) return { estado: 'no_encontrado' };
+  if (!data.foto_ruta) return { estado: 'sin_foto' };
+
+  const enlace = await fotoEscaneoService.urlFirmada(cliente, data.foto_ruta);
+  if (enlace.error) return { error: enlace.error };
+  return { estado: 'ok', url: enlace.url, expira_en: enlace.expira_en };
+};
+
 module.exports = {
   obtener,
+  obtenerFoto,
   listar,
   balance,
   planDeTransferencias,
