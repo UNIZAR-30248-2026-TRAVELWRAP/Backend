@@ -79,6 +79,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/perfil/sellos`](#get-perfilsellos) | Lista los sellos del usuario (pasaporte de viajes) | Token de sesión |
 | PATCH | [`/perfil/sellos/{selloId}`](#patch-perfilsellosselloid) | Cambia el diseño de un sello propio | Token de sesión |
 | DELETE | [`/perfil/sellos/{selloId}`](#delete-perfilsellosselloid) | Quita un sello propio | Token de sesión |
+| GET | [`/notificaciones/clave-publica`](#get-notificacionesclave-publica) | Obtiene la clave pública para las notificaciones push | Token de sesión |
+| POST | [`/notificaciones/suscripciones`](#post-notificacionessuscripciones) | Activa las notificaciones push de este dispositivo | Token de sesión |
+| DELETE | [`/notificaciones/suscripciones`](#delete-notificacionessuscripciones) | Desactiva las notificaciones push de este dispositivo | Token de sesión |
 
 ## General
 
@@ -4649,3 +4652,142 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_storage` | No se ha podido quitar la foto |
+
+## Notificaciones
+
+### GET /notificaciones/clave-publica
+
+**Obtiene la clave pública para las notificaciones push**
+
+Devuelve la clave pública VAPID del servidor, con la que el navegador crea la suscripción push de este
+dispositivo. Si el servidor no tiene configuradas las claves, responde 503 y la app solo muestra los avisos
+dentro de la aplicación.
+
+**Avisos en tiempo real.** Los eventos del viaje también llegan por el namespace `/notificaciones` de
+Socket.io (se conecta con `auth: { token }` y entra solo en su sala personal). Cuando un miembro crea una
+votación, registra un gasto, añade una tarea o envía un mensaje, el resto de miembros activos del viaje
+(nunca quien lo genera) recibe el evento `notificacion` con `{ viaje_id, viaje_nombre, tipo, pantalla, texto }`.
+`tipo` es `votacion`, `gasto`, `tarea` o `mensaje`, y `pantalla` es `votaciones`, `gastos`, `tareas` o `chat`.
+La misma carga se envía por push a los dispositivos suscritos.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Respuestas**
+
+**200** — Clave pública VAPID
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `clave` | string | Sí | Clave pública VAPID en base64 de URL |  |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**503** — El servidor no tiene configuradas las notificaciones push
+
+| Código de error | Mensaje |
+| --- | --- |
+| `push_no_disponible` | Las notificaciones push no están disponibles |
+
+### POST /notificaciones/suscripciones
+
+**Activa las notificaciones push de este dispositivo**
+
+Guarda la suscripción push del dispositivo de quien hace la petición, con el formato que da el navegador
+(`PushSubscription.toJSON()`). Si el `endpoint` ya estaba guardado, se actualiza. Solo se guardan
+suscripciones del propio usuario del token.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `endpoint` | string | Sí | URL https del servicio push del navegador |  |
+| `keys` | object | Sí |  |  |
+| `keys.p256dh` | string | Sí |  |  |
+| `keys.auth` | string | Sí |  |  |
+
+**Respuestas**
+
+**201** — Suscripción guardada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `endpoint` | string | No |  |  |
+
+**400** — Falta el endpoint (https) o alguna de las claves
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La suscripción debe llevar un endpoint https y las claves p256dh y auth |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_notificacion` | No se ha podido activar las notificaciones |
+
+### DELETE /notificaciones/suscripciones
+
+**Desactiva las notificaciones push de este dispositivo**
+
+Borra la suscripción push con ese `endpoint`, solo si es del usuario del token.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `endpoint` | string | Sí |  |  |
+
+**Respuestas**
+
+**204** — Suscripción borrada (también si no existía)
+
+**400** — Falta el endpoint
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Indica el endpoint de la suscripción |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_notificacion` | No se ha podido desactivar las notificaciones |

@@ -1,5 +1,6 @@
 const votacionService = require('../services/votacionService');
 const votacionesSocket = require('../sockets/votacionesSocket');
+const { avisarEvento } = require('../utils/avisosViaje');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -127,6 +128,7 @@ const ejecutar = async (res, accion, codigoOk, mensajeFallo, aviso) => {
     if (resultado.error) return responderFallo(res, resultado.error, mensajeFallo);
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, mensajeFallo);
     if (aviso) votacionesSocket.avisarCambio(aviso.viajeId, { votacion_id: resultado.votacion.id, motivo: aviso.motivo });
+    if (aviso?.motivo === 'creada') void avisarEvento(aviso.cliente, aviso.usuarioId, aviso.viajeId, 'votacion', resultado.votacion.titulo);
     return res.status(codigoOk).json(resultado.votacion);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
@@ -174,7 +176,7 @@ const crear = async (req, res) => {
     () => votacionService.crear(req.supabase, req.usuario.id, req.params.viajeId, validacion.datos),
     201,
     'No se ha podido crear la votación',
-    { viajeId: req.params.viajeId, motivo: 'creada' },
+    { viajeId: req.params.viajeId, motivo: 'creada', cliente: req.supabase, usuarioId: req.usuario.id },
   );
 };
 

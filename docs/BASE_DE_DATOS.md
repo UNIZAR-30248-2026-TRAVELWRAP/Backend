@@ -23,6 +23,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [sellos](#sellos) | 7 | Activada | 4 |
 | [deudas_saldadas](#deudas_saldadas) | 4 | Activada | 4 |
 | [mensajes](#mensajes) | 5 | Activada | 2 |
+| [suscripciones_push](#suscripciones_push) | 6 | Activada | 3 |
 
 ## Relaciones
 
@@ -61,6 +62,7 @@ erDiagram
     miembros_viaje ||--o{ deudas_saldadas : "a_usuario_id"
     viajes ||--o{ mensajes : "viaje_id"
     miembros_viaje ||--o{ mensajes : "autor_id"
+    perfiles ||--o{ suscripciones_push : "usuario_id"
 ```
 
 ## Tipos enumerados
@@ -428,6 +430,25 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 
 - `mensajes_viaje_idx` sobre (viaje_id, creado_en)
 
+### suscripciones_push
+
+Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un usuario (endpoint del servicio push del navegador y sus claves). Un mismo endpoint solo puede estar una vez. Al borrar el perfil se borran
+
+**Seguridad por filas (RLS):** activada, 3 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `usuario_id` | `uuid` | Sí | FK → perfiles.id (ON DELETE CASCADE) |  |  |
+| `endpoint` | `text` | Sí | UNIQUE |  |  |
+| `p256dh` | `text` | Sí |  |  |  |
+| `auth` | `text` | Sí |  |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Índices**
+
+- `suscripciones_push_usuario_idx` sobre (usuario_id)
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -457,6 +478,8 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `borrar_viaje` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Borra de verdad el viaje y todo lo suyo (en cascada: miembros, gastos, documentos, fotos, votaciones, tareas...; los sellos no, son de cada usuario). Solo lo puede hacer el último miembro y solo cuando ya no queda ningún archivo suyo en Storage: Storage no da error cuando una política le impide borrar (devuelve la lista vacía), y sin esta comprobación un borrado rechazado dejaría archivos huérfanos sin viaje. Devuelve false si no borra nada |
 | `abandonar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca de cada gasto). Devuelve: { "estado": "no_miembro" }, { "estado": "es_creador" } o { "estado": "no_activo" }  sin cambios { "estado": "saldo_pendiente", "saldo": n }  sin cambios { "estado": "ok" }  ya no es miembro del viaje |
 | `cambiar_portada` | `p_viaje_id uuid, p_ruta text` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Cambia la foto de portada del viaje (o la quita con null). La puede cambiar cualquier miembro mientras el viaje está activo, aunque no sea el creador (que es el único que modifica el resto de datos del viaje, por eso no basta viajes_update). La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada |
+| `suscripciones_push_del_viaje` | `p_viaje_id uuid` | `TABLE` | su propietario (SECURITY DEFINER) | authenticated | Suscripciones de los demás miembros activos del viaje, para enviarles el aviso. Solo las puede pedir un miembro activo del viaje, y nunca devuelve las suyas |
+| `borrar_suscripcion_caducada` | `p_endpoint text` | `void` | su propietario (SECURITY DEFINER) | authenticated | Borra una suscripción que el servicio push ha dado por caducada (404 o 410), siempre que sea de un miembro de un viaje que comparte con quien la pide |
 
 ### Políticas por tabla
 
@@ -582,6 +605,14 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | --- | --- | --- | --- | --- |
 | `mensajes_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `mensajes_insert` | INSERT | authenticated |  | `autor_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+
+#### suscripciones_push
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `suscripciones_push_select` | SELECT | authenticated | `usuario_id = auth.uid()` |  |
+| `suscripciones_push_insert` | INSERT | authenticated |  | `usuario_id = auth.uid()` |
+| `suscripciones_push_delete` | DELETE | authenticated | `usuario_id = auth.uid()` |  |
 
 ## Almacenamiento de archivos (Supabase Storage)
 

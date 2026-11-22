@@ -1,4 +1,5 @@
 const gastoService = require('../services/gastoService');
+const { avisarEvento } = require('../utils/avisosViaje');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
 const MAX_CONCEPTO = 100;
@@ -231,6 +232,7 @@ const crear = async (req, res) => {
       return responderError(res, 502, 'error_gasto', 'No se ha podido registrar el gasto');
     }
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido registrar el gasto');
+    void avisarEvento(req.supabase, req.usuario.id, viajeId, 'gasto', resultado.gasto.concepto);
     return res.status(201).json(resultado.gasto);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');

@@ -1,4 +1,5 @@
 const tareaService = require('../services/tareaService');
+const { avisarEvento } = require('../utils/avisosViaje');
 const { UUID_REGEX, CHECK_VIOLATION, responderError } = require('../utils/validacion');
 
 const MAX_TEXTO = 200;
@@ -100,6 +101,7 @@ const crear = async (req, res) => {
       return responderError(res, 502, 'error_tarea', 'No se ha podido crear la tarea');
     }
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido crear la tarea');
+    void avisarEvento(req.supabase, req.usuario.id, viajeId, 'tarea', resultado.tarea.texto);
     return res.status(201).json(resultado.tarea);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');

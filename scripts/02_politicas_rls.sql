@@ -1229,3 +1229,61 @@ REVOKE ALL ON FUNCTION public.eliminar_viaje(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.eliminar_viaje(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.borrar_viaje(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.borrar_viaje(uuid) TO authenticated;
+
+-- 20. NOTIFICACIONES PUSH (PB-54)
+-- Cada usuario ve, crea y borra solo sus suscripciones. Para avisar a los demás miembros del viaje no se leen sus
+-- filas directamente: se usan las funciones de abajo
+ALTER TABLE public.suscripciones_push ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS suscripciones_push_select ON public.suscripciones_push;
+CREATE POLICY suscripciones_push_select ON public.suscripciones_push FOR SELECT TO authenticated
+  USING (usuario_id = auth.uid());
+
+DROP POLICY IF EXISTS suscripciones_push_insert ON public.suscripciones_push;
+CREATE POLICY suscripciones_push_insert ON public.suscripciones_push FOR INSERT TO authenticated
+  WITH CHECK (usuario_id = auth.uid());
+
+DROP POLICY IF EXISTS suscripciones_push_delete ON public.suscripciones_push;
+CREATE POLICY suscripciones_push_delete ON public.suscripciones_push FOR DELETE TO authenticated
+  USING (usuario_id = auth.uid());
+
+-- Suscripciones de los demás miembros activos del viaje, para enviarles el aviso. Solo las puede pedir un
+-- miembro activo del viaje, y nunca devuelve las suyas
+CREATE OR REPLACE FUNCTION public.suscripciones_push_del_viaje(p_viaje_id uuid)
+RETURNS TABLE (usuario_id uuid, endpoint text, p256dh text, auth text)
+LANGUAGE sql SECURITY DEFINER STABLE
+SET search_path = public
+AS $$
+  SELECT s.usuario_id, s.endpoint, s.p256dh, s.auth
+  FROM public.suscripciones_push s
+  JOIN public.miembros_viaje m ON m.usuario_id = s.usuario_id
+  WHERE public.es_miembro(p_viaje_id)
+    AND m.viaje_id = p_viaje_id
+    AND m.abandonado_en IS NULL
+    AND m.eliminado_en IS NULL
+    AND s.usuario_id <> auth.uid();
+$$;
+
+-- Borra una suscripción que el servicio push ha dado por caducada (404 o 410), siempre que sea de un miembro de un
+-- viaje que comparte con quien la pide
+CREATE OR REPLACE FUNCTION public.borrar_suscripcion_caducada(p_endpoint text)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public
+AS $$
+  DELETE FROM public.suscripciones_push s
+  WHERE s.endpoint = p_endpoint
+    AND EXISTS (
+      SELECT 1
+      FROM public.miembros_viaje otro
+      JOIN public.miembros_viaje yo ON yo.viaje_id = otro.viaje_id
+      WHERE otro.usuario_id = s.usuario_id
+        AND yo.usuario_id = auth.uid()
+        AND yo.abandonado_en IS NULL
+    );
+$$;
+
+REVOKE ALL ON FUNCTION public.suscripciones_push_del_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.suscripciones_push_del_viaje(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.borrar_suscripcion_caducada(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.borrar_suscripcion_caducada(text) TO authenticated;

@@ -371,3 +371,15 @@ CREATE TABLE IF NOT EXISTS public.mensajes (
 CREATE INDEX IF NOT EXISTS mensajes_viaje_idx ON public.mensajes (viaje_id, creado_en);
 -- Pasaporte del usuario, del año más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS sellos_usuario_idx ON public.sellos (usuario_id, anio DESC, elegido_en);
+
+-- Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un usuario (endpoint del servicio
+-- push del navegador y sus claves). Un mismo endpoint solo puede estar una vez. Al borrar el perfil se borran
+CREATE TABLE IF NOT EXISTS public.suscripciones_push (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_id uuid NOT NULL REFERENCES public.perfiles (id) ON DELETE CASCADE,
+  endpoint text NOT NULL UNIQUE,
+  p256dh text NOT NULL,
+  auth text NOT NULL,
+  creado_en timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS suscripciones_push_usuario_idx ON public.suscripciones_push (usuario_id);
