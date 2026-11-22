@@ -12540,10 +12540,8 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('Cuenta los días y no hay gastos, actividad más votada ni alma del grupo', () => {",
+                  "pm.test('Cuenta los días y no hay actividad más votada ni alma del grupo', () => {",
                   "  pm.expect(body.dias).to.eql(4);",
-                  "  pm.expect(body.gasto_total).to.eql(0);",
-                  "  pm.expect(body.gasto_mayor).to.eql(null);",
                   "  pm.expect(body.actividad_mas_votada).to.eql(null);",
                   "  pm.expect(body.alma_del_grupo).to.eql(null);",
                   "});"
@@ -12759,8 +12757,7 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('El gasto total es la suma exacta de los gastos', () => pm.expect(body.gasto_total).to.eql(178));",
-                  "pm.test('El gasto más alto es la cena', () => pm.expect(body.gasto_mayor).to.eql({ concepto: 'Cena Trastevere', importe: 120.5 }));",
+                  "pm.test('No devuelve los gastos, que el Wrap ya no muestra', () => pm.expect(Object.keys(body).sort()).to.eql(['actividad_mas_votada', 'alma_del_grupo', 'dias']));",
                   "pm.test('La actividad más votada es el Coliseo', () => pm.expect(body.actividad_mas_votada).to.eql({ titulo: 'Coliseo', votos: 1 }));",
                   "pm.test('El alma del grupo es quien pagó los tres gastos', () => {",
                   "  pm.expect(body.alma_del_grupo.usuario_id).to.eql(pm.collectionVariables.get('usuarioIdResumen'));",
@@ -12887,7 +12884,7 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Mantiene los datos', () => {",
-                  "  pm.expect(pm.response.json().gasto_total).to.eql(178);",
+                  "  pm.expect(pm.response.json().alma_del_grupo.pagos).to.eql(3);",
                   "  pm.expect(pm.response.json().dias).to.eql(4);",
                   "});"
                 ]

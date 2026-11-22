@@ -4601,16 +4601,18 @@ archivo ya no existe y queda en el bucket sin fila, invisible.
 
 **Resumen «Fin de viaje» (Wrap) del viaje**
 
-Calcula los datos que muestra el resumen de fin de viaje: los días del viaje, lo gastado, el gasto más alto, la
-actividad más votada y el «alma del grupo». Los datos se calculan al pedirlos, así que siempre están al día.
+Calcula los datos que muestra el resumen de fin de viaje: los días del viaje, la actividad más votada y el
+«alma del grupo». Los datos se calculan al pedirlos, así que siempre están al día.
 Solo lo pueden pedir los miembros del viaje, y funciona con el viaje activo o finalizado porque solo
-lee. Las fotos y el balance que también aparecen en la pantalla se piden con `GET /viajes/{viajeId}/fotos` y
-`GET /viajes/{viajeId}/gastos/balance`.
+lee. Las fotos que también aparecen en la pantalla se piden con `GET /viajes/{viajeId}/fotos`.
+
+El resumen solo incluye lo que enseña el Wrap: no devuelve los gastos (ni el total ni el más alto) ni el balance
+entre los viajeros, que se consultan en la pantalla de gastos. Lo que no tiene datos viene como `null` y el Wrap
+no muestra esa diapositiva. La imagen para descargar la genera el propio navegador con estos mismos datos, por
+lo que no hay un endpoint para ella.
 
 - `dias`: días desde el primero hasta el último del viaje, ambos incluidos. Si el viaje no tiene las dos
   fechas, los días distintos que tienen actividades.
-- `gasto_total`: suma de todos los gastos, calculada en céntimos para no arrastrar errores de coma flotante.
-- `gasto_mayor`: el gasto de mayor importe (con un empate, el primero), o `null` si no hay gastos.
 - `actividad_mas_votada`: la opción con más votos entre las votaciones de tipo `actividad` (con un empate, la
   que va antes en la lista), o `null` si nadie ha votado.
 - `alma_del_grupo`: el miembro actual que ha pagado más gastos (con el mismo número, el que ha pagado más
@@ -4634,10 +4636,6 @@ Cuerpo (`application/json`):
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `dias` | integer | No | Días del viaje | `4` |
-| `gasto_total` | number | No | Suma de los gastos del viaje | `850` |
-| `gasto_mayor` | object \| null | No | Gasto de mayor importe (null si no hay gastos) |  |
-| `gasto_mayor.concepto` | string | No |  | `Cena Trastevere` |
-| `gasto_mayor.importe` | number | No |  | `120.5` |
 | `actividad_mas_votada` | object \| null | No | Opción con más votos de las votaciones de tipo actividad (null si nadie ha votado) |  |
 | `actividad_mas_votada.titulo` | string | No |  | `Coliseo Romano` |
 | `actividad_mas_votada.votos` | integer | No |  | `3` |
