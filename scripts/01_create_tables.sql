@@ -199,6 +199,21 @@ CREATE TRIGGER actividades_actualizado_en
   BEFORE UPDATE ON public.actividades
   FOR EACH ROW EXECUTE FUNCTION public.marcar_actualizado_en();
 
+-- Puntos de interés del viaje, los sitios que el grupo quiere tener en el mapa sin que sean una actividad.
+-- Al eliminar el viaje se borran con él; si se borra el perfil de quien lo añadió, el punto se queda sin autor
+CREATE TABLE IF NOT EXISTS public.puntos_interes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 120),
+  nota text CHECK (nota IS NULL OR char_length(nota) <= 300),
+  categoria text CHECK (categoria IS NULL OR categoria IN ('comida', 'cultura', 'transporte', 'alojamiento', 'otro')),
+  latitud numeric(9,6) NOT NULL CHECK (latitud BETWEEN -90 AND 90),
+  longitud numeric(9,6) NOT NULL CHECK (longitud BETWEEN -180 AND 180),
+  lugar_externo_id text,
+  creado_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now()
+);
+
 -- Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan
 -- siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos
 CREATE TABLE IF NOT EXISTS public.gastos (
@@ -364,6 +379,8 @@ CREATE TABLE IF NOT EXISTS public.deudas_saldadas (
 );
 -- Cartera del viaje, del documento más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);
+-- Puntos de interés del viaje, del más antiguo al más reciente
+CREATE INDEX IF NOT EXISTS puntos_interes_viaje_idx ON public.puntos_interes (viaje_id, creado_en);
 -- Galería del viaje, de la foto más reciente a la más antigua
 CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);
 -- Lista de tareas del viaje, de la más antigua a la más reciente

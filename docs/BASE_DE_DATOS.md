@@ -15,6 +15,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
 | [votos](#votos) | 5 | Activada | 4 |
 | [actividades](#actividades) | 16 | Activada | 4 |
+| [puntos_interes](#puntos_interes) | 10 | Activada | 3 |
 | [gastos](#gastos) | 10 | Activada | 4 |
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
 | [documentos](#documentos) | 8 | Activada | 3 |
@@ -42,6 +43,8 @@ erDiagram
     perfiles ||--o{ votos : "usuario_id"
     viajes ||--o{ actividades : "viaje_id"
     perfiles |o--o{ actividades : "creado_por"
+    viajes ||--o{ puntos_interes : "viaje_id"
+    perfiles |o--o{ puntos_interes : "creado_por"
     viajes ||--o{ gastos : "viaje_id"
     perfiles ||--o{ gastos : "pagado_por"
     perfiles |o--o{ gastos : "creado_por"
@@ -238,6 +241,29 @@ Voto de un usuario en una votación. Cambiar el voto actualiza la fila; retirarl
 **Índices**
 
 - `actividades_viaje_fecha_idx` sobre (viaje_id, fecha)
+
+### puntos_interes
+
+Puntos de interés del viaje, los sitios que el grupo quiere tener en el mapa sin que sean una actividad. Al eliminar el viaje se borran con él; si se borra el perfil de quien lo añadió, el punto se queda sin autor
+
+**Seguridad por filas (RLS):** activada, 3 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  |  |
+| `nombre` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(nombre)) BETWEEN 1 AND 120` |
+| `nota` | `text` | No |  |  | Debe cumplir: `nota IS NULL OR char_length(nota) <= 300` |
+| `categoria` | `text` | No |  |  | Debe cumplir: `categoria IS NULL OR categoria IN ('comida', 'cultura', 'transporte', 'alojamiento', 'otro')` |
+| `latitud` | `numeric(9,6)` | Sí |  |  | Debe cumplir: `latitud BETWEEN -90 AND 90` |
+| `longitud` | `numeric(9,6)` | Sí |  |  | Debe cumplir: `longitud BETWEEN -180 AND 180` |
+| `lugar_externo_id` | `text` | No |  |  |  |
+| `creado_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Índices**
+
+- `puntos_interes_viaje_idx` sobre (viaje_id, creado_en) — Puntos de interés del viaje, del más antiguo al más reciente
 
 ### gastos
 
@@ -538,6 +564,14 @@ Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un 
 | `actividades_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `actividades_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `actividades_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
+#### puntos_interes
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `puntos_interes_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `puntos_interes_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `puntos_interes_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 #### gastos
 

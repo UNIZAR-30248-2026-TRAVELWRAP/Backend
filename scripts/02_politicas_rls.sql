@@ -147,6 +147,7 @@ ALTER TABLE public.repartos_gasto ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.deudas_saldadas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fotos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.puntos_interes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tareas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mensajes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sellos ENABLE ROW LEVEL SECURITY;
@@ -263,6 +264,22 @@ CREATE POLICY actividades_update ON public.actividades FOR UPDATE TO authenticat
 
 DROP POLICY IF EXISTS actividades_delete ON public.actividades;
 CREATE POLICY actividades_delete ON public.actividades FOR DELETE TO authenticated
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- POLÍTICAS PUNTOS DE INTERÉS
+-- Los miembros ven los puntos de su viaje, también en viajes finalizados o archivados
+DROP POLICY IF EXISTS puntos_interes_select ON public.puntos_interes;
+CREATE POLICY puntos_interes_select ON public.puntos_interes FOR SELECT TO authenticated
+  USING (public.es_miembro(viaje_id));
+
+-- Cualquier miembro añade puntos mientras el viaje está activo; quedan a su nombre
+DROP POLICY IF EXISTS puntos_interes_insert ON public.puntos_interes;
+CREATE POLICY puntos_interes_insert ON public.puntos_interes FOR INSERT TO authenticated
+  WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+
+-- Cualquier miembro borra cualquier punto mientras el viaje está activo. No se editan
+DROP POLICY IF EXISTS puntos_interes_delete ON public.puntos_interes;
+CREATE POLICY puntos_interes_delete ON public.puntos_interes FOR DELETE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- POLÍTICAS GASTOS
