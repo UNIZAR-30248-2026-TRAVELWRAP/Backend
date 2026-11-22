@@ -9,20 +9,22 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | Tabla | Columnas | RLS | Políticas |
 | --- | --- | --- | --- |
 | [perfiles](#perfiles) | 5 | Activada | 3 |
-| [viajes](#viajes) | 15 | Activada | 3 |
+| [viajes](#viajes) | 16 | Activada | 3 |
 | [miembros_viaje](#miembros_viaje) | 7 | Activada | 2 |
 | [votaciones](#votaciones) | 10 | Activada | 3 |
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
 | [votos](#votos) | 5 | Activada | 4 |
 | [actividades](#actividades) | 16 | Activada | 4 |
+| [puntos_interes](#puntos_interes) | 11 | Activada | 3 |
 | [gastos](#gastos) | 10 | Activada | 4 |
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
 | [documentos](#documentos) | 8 | Activada | 3 |
-| [fotos](#fotos) | 8 | Activada | 2 |
+| [fotos](#fotos) | 8 | Activada | 3 |
 | [tareas](#tareas) | 8 | Activada | 4 |
 | [sellos](#sellos) | 7 | Activada | 4 |
 | [deudas_saldadas](#deudas_saldadas) | 4 | Activada | 4 |
 | [mensajes](#mensajes) | 5 | Activada | 2 |
+| [suscripciones_push](#suscripciones_push) | 6 | Activada | 3 |
 
 ## Relaciones
 
@@ -41,6 +43,8 @@ erDiagram
     perfiles ||--o{ votos : "usuario_id"
     viajes ||--o{ actividades : "viaje_id"
     perfiles |o--o{ actividades : "creado_por"
+    viajes ||--o{ puntos_interes : "viaje_id"
+    perfiles |o--o{ puntos_interes : "creado_por"
     viajes ||--o{ gastos : "viaje_id"
     perfiles ||--o{ gastos : "pagado_por"
     perfiles |o--o{ gastos : "creado_por"
@@ -52,7 +56,7 @@ erDiagram
     viajes ||--o{ fotos : "viaje_id"
     perfiles |o--o{ fotos : "subido_por"
     viajes ||--o{ tareas : "viaje_id"
-    miembros_viaje ||--o{ tareas : "responsable_id"
+    miembros_viaje |o--o{ tareas : "responsable_id"
     perfiles |o--o{ tareas : "creada_por"
     perfiles ||--o{ sellos : "usuario_id"
     viajes |o--o{ sellos : "viaje_id"
@@ -61,6 +65,7 @@ erDiagram
     miembros_viaje ||--o{ deudas_saldadas : "a_usuario_id"
     viajes ||--o{ mensajes : "viaje_id"
     miembros_viaje ||--o{ mensajes : "autor_id"
+    perfiles ||--o{ suscripciones_push : "usuario_id"
 ```
 
 ## Tipos enumerados
@@ -102,6 +107,7 @@ erDiagram
 | `fecha_inicio` | `date` | No |  |  |  |
 | `fecha_fin` | `date` | No |  |  |  |
 | `imagen_portada_url` | `text` | No |  |  |  |
+| `portada_ruta` | `text` | No |  |  | Ruta de la foto de portada en el bucket privado «portadas» (carpeta del viaje). Null si no tiene portada |
 | `moneda` | `char(3)` | Sí |  | `'EUR'` |  |
 | `presupuesto` | `numeric(12,2)` | Sí |  |  | Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después<br>Debe cumplir: `presupuesto >= 0` |
 | `estado` | `estado_viaje` | Sí |  | `'activo'` | activo: se puede editar. finalizado: solo lectura, aparece en «Viajes anteriores»; no vuelve a activo. archivado: sin uso desde MEJ-12 (archivar y eliminar son personales: ver archivado_en y eliminado_en en miembros_viaje) |
@@ -112,6 +118,7 @@ erDiagram
 **Restricciones**
 
 - `viajes_fechas_validas`: `CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)`
+- `viajes_portada_del_viaje`: `CHECK (portada_ruta IS NULL OR portada_ruta LIKE id::text || '/%')` — El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
 
 ### miembros_viaje
 
@@ -235,6 +242,30 @@ Voto de un usuario en una votación. Cambiar el voto actualiza la fila; retirarl
 
 - `actividades_viaje_fecha_idx` sobre (viaje_id, fecha)
 
+### puntos_interes
+
+Puntos de interés del viaje, los sitios que el grupo quiere tener en el mapa sin que sean una actividad. Al eliminar el viaje se borran con él; si se borra el perfil de quien lo añadió, el punto se queda sin autor
+
+**Seguridad por filas (RLS):** activada, 3 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  |  |
+| `nombre` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(nombre)) BETWEEN 1 AND 120` |
+| `nota` | `text` | No |  |  | Debe cumplir: `nota IS NULL OR char_length(nota) <= 300` |
+| `categoria` | `text` | No |  |  | Debe cumplir: `categoria IS NULL OR categoria IN ('comida', 'cultura', 'transporte', 'alojamiento', 'otro')` |
+| `latitud` | `numeric(9,6)` | Sí |  |  | Debe cumplir: `latitud BETWEEN -90 AND 90` |
+| `longitud` | `numeric(9,6)` | Sí |  |  | Debe cumplir: `longitud BETWEEN -180 AND 180` |
+| `lugar_externo_id` | `text` | No |  |  |  |
+| `direccion` | `text` | No |  |  | Debe cumplir: `direccion IS NULL OR char_length(direccion) <= 300` |
+| `creado_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Índices**
+
+- `puntos_interes_viaje_idx` sobre (viaje_id, creado_en) — Puntos de interés del viaje, del más antiguo al más reciente
+
 ### gastos
 
 Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos
@@ -312,9 +343,9 @@ Documentos de la cartera compartida del viaje (billetes, reservas, seguros...). 
 
 ### fotos
 
-Fotos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase Storage y esta fila guarda sus datos y dónde está
+Fotos y vídeos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase Storage y esta fila guarda sus datos y dónde está
 
-**Seguridad por filas (RLS):** activada, 2 políticas
+**Seguridad por filas (RLS):** activada, 3 políticas
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
@@ -322,8 +353,8 @@ Fotos de la galería compartida del viaje. El archivo se guarda en el bucket pri
 | `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus filas, pero no los archivos del bucket |
 | `nombre` | `text` | Sí |  |  | Nombre que ve el usuario (el del archivo original)<br>Debe cumplir: `char_length(btrim(nombre)) BETWEEN 1 AND 150` |
 | `ruta` | `text` | Sí | UNIQUE |  | Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original |
-| `tipo_mime` | `text` | Sí |  |  | Debe cumplir: `tipo_mime IN ('image/jpeg', 'image/png', 'image/webp')` |
-| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 8000000` |
+| `tipo_mime` | `text` | Sí |  |  | Debe cumplir: `tipo_mime IN ('image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime')` |
+| `tamano_bytes` | `integer` | Sí |  |  | Tamaño del archivo, como máximo 50 MB (50.000.000 bytes, el tope por archivo de Supabase Storage). El backend limita las fotos a 8 MB y el total del viaje a 200 MB<br>Debe cumplir: `tamano_bytes > 0 AND tamano_bytes <= 50000000` |
 | `subido_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
 
@@ -346,7 +377,7 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 | `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
 | `viaje_id` | `uuid` | Sí | FK → viajes.id (ON DELETE CASCADE) |  | Al eliminar el viaje se borran sus tareas |
 | `texto` | `text` | Sí |  |  | Debe cumplir: `char_length(btrim(texto)) BETWEEN 1 AND 200` |
-| `responsable_id` | `uuid` | Sí | FK → miembros_viaje.usuario_id |  | Miembro del viaje al que se asigna la tarea |
+| `responsable_id` | `uuid` | No | FK → miembros_viaje.usuario_id |  | Miembro del viaje al que se asigna la tarea; null si está sin asignar (también si su responsable abandona el viaje) |
 | `hecha` | `boolean` | Sí |  | `false` |  |
 | `hecha_en` | `timestamptz` | No |  |  | Cuándo se marcó como hecha; null mientras está pendiente |
 | `creada_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
@@ -354,7 +385,7 @@ Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca
 
 **Restricciones**
 
-- `tareas_responsable_miembro`: `FOREIGN KEY (viaje_id, responsable_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo se asigna a miembros del viaje
+- `tareas_responsable_miembro`: `FOREIGN KEY (viaje_id, responsable_id) REFERENCES public.miembros_viaje (viaje_id, usuario_id)` — Solo se asigna a miembros del viaje (con responsable_id null no se comprueba)
 - `tareas_hecha_coherente`: `CHECK (hecha = (hecha_en IS NOT NULL))` — hecha y hecha_en van siempre a la par
 
 **Índices**
@@ -426,6 +457,25 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 
 - `mensajes_viaje_idx` sobre (viaje_id, creado_en)
 
+### suscripciones_push
+
+Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un usuario (endpoint del servicio push del navegador y sus claves). Un mismo endpoint solo puede estar una vez. Al borrar el perfil se borran
+
+**Seguridad por filas (RLS):** activada, 3 políticas
+
+| Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | Sí | PK | `gen_random_uuid()` |  |
+| `usuario_id` | `uuid` | Sí | FK → perfiles.id (ON DELETE CASCADE) |  |  |
+| `endpoint` | `text` | Sí | UNIQUE |  |  |
+| `p256dh` | `text` | Sí |  |  |  |
+| `auth` | `text` | Sí |  |  |  |
+| `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+
+**Índices**
+
+- `suscripciones_push_usuario_idx` sobre (usuario_id)
+
 ## Seguridad (RLS)
 
 ### Funciones
@@ -438,7 +488,7 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `es_editable` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje solo admite contenido nuevo mientras está activo: al finalizarlo queda de solo lectura. Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura |
 | `es_terminado` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Un viaje ha terminado cuando está finalizado (archivarlo o no es personal y no cambia su estado). Solo entonces se puede elegir un sello |
 | `es_ultimo_miembro` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Verdadera si el viaje está finalizado, quien llama lo tiene archivado (y no eliminado ni abandonado) y ningún otro miembro lo conserva (todos los demás lo han eliminado o abandonado). La usan eliminar_viaje, borrar_viaje y las políticas de Storage que dejan al último miembro borrar los archivos del viaje |
-| `viaje_de_ruta` | `p_ruta text` | `uuid` | quien la llama |  | Viaje al que pertenece un archivo de los buckets «documentos» y «fotos», sacado de la primera carpeta de su ruta. Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage) |
+| `viaje_de_ruta` | `p_ruta text` | `uuid` | quien la llama |  | Viaje al que pertenece un archivo de los buckets «documentos», «fotos» y «portadas», sacado de la primera carpeta de su ruta. Devuelve null si esa carpeta no es un uuid, en lugar de fallar al convertirla (lo usan las políticas de Storage) |
 | `viaje_de_votacion` | `p_votacion_id uuid` | `uuid` | su propietario (SECURITY DEFINER) |  | Viaje al que pertenece una votación (lo usan las políticas de opciones y votos) |
 | `puede_votar` | `p_votacion_id uuid` | `boolean` | su propietario (SECURITY DEFINER) |  | Se pueden proponer opciones y votar si eres miembro del viaje, el viaje está activo y la votación sigue abierta |
 | `nombre_por_defecto` | `p_destino text, p_inicio date, p_fin date` | `text` | quien la llama |  | Nombre por defecto de un viaje: su destino y el año de sus fechas («Roma 2027», «Praga 2027-2028» si cruza de año). Sin destino, uno temporal («Viaje sin destino 2027»). Como mucho 100 caracteres |
@@ -451,9 +501,12 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `viajes_nombre_automatico` |  | `trigger` | quien la llama |  | Si el viaje se crea sin nombre, se le pone el nombre por defecto y queda marcado como automático. Mientras lo sea, se vuelve a generar cada vez que cambian el destino o las fechas: así, al fijar el destino por votación (o al editarlo), el nombre temporal pasa a ser el del destino. En cuanto alguien escribe un nombre, se respeta |
 | `archivar_viaje` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Archiva el viaje para quien llama: solo si está finalizado y todavía no lo tenía archivado |
 | `desarchivar_viaje_propio` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Desarchiva el viaje para quien llama. No toca el estado del viaje: sigue finalizado y vuelve a «Viajes anteriores» |
-| `eliminar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve: { "estado": "no_permitido" }  sin cambios { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...] }  sin cambios todavía: es el último miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje. Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida |
+| `eliminar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve: { "estado": "no_permitido" }  sin cambios { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...], "portadas": [...] }  sin cambios todavía: es el último miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje. Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida |
 | `borrar_viaje` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Borra de verdad el viaje y todo lo suyo (en cascada: miembros, gastos, documentos, fotos, votaciones, tareas...; los sellos no, son de cada usuario). Solo lo puede hacer el último miembro y solo cuando ya no queda ningún archivo suyo en Storage: Storage no da error cuando una política le impide borrar (devuelve la lista vacía), y sin esta comprobación un borrado rechazado dejaría archivos huérfanos sin viaje. Devuelve false si no borra nada |
 | `abandonar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca de cada gasto). Devuelve: { "estado": "no_miembro" }, { "estado": "es_creador" } o { "estado": "no_activo" }  sin cambios { "estado": "saldo_pendiente", "saldo": n }  sin cambios { "estado": "ok" }  ya no es miembro del viaje |
+| `cambiar_portada` | `p_viaje_id uuid, p_ruta text` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Cambia la foto de portada del viaje (o la quita con null). La puede cambiar cualquier miembro mientras el viaje está activo, aunque no sea el creador (que es el único que modifica el resto de datos del viaje, por eso no basta viajes_update). La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada |
+| `suscripciones_push_del_viaje` | `p_viaje_id uuid` | `TABLE` | su propietario (SECURITY DEFINER) | authenticated | Suscripciones de los demás miembros activos del viaje, para enviarles el aviso. Solo las puede pedir un miembro activo del viaje, y nunca devuelve las suyas |
+| `borrar_suscripcion_caducada` | `p_endpoint text` | `void` | su propietario (SECURITY DEFINER) | authenticated | Borra una suscripción que el servicio push ha dado por caducada (404 o 410), siempre que sea de un miembro de un viaje que comparte con quien la pide |
 
 ### Políticas por tabla
 
@@ -513,6 +566,14 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `actividades_update` | UPDATE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 | `actividades_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
+#### puntos_interes
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `puntos_interes_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
+| `puntos_interes_insert` | INSERT | authenticated |  | `creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `puntos_interes_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
+
 #### gastos
 
 | Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
@@ -545,6 +606,7 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | --- | --- | --- | --- | --- |
 | `fotos_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `fotos_insert` | INSERT | authenticated |  | `subido_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
+| `fotos_delete` | DELETE | authenticated | `public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |  |
 
 #### tareas
 
@@ -580,6 +642,14 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `mensajes_select` | SELECT | authenticated | `public.es_miembro(viaje_id)` |  |
 | `mensajes_insert` | INSERT | authenticated |  | `autor_id = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id)` |
 
+#### suscripciones_push
+
+| Política | Operación | Rol | USING (qué filas puede ver o modificar) | WITH CHECK (qué filas puede escribir) |
+| --- | --- | --- | --- | --- |
+| `suscripciones_push_select` | SELECT | authenticated | `usuario_id = auth.uid()` |  |
+| `suscripciones_push_insert` | INSERT | authenticated |  | `usuario_id = auth.uid()` |
+| `suscripciones_push_delete` | DELETE | authenticated | `usuario_id = auth.uid()` |  |
+
 ## Almacenamiento de archivos (Supabase Storage)
 
 ### Buckets
@@ -588,7 +658,8 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | --- | --- | --- | --- | --- |
 | `documentos` | Privado | 8 MB (8.000.000 bytes) | `application/pdf`, `image/jpeg`, `image/png` | Bucket privado de la cartera: los archivos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los de más de 8 MB o de otro tipo |
 | `avatares` | Público | 2 MB (2.000.000 bytes) | `image/jpeg`, `image/png` | Bucket público (los avatares salen en casi todas las pantallas): cualquiera con la URL puede leer la foto, pero el nombre del archivo lleva un UUID aleatorio. Storage rechaza los de más de 2 MB o de otro tipo |
-| `fotos` | Privado | 8 MB (8.000.000 bytes) | `image/jpeg`, `image/png`, `image/webp` | Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo las de más de 8 MB o de otro tipo |
+| `fotos` | Privado | 50 MB (50.000.000 bytes) | `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/webm`, `video/quicktime` | Bucket privado de la galería: las fotos solo se leen con la sesión de un miembro (o con una URL firmada) y Storage rechaza por sí mismo los archivos de más de 50 MB o de otro tipo (el backend limita las fotos a 8 MB) |
+| `portadas` | Privado | 5 MB (5.000.000 bytes) | `image/jpeg`, `image/png` | Bucket privado de las fotos de portada: una por viaje, en su carpeta, y solo se leen con la sesión de un miembro (o con una URL firmada). Storage rechaza por sí mismo las de más de 5 MB o de otro tipo |
 
 ### Políticas de `storage.objects`
 
@@ -605,3 +676,7 @@ Mensajes del chat del viaje. Solo se añaden y se leen: no se editan ni se borra
 | `fotos_storage_insert` | INSERT | authenticated |  | `bucket_id = 'fotos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Los miembros suben fotos a la carpeta de su viaje mientras está activo |
 | `fotos_storage_delete_huerfano` | DELETE | authenticated | `bucket_id = 'fotos' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name)) AND NOT EXISTS (SELECT 1 FROM public.fotos f WHERE f.ruta = objects.name)` |  | Solo para deshacer una subida cuando falla el registro de la foto: se puede borrar un archivo de la carpeta de un viaje activo que todavía no tiene fila en fotos |
 | `fotos_storage_delete_ultimo` | DELETE | authenticated | `bucket_id = 'fotos' AND public.es_ultimo_miembro(public.viaje_de_ruta(name))` |  | El último miembro que elimina un viaje finalizado borra sus fotos (igual que con los documentos) |
+| `portadas_storage_select` | SELECT | authenticated | `bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name))` |  | Los miembros leen la portada de su viaje (para generar URLs firmadas), también en viajes finalizados o archivados |
+| `portadas_storage_insert` | INSERT | authenticated |  | `bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` | Cualquier miembro sube la portada, mientras el viaje está activo |
+| `portadas_storage_delete_miembro` | DELETE | authenticated | `bucket_id = 'portadas' AND public.es_miembro(public.viaje_de_ruta(name)) AND public.es_editable(public.viaje_de_ruta(name))` |  |  |
+| `portadas_storage_delete_ultimo` | DELETE | authenticated | `bucket_id = 'portadas' AND public.es_ultimo_miembro(public.viaje_de_ruta(name))` |  | El último miembro que elimina un viaje finalizado borra también su portada (igual que con los documentos) |

@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   fecha_inicio date,
   fecha_fin date,
   imagen_portada_url text,
+  -- Ruta de la foto de portada en el bucket privado «portadas» (carpeta del viaje). Null si no tiene portada
+  portada_ruta text,
   moneda char(3) NOT NULL DEFAULT 'EUR',
   -- Presupuesto estimado del viaje, en su moneda. Se fija al crearlo y se puede editar después
   presupuesto numeric(12,2) NOT NULL CHECK (presupuesto >= 0),
@@ -85,7 +87,9 @@ CREATE TABLE IF NOT EXISTS public.viajes (
   -- Token del enlace/QR de invitación: uno por viaje, permanente
   token_invitacion text NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text, '-', ''),
   creado_en timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT viajes_fechas_validas CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio)
+  CONSTRAINT viajes_fechas_validas CHECK (fecha_fin IS NULL OR fecha_inicio IS NULL OR fecha_fin >= fecha_inicio),
+  -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
+  CONSTRAINT viajes_portada_del_viaje CHECK (portada_ruta IS NULL OR portada_ruta LIKE id::text || '/%')
 );
 
 CREATE TABLE IF NOT EXISTS public.miembros_viaje (
@@ -149,6 +153,12 @@ CREATE TABLE IF NOT EXISTS public.votos (
 -- Viajes creados antes de que existiera el nombre automático
 ALTER TABLE public.viajes ADD COLUMN IF NOT EXISTS nombre_automatico boolean NOT NULL DEFAULT false;
 
+-- Viajes creados antes de que existiera la foto de portada (PB-53)
+ALTER TABLE public.viajes ADD COLUMN IF NOT EXISTS portada_ruta text;
+ALTER TABLE public.viajes DROP CONSTRAINT IF EXISTS viajes_portada_del_viaje;
+ALTER TABLE public.viajes ADD CONSTRAINT viajes_portada_del_viaje
+  CHECK (portada_ruta IS NULL OR portada_ruta LIKE id::text || '/%');
+
 -- votaciones y opciones_votacion se referencian entre sí: la clave de la opción ganadora se añade al final
 ALTER TABLE public.votaciones DROP CONSTRAINT IF EXISTS votaciones_opcion_ganadora_fk;
 ALTER TABLE public.votaciones ADD CONSTRAINT votaciones_opcion_ganadora_fk
@@ -188,6 +198,27 @@ DROP TRIGGER IF EXISTS actividades_actualizado_en ON public.actividades;
 CREATE TRIGGER actividades_actualizado_en
   BEFORE UPDATE ON public.actividades
   FOR EACH ROW EXECUTE FUNCTION public.marcar_actualizado_en();
+
+-- Puntos de interés del viaje, los sitios que el grupo quiere tener en el mapa sin que sean una actividad.
+-- Al eliminar el viaje se borran con él; si se borra el perfil de quien lo añadió, el punto se queda sin autor
+CREATE TABLE IF NOT EXISTS public.puntos_interes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
+  nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 120),
+  nota text CHECK (nota IS NULL OR char_length(nota) <= 300),
+  categoria text CHECK (categoria IS NULL OR categoria IN ('comida', 'cultura', 'transporte', 'alojamiento', 'otro')),
+  latitud numeric(9,6) NOT NULL CHECK (latitud BETWEEN -90 AND 90),
+  longitud numeric(9,6) NOT NULL CHECK (longitud BETWEEN -180 AND 180),
+  lugar_externo_id text,
+  direccion text CHECK (direccion IS NULL OR char_length(direccion) <= 300),
+  creado_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
+  creado_en timestamptz NOT NULL DEFAULT now()
+);
+-- Dirección del lugar cuando se eligió con el buscador (null si se eligió tocando el mapa). Para bases de datos ya creadas
+ALTER TABLE public.puntos_interes ADD COLUMN IF NOT EXISTS direccion text;
+ALTER TABLE public.puntos_interes DROP CONSTRAINT IF EXISTS puntos_interes_direccion_check;
+ALTER TABLE public.puntos_interes ADD CONSTRAINT puntos_interes_direccion_check
+  CHECK (direccion IS NULL OR char_length(direccion) <= 300);
 
 -- Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan
 -- siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos
@@ -257,7 +288,7 @@ ALTER TABLE public.documentos
   DROP CONSTRAINT IF EXISTS documentos_tamano_bytes_check,
   ADD CONSTRAINT documentos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000);
 
--- Fotos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase
+-- Fotos y vídeos de la galería compartida del viaje. El archivo se guarda en el bucket privado «fotos» de Supabase
 -- Storage y esta fila guarda sus datos y dónde está
 CREATE TABLE IF NOT EXISTS public.fotos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -267,14 +298,26 @@ CREATE TABLE IF NOT EXISTS public.fotos (
   nombre text NOT NULL CHECK (char_length(btrim(nombre)) BETWEEN 1 AND 150),
   -- Ruta del archivo dentro del bucket: viaje_id/uuid.extensión, nunca el nombre original
   ruta text NOT NULL UNIQUE,
-  tipo_mime text NOT NULL CHECK (tipo_mime IN ('image/jpeg', 'image/png', 'image/webp')),
-  -- Tamaño del archivo, como máximo 8 MB (8.000.000 bytes)
-  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 8000000),
+  tipo_mime text NOT NULL CHECK (
+    tipo_mime IN ('image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime')
+  ),
+  -- Tamaño del archivo, como máximo 50 MB (50.000.000 bytes, el tope por archivo de Supabase Storage). El backend
+  -- limita las fotos a 8 MB y el total del viaje a 200 MB
+  tamano_bytes integer NOT NULL CHECK (tamano_bytes > 0 AND tamano_bytes <= 50000000),
   subido_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   creado_en timestamptz NOT NULL DEFAULT now(),
   -- El archivo tiene que estar en la carpeta de su viaje, que es la que comprueban las políticas de Storage
   CONSTRAINT fotos_ruta_del_viaje CHECK (ruta LIKE viaje_id::text || '/%')
 );
+
+-- La tabla se creó solo para fotos de hasta 8 MB: en las bases de datos que ya la tienen, se admiten también los vídeos
+ALTER TABLE public.fotos
+  DROP CONSTRAINT IF EXISTS fotos_tipo_mime_check,
+  ADD CONSTRAINT fotos_tipo_mime_check CHECK (
+    tipo_mime IN ('image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime')
+  ),
+  DROP CONSTRAINT IF EXISTS fotos_tamano_bytes_check,
+  ADD CONSTRAINT fotos_tamano_bytes_check CHECK (tamano_bytes > 0 AND tamano_bytes <= 50000000);
 
 -- Lista de tareas colaborativa del viaje: cualquier miembro las crea, edita, marca y borra mientras el viaje está activo
 CREATE TABLE IF NOT EXISTS public.tareas (
@@ -282,14 +325,14 @@ CREATE TABLE IF NOT EXISTS public.tareas (
   -- Al eliminar el viaje se borran sus tareas
   viaje_id uuid NOT NULL REFERENCES public.viajes (id) ON DELETE CASCADE,
   texto text NOT NULL CHECK (char_length(btrim(texto)) BETWEEN 1 AND 200),
-  -- Miembro del viaje al que se asigna la tarea
-  responsable_id uuid NOT NULL,
+  -- Miembro del viaje al que se asigna la tarea; null si está sin asignar (también si su responsable abandona el viaje)
+  responsable_id uuid,
   hecha boolean NOT NULL DEFAULT false,
   -- Cuándo se marcó como hecha; null mientras está pendiente
   hecha_en timestamptz,
   creada_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   creado_en timestamptz NOT NULL DEFAULT now(),
-  -- Solo se asigna a miembros del viaje
+  -- Solo se asigna a miembros del viaje (con responsable_id null no se comprueba)
   CONSTRAINT tareas_responsable_miembro FOREIGN KEY (viaje_id, responsable_id)
     REFERENCES public.miembros_viaje (viaje_id, usuario_id),
   -- hecha y hecha_en van siempre a la par
@@ -342,6 +385,8 @@ CREATE TABLE IF NOT EXISTS public.deudas_saldadas (
 );
 -- Cartera del viaje, del documento más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS documentos_viaje_idx ON public.documentos (viaje_id, creado_en DESC);
+-- Puntos de interés del viaje, del más antiguo al más reciente
+CREATE INDEX IF NOT EXISTS puntos_interes_viaje_idx ON public.puntos_interes (viaje_id, creado_en);
 -- Galería del viaje, de la foto más reciente a la más antigua
 CREATE INDEX IF NOT EXISTS fotos_viaje_idx ON public.fotos (viaje_id, creado_en DESC);
 -- Lista de tareas del viaje, de la más antigua a la más reciente
@@ -361,3 +406,15 @@ CREATE TABLE IF NOT EXISTS public.mensajes (
 CREATE INDEX IF NOT EXISTS mensajes_viaje_idx ON public.mensajes (viaje_id, creado_en);
 -- Pasaporte del usuario, del año más reciente al más antiguo
 CREATE INDEX IF NOT EXISTS sellos_usuario_idx ON public.sellos (usuario_id, anio DESC, elegido_en);
+
+-- Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un usuario (endpoint del servicio
+-- push del navegador y sus claves). Un mismo endpoint solo puede estar una vez. Al borrar el perfil se borran
+CREATE TABLE IF NOT EXISTS public.suscripciones_push (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_id uuid NOT NULL REFERENCES public.perfiles (id) ON DELETE CASCADE,
+  endpoint text NOT NULL UNIQUE,
+  p256dh text NOT NULL,
+  auth text NOT NULL,
+  creado_en timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS suscripciones_push_usuario_idx ON public.suscripciones_push (usuario_id);

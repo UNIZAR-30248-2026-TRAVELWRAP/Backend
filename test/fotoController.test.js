@@ -12,6 +12,10 @@ const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0x24, 0, 0, 0]), Buffer.from('WEBPVP8 ')]);
 const PDF = Buffer.from('%PDF-1.4\n%contenido de prueba');
+const MP4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(8)]);
+const MOV = Buffer.concat([Buffer.from([0, 0, 0, 0x14]), Buffer.from('ftypqt  '), Buffer.alloc(8)]);
+const WEBM = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f]), Buffer.from('B\x82\x84webm'), Buffer.alloc(8)]);
+const MATROSKA = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f]), Buffer.from('B\x82\x88matroska'), Buffer.alloc(8)]);
 
 const crearRes = () => ({
   codigo: null,
@@ -45,6 +49,20 @@ const esperarError = (res, codigo, codigoError) => {
 };
 
 afterEach(() => mock.restoreAll());
+
+describe('detectarTipo (vídeos)', () => {
+  it('reconoce MP4, MOV y WebM por su contenido', () => {
+    assert.equal(fotoController.detectarTipo(MP4), 'video/mp4');
+    assert.equal(fotoController.detectarTipo(MOV), 'video/quicktime');
+    assert.equal(fotoController.detectarTipo(WEBM), 'video/webm');
+  });
+
+  it('rechaza un Matroska, un contenedor sin ftyp y los archivos demasiado cortos', () => {
+    assert.equal(fotoController.detectarTipo(MATROSKA), null);
+    assert.equal(fotoController.detectarTipo(Buffer.concat([Buffer.alloc(4), Buffer.from('moov'), Buffer.alloc(8)])), null);
+    assert.equal(fotoController.detectarTipo(Buffer.from([0, 0, 0, 0x18, 0x66, 0x74])), null);
+  });
+});
 
 describe('detectarTipo (fotos)', () => {
   it('reconoce JPEG, PNG y WebP por sus primeros bytes', () => {
@@ -131,13 +149,85 @@ describe('POST /viajes/:viajeId/fotos (subir)', () => {
   });
 });
 
+describe('POST /viajes/:viajeId/fotos (vídeos y límites)', () => {
+  it('sube un vídeo reconocido por su contenido y lo llama «Vídeo» si no tiene nombre', async () => {
+    const subir = mock.method(fotoService, 'subir', async () => ({ estado: 'ok', foto: { id: 'v1' } }));
+    const res = await llamarSubir({ file: { buffer: MP4, originalname: '' } });
+
+    assert.equal(res.codigo, 201);
+    assert.equal(subir.mock.calls[0].arguments[3].tipoMime, 'video/mp4');
+    assert.equal(subir.mock.calls[0].arguments[3].nombre, 'Vídeo');
+  });
+
+  it('una foto de más de 8 MB se rechaza aunque un vídeo del mismo tamaño se admita', async () => {
+    const subir = mock.method(fotoService, 'subir', async () => ({ estado: 'ok', foto: { id: 'x' } }));
+    const grande = (cabecera) => Buffer.concat([cabecera, Buffer.alloc(8_000_001, 1)]);
+
+    esperarError(await llamarSubir({ file: { buffer: grande(JPEG), originalname: 'a.jpg' } }), 400, 'archivo_demasiado_grande');
+    assert.equal(subir.mock.calls.length, 0);
+    assert.equal((await llamarSubir({ file: { buffer: grande(MP4), originalname: 'a.mp4' } })).codigo, 201);
+  });
+
+  it('devuelve 413 si el viaje ha llegado al límite de almacenamiento', async () => {
+    mock.method(fotoService, 'subir', async () => ({ estado: 'almacenamiento_lleno', usado_bytes: 199_999_999, limite_bytes: 200_000_000 }));
+    esperarError(await llamarSubir({ file: { buffer: MP4, originalname: 'a.mp4' } }), 413, 'almacenamiento_lleno');
+  });
+});
+
+describe('DELETE /viajes/:viajeId/fotos/:fotoId (eliminar)', () => {
+  const FOTO_ID = '5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f';
+  const llamarEliminar = async ({ viajeId = VIAJE_ID, fotoId = FOTO_ID } = {}) => {
+    const res = { ...crearRes(), end() { this.terminado = true; return this; } };
+    await fotoController.eliminar({ params: { viajeId, fotoId }, usuario: USUARIO, supabase: {} }, res);
+    return res;
+  };
+
+  it('borra la foto y devuelve 204', async () => {
+    const eliminar = mock.method(fotoService, 'eliminar', async () => ({ estado: 'ok' }));
+    const res = await llamarEliminar();
+
+    assert.equal(res.codigo, 204);
+    assert.equal(res.terminado, true);
+    assert.deepEqual(eliminar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID, FOTO_ID]);
+  });
+
+  it('devuelve 400 si algún identificador no es un UUID', async () => {
+    const eliminar = mock.method(fotoService, 'eliminar', async () => ({ estado: 'ok' }));
+    esperarError(await llamarEliminar({ viajeId: 'no-uuid' }), 400, 'datos_invalidos');
+    esperarError(await llamarEliminar({ fotoId: 'no-uuid' }), 400, 'datos_invalidos');
+    assert.equal(eliminar.mock.calls.length, 0);
+  });
+
+  it('devuelve 404 si el viaje o la foto no existen, 409 si el viaje no está activo y 502 si Supabase falla', async () => {
+    mock.method(fotoService, 'eliminar', async () => ({ estado: 'no_existe' }));
+    esperarError(await llamarEliminar(), 404, 'viaje_no_encontrado');
+    mock.restoreAll();
+    mock.method(fotoService, 'eliminar', async () => ({ estado: 'foto_no_existe' }));
+    esperarError(await llamarEliminar(), 404, 'foto_no_encontrada');
+    mock.restoreAll();
+    mock.method(fotoService, 'eliminar', async () => ({ estado: 'no_activo' }));
+    esperarError(await llamarEliminar(), 409, 'viaje_no_activo');
+    mock.restoreAll();
+    mock.method(fotoService, 'eliminar', async () => ({ error: { code: 'XX000' } }));
+    esperarError(await llamarEliminar(), 502, 'error_foto');
+  });
+
+  it('devuelve 500 si el servicio lanza una excepción', async () => {
+    mock.method(fotoService, 'eliminar', async () => {
+      throw new Error('boom');
+    });
+    esperarError(await llamarEliminar(), 500, 'error_interno');
+  });
+});
+
 describe('GET /viajes/:viajeId/fotos (listar)', () => {
   it('devuelve 200 con las fotos', async () => {
     const fotos = [{ id: 'f1', url: 'https://storage/a' }];
-    mock.method(fotoService, 'listar', async () => ({ estado: 'ok', fotos }));
+    const almacenamiento = { usado_bytes: 1500, limite_bytes: 200_000_000 };
+    mock.method(fotoService, 'listar', async () => ({ estado: 'ok', fotos, almacenamiento }));
     const res = await llamarListar();
     assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { fotos });
+    assert.deepEqual(res.cuerpo, { fotos, almacenamiento });
   });
 
   it('devuelve 400 si el identificador del viaje no es un UUID', async () => {
@@ -162,7 +252,7 @@ describe('GET /viajes/:viajeId/fotos (listar)', () => {
   });
 });
 
-describe('middleware de subida de fotos (límite de 8 MB)', () => {
+describe('middleware de subida (límite de 50 MB por archivo)', () => {
   const enviar = async (archivo, campo = 'archivo') => {
     const app = express();
     app.post('/', recibirFoto, (req, res) => res.status(200).json({ bytes: req.file.size, nombre: req.file.originalname }));
@@ -185,14 +275,14 @@ describe('middleware de subida de fotos (límite de 8 MB)', () => {
     assert.equal(cuerpo.nombre, 'ñandú.jpg');
   });
 
-  it('rechaza con 400 archivo_demasiado_grande una foto de más de 8 MB', async () => {
-    const { estado, cuerpo } = await enviar(Buffer.alloc(8_000_001, 1));
+  it('rechaza con 400 archivo_demasiado_grande un archivo de más de 50 MB', async () => {
+    const { estado, cuerpo } = await enviar(Buffer.alloc(50_000_001, 1));
     assert.equal(estado, 400);
     assert.equal(cuerpo.error.codigo, 'archivo_demasiado_grande');
   });
 
-  it('acepta una foto de exactamente 8 MB', async () => {
-    const { estado } = await enviar(Buffer.alloc(8_000_000, 1));
+  it('acepta un archivo de 9 MB, que ya pasa el límite de las fotos pero no el de los vídeos', async () => {
+    const { estado } = await enviar(Buffer.alloc(9_000_000, 1));
     assert.equal(estado, 200);
   });
 

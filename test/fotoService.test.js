@@ -9,6 +9,7 @@ const DATOS = { nombre: 'coliseo.jpg', buffer: Buffer.from([0xff, 0xd8, 0xff, 0x
 
 const clienteFalso = ({
   respuesta = { data: null, error: null },
+  ocupado = { data: [], error: null },
   subida = { error: null },
   firmadas = { data: [], error: null },
   firmada = { data: { signedUrl: 'https://storage/firmada' }, error: null },
@@ -23,7 +24,10 @@ const clienteFalso = ({
       {},
       {
         get: (_, metodo) => {
-          if (metodo === 'then') return (resolver, rechazar) => Promise.resolve(respuesta).then(resolver, rechazar);
+          if (metodo === 'then') {
+            const sumaDeBytes = consulta.operaciones.some(([m, columna]) => m === 'select' && columna === 'tamano_bytes');
+            return (resolver, rechazar) => Promise.resolve(sumaDeBytes ? ocupado : respuesta).then(resolver, rechazar);
+          }
           return (...args) => {
             consulta.operaciones.push([metodo, ...args]);
             return encadenable;
@@ -83,8 +87,9 @@ describe('fotoService.subir', () => {
     assert.deepEqual(subida.opciones, { contentType: 'image/jpeg', upsert: false });
     assert.deepEqual(storage.firmada, [{ bucket: 'fotos', ruta: subida.ruta, segundos: 3600 }]);
 
-    const insert = consultas[0].operaciones.find(([metodo]) => metodo === 'insert')[1];
-    assert.equal(consultas[0].tabla, 'fotos');
+    const registro = consultas.find((consulta) => consulta.operaciones.some(([metodo]) => metodo === 'insert'));
+    const insert = registro.operaciones.find(([metodo]) => metodo === 'insert')[1];
+    assert.equal(registro.tabla, 'fotos');
     assert.equal(insert.ruta, subida.ruta);
     assert.equal(insert.nombre, DATOS.nombre);
     assert.equal(insert.tamano_bytes, DATOS.buffer.length);
@@ -142,7 +147,7 @@ describe('fotoService.subir', () => {
     const error = { message: 'bucket' };
     const { cliente, consultas } = clienteFalso({ subida: { error } });
     assert.deepEqual(await fotoService.subir(cliente, USUARIO_ID, VIAJE_ID, DATOS), { error });
-    assert.equal(consultas.length, 0);
+    assert.ok(!consultas.some((consulta) => consulta.operaciones.some(([metodo]) => metodo === 'insert')));
   });
 
   it('devuelve no_existe si el viaje no existe, sin subir nada', async () => {
@@ -167,10 +172,119 @@ describe('fotoService.subir', () => {
   });
 });
 
+describe('fotoService.subir (límite de almacenamiento y vídeos)', () => {
+  const grande = (bytes) => Buffer.alloc(bytes, 1);
+
+  it('rechaza con almacenamiento_lleno si la foto no cabe en lo que queda, sin subir nada', async () => {
+    viajeActivo();
+    const { cliente, storage } = clienteFalso({ ocupado: { data: [{ tamano_bytes: 150_000_000 }, { tamano_bytes: 49_999_999 }], error: null } });
+
+    const resultado = await fotoService.subir(cliente, USUARIO_ID, VIAJE_ID, DATOS);
+
+    assert.deepEqual(resultado, { estado: 'almacenamiento_lleno', usado_bytes: 199_999_999, limite_bytes: 200_000_000 });
+    assert.equal(storage.subidas.length, 0);
+  });
+
+  it('acepta el archivo que llena el almacenamiento justo hasta el límite', async () => {
+    viajeActivo();
+    const fila = { id: 'f1', nombre: 'a.mp4', tipo_mime: 'video/mp4' };
+    const { cliente } = clienteFalso({
+      ocupado: { data: [{ tamano_bytes: 150_000_000 }], error: null },
+      respuesta: { data: fila, error: null },
+    });
+
+    const resultado = await fotoService.subir(cliente, USUARIO_ID, VIAJE_ID, { nombre: 'a.mp4', buffer: grande(50_000_000), tipoMime: 'video/mp4' });
+
+    assert.equal(resultado.estado, 'ok');
+  });
+
+  it('devuelve el error si no se puede calcular el espacio usado, sin subir nada', async () => {
+    viajeActivo();
+    const error = { code: 'XX000' };
+    const { cliente, storage } = clienteFalso({ ocupado: { data: null, error } });
+
+    assert.deepEqual(await fotoService.subir(cliente, USUARIO_ID, VIAJE_ID, DATOS), { error });
+    assert.equal(storage.subidas.length, 0);
+  });
+
+  it('guarda los vídeos con su extensión según el tipo', async () => {
+    viajeActivo();
+    const { cliente, storage } = clienteFalso({ respuesta: { data: { id: 'v' }, error: null } });
+    for (const tipoMime of ['video/mp4', 'video/webm', 'video/quicktime']) {
+      await fotoService.subir(cliente, USUARIO_ID, VIAJE_ID, { nombre: 'v', buffer: grande(10), tipoMime });
+    }
+
+    assert.deepEqual(
+      storage.subidas.map((s) => s.ruta.split('.').pop()),
+      ['mp4', 'webm', 'mov'],
+    );
+    assert.deepEqual(
+      storage.subidas.map((s) => s.opciones.contentType),
+      ['video/mp4', 'video/webm', 'video/quicktime'],
+    );
+  });
+});
+
+describe('fotoService.eliminar', () => {
+  const FOTO_ID = '5b1f0c2e-8a7d-4c3b-9e6f-2d4a1b3c5e7f';
+
+  it('borra la fila de este viaje y después el archivo de Storage', async () => {
+    viajeActivo();
+    const { cliente, storage, consultas } = clienteFalso({ respuesta: { data: [{ ruta: `${VIAJE_ID}/a.jpg` }], error: null } });
+
+    assert.deepEqual(await fotoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { estado: 'ok' });
+
+    const operaciones = consultas[0].operaciones;
+    assert.ok(operaciones.some(([m]) => m === 'delete'));
+    assert.deepEqual(operaciones.filter(([m]) => m === 'eq'), [['eq', 'id', FOTO_ID], ['eq', 'viaje_id', VIAJE_ID]]);
+    assert.deepEqual(storage.borrados, [{ bucket: 'fotos', rutas: [`${VIAJE_ID}/a.jpg`] }]);
+  });
+
+  it('si falla el borrado del archivo, la foto ya no existe para los miembros y se devuelve ok', async () => {
+    viajeActivo();
+    const { cliente } = clienteFalso({
+      respuesta: { data: [{ ruta: `${VIAJE_ID}/a.jpg` }], error: null },
+      remove: async () => {
+        throw new Error('storage caído');
+      },
+    });
+
+    assert.deepEqual(await fotoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { estado: 'ok' });
+  });
+
+  it('devuelve foto_no_existe si no se borra ninguna fila (otro viaje, otro id o la política lo impide)', async () => {
+    viajeActivo();
+    const { cliente, storage } = clienteFalso({ respuesta: { data: [], error: null } });
+
+    assert.deepEqual(await fotoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { estado: 'foto_no_existe' });
+    assert.equal(storage.borrados.length, 0);
+  });
+
+  it('devuelve no_existe y no_activo sin borrar nada', async () => {
+    const { cliente, consultas } = clienteFalso();
+    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
+    assert.deepEqual(await fotoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { estado: 'no_existe' });
+    mock.restoreAll();
+    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
+    assert.deepEqual(await fotoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { estado: 'no_activo' });
+    assert.equal(consultas.length, 0);
+  });
+
+  it('devuelve el error si falla la comprobación del viaje o el borrado de la fila', async () => {
+    const error = { code: 'XX000' };
+    mock.method(viajeService, 'obtener', async () => ({ error }));
+    assert.deepEqual(await fotoService.eliminar(clienteFalso().cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { error });
+    mock.restoreAll();
+    viajeActivo();
+    const { cliente } = clienteFalso({ respuesta: { data: null, error } });
+    assert.deepEqual(await fotoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, FOTO_ID), { error });
+  });
+});
+
 describe('fotoService.listar', () => {
   const filas = [
-    { id: 'f2', nombre: 'trevi.jpg', ruta: `${VIAJE_ID}/b.jpg`, creado_en: '2027-05-13T10:00:00Z' },
-    { id: 'f1', nombre: 'coliseo.jpg', ruta: `${VIAJE_ID}/a.jpg`, creado_en: '2027-05-12T10:00:00Z' },
+    { id: 'f2', nombre: 'trevi.jpg', ruta: `${VIAJE_ID}/b.jpg`, tamano_bytes: 300_000, creado_en: '2027-05-13T10:00:00Z' },
+    { id: 'f1', nombre: 'coliseo.jpg', ruta: `${VIAJE_ID}/a.jpg`, tamano_bytes: 1_200_000, creado_en: '2027-05-12T10:00:00Z' },
   ];
 
   it('pide las fotos del viaje de la más reciente a la más antigua y las devuelve con su URL, sin la ruta', async () => {
@@ -197,6 +311,7 @@ describe('fotoService.listar', () => {
       ],
     );
     assert.ok(resultado.fotos.every((foto) => !('ruta' in foto)));
+    assert.deepEqual(resultado.almacenamiento, { usado_bytes: 1_500_000, limite_bytes: 200_000_000 });
     assert.deepEqual(consultas[0].operaciones.find(([m]) => m === 'eq'), ['eq', 'viaje_id', VIAJE_ID]);
     assert.deepEqual(consultas[0].operaciones.find(([m]) => m === 'order'), ['order', 'creado_en', { ascending: false }]);
     assert.deepEqual(storage.firmadas, [
@@ -207,7 +322,11 @@ describe('fotoService.listar', () => {
   it('sin fotos devuelve una lista vacía sin pedir URLs', async () => {
     viajeActivo();
     const { cliente, storage } = clienteFalso({ respuesta: { data: [], error: null } });
-    assert.deepEqual(await fotoService.listar(cliente, USUARIO_ID, VIAJE_ID), { estado: 'ok', fotos: [] });
+    assert.deepEqual(await fotoService.listar(cliente, USUARIO_ID, VIAJE_ID), {
+      estado: 'ok',
+      fotos: [],
+      almacenamiento: { usado_bytes: 0, limite_bytes: 200_000_000 },
+    });
     assert.equal(storage.firmadas.length, 0);
   });
 

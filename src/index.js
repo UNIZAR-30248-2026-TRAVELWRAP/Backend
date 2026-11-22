@@ -8,12 +8,15 @@ const invitationRoutes = require('./routes/invitationRoutes');
 const viajeRoutes = require('./routes/viajeRoutes');
 const votacionRoutes = require('./routes/votacionRoutes');
 const actividadRoutes = require('./routes/actividadRoutes');
+const puntoInteresRoutes = require('./routes/puntoInteresRoutes');
 const direccionRoutes = require('./routes/direccionRoutes');
 const rutaRoutes = require('./routes/rutaRoutes');
 const fotoRoutes = require('./routes/fotoRoutes');
 const resumenRoutes = require('./routes/resumenRoutes');
 const votacionesSocket = require('./sockets/votacionesSocket');
 const chatSocket = require('./sockets/chatSocket');
+const notificacionesSocket = require('./sockets/notificacionesSocket');
+const notificacionRoutes = require('./routes/notificacionRoutes');
 const { comprobarToken } = require('./middleware/authMiddleware');
 const viajeService = require('./services/viajeService');
 const gastoRoutes = require('./routes/gastoRoutes');
@@ -60,14 +63,8 @@ chatSocket.configurar(chatNamespace, { comprobarToken, esMiembro: esMiembroDelVi
 // Votaciones en tiempo real: avisa a los miembros de un viaje cuando cambia una de sus votaciones
 votacionesSocket.configurar(votacionesNamespace, { comprobarToken, esMiembro: esMiembroDelViaje });
 
-// Lógica básica para las notificaciones
-notificacionesNamespace.on('connection', (socket) => {
-  console.log(`Usuario conectado al namespace /notificaciones [ID: ${socket.id}]`);
-  
-  socket.on('disconnect', () => {
-    console.log(`Usuario desconectado de /notificaciones [ID: ${socket.id}]`);
-  });
-});
+// Avisos de votaciones, gastos, tareas y mensajes nuevos: cada usuario recibe los de sus viajes
+notificacionesSocket.configurar(notificacionesNamespace, { comprobarToken });
 
 // --- Middlewares globales ---
 // Solo el frontend puede llamar a la API REST. CORS_ORIGINS admite varios orígenes separados por comas;
@@ -87,6 +84,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/viajes', viajeRoutes);
 app.use('/api/viajes/:viajeId/votaciones', votacionRoutes);
 app.use('/api/viajes/:viajeId/actividades', actividadRoutes);
+app.use('/api/viajes/:viajeId/puntos-de-interes', puntoInteresRoutes);
 app.use('/api/viajes/:viajeId/ruta', rutaRoutes);
 app.use('/api/viajes/:viajeId/gastos', gastoRoutes);
 app.use('/api/viajes/:viajeId/documentos', documentoRoutes);
@@ -95,6 +93,7 @@ app.use('/api/viajes/:viajeId/mensajes', mensajeRoutes);
 app.use('/api/viajes/:viajeId/playlist', playlistRoutes);
 app.use('/api/viajes/:viajeId/sello', selloRoutes);
 app.use('/api/perfil', perfilRoutes);
+app.use('/api/notificaciones', notificacionRoutes);
 app.use('/api/viajes/:viajeId/fotos', fotoRoutes);
 app.use('/api/viajes/:viajeId/resumen', resumenRoutes);
 app.use('/api/direcciones', direccionRoutes);

@@ -164,6 +164,30 @@
     {
       "key": "avatarUrlPerfil",
       "value": ""
+    },
+    {
+      "key": "viajeIdPortada",
+      "value": ""
+    },
+    {
+      "key": "fotoIdFoto",
+      "value": ""
+    },
+    {
+      "key": "fotoIdVideo",
+      "value": ""
+    },
+    {
+      "key": "viajeIdPunto",
+      "value": ""
+    },
+    {
+      "key": "puntoIdTrevi",
+      "value": ""
+    },
+    {
+      "key": "puntoIdMirador",
+      "value": ""
     }
   ],
   "item": [
@@ -7864,6 +7888,539 @@
       ]
     },
     {
+      "name": "Portada",
+      "item": [
+        {
+          "name": "Crear viaje para la portada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Roma 2027\",\n  \"presupuesto\": 850,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Sin portada', () => pm.expect(pm.response.json().portada_url).to.eql(null));",
+                  "pm.collectionVariables.set('viajeIdPortada', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una portada JPEG",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Devuelve la URL firmada de la portada', () => pm.expect(body.portada_url).to.be.a('string'));",
+                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('portada_ruta'));",
+                  "pm.test('La URL de la portada se puede abrir', () => {",
+                  "  pm.sendRequest(body.portada_url, (error, respuesta) => pm.expect(respuesta).to.have.property('code', 200));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambiar la portada por una imagen PNG",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.png"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve la nueva URL', () => pm.expect(pm.response.json().portada_url).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener el viaje con su portada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Incluye la portada', () => pm.expect(pm.response.json().portada_url).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los viajes con su portada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El viaje trae su portada', () => {",
+                  "  const viaje = pm.response.json().viajes.find((v) => v.id === pm.collectionVariables.get('viajeIdPortada'));",
+                  "  pm.expect(viaje.portada_url).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la portada",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('El viaje queda sin portada', () => pm.expect(pm.response.json().portada_url).to.eql(null));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la portada de un viaje que no la tiene",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sigue sin portada', () => pm.expect(pm.response.json().portada_url).to.eql(null));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un archivo de texto con extensión .jpg",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/no_es_una_foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código tipo_no_permitido', () => pm.expect(pm.response.json().error.codigo).to.eql('tipo_no_permitido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una portada sin archivo",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una portada con identificador de viaje no válido",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una portada sin sesión",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una portada a un viaje que no existe",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la portada con identificador de viaje no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/portada"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la portada sin sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la portada de un viaje que no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/portada"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar el viaje de la portada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/finalizar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir una portada a un viaje finalizado",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la portada de un viaje finalizado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPortada}}/portada"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Documentos",
       "item": [
         {
@@ -10491,7 +11048,8 @@
                   "  pm.expect(body.subido_por).to.be.a('string');",
                   "});",
                   "pm.test('Devuelve una URL firmada', () => pm.expect(body.url).to.match(/^https?:\\/\\//));",
-                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));"
+                  "pm.test('No devuelve la ruta interna del archivo', () => pm.expect(body).to.not.have.property('ruta'));",
+                  "pm.collectionVariables.set('fotoIdFoto', body.id);"
                 ]
               }
             }
@@ -10635,6 +11193,245 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "pm.test('Es una imagen', () => pm.expect(pm.response.headers.get('Content-Type')).to.match(/^image\\//));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subir un vídeo MP4",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/video.mp4"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('Guarda el nombre y el tipo reconocido por su contenido', () => {",
+                  "  pm.expect(body.nombre).to.eql('video.mp4');",
+                  "  pm.expect(body.tipo_mime).to.eql('video/mp4');",
+                  "});",
+                  "pm.collectionVariables.set('fotoIdVideo', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El listado incluye el vídeo e indica el almacenamiento usado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const { fotos, almacenamiento } = pm.response.json();",
+                  "pm.test('El vídeo es el más reciente', () => pm.expect(fotos[0].tipo_mime).to.eql('video/mp4'));",
+                  "pm.test('Indica el espacio usado y el límite', () => {",
+                  "  pm.expect(almacenamiento.usado_bytes).to.eql(fotos.reduce((total, f) => total + f.tamano_bytes, 0));",
+                  "  pm.expect(almacenamiento.limite_bytes).to.eql(200000000);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar el vídeo",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdVideo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El vídeo borrado ya no sale en el listado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Quedan las tres fotos', () => pm.expect(pm.response.json().fotos).to.have.length(3));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un vídeo que ya no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdVideo}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código foto_no_encontrada', () => pm.expect(pm.response.json().error.codigo).to.eql('foto_no_encontrada'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar con identificador de foto no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/no-es-un-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar con identificador de viaje no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una foto sin sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar una foto de un viaje que no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
                 ]
               }
             }
@@ -10975,6 +11772,31 @@
           ]
         },
         {
+          "name": "Borrar una foto de un viaje finalizado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/fotos/{{fotoIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Listar las fotos de un viaje finalizado (solo lectura)",
           "request": {
             "method": "GET",
@@ -11000,7 +11822,31 @@
           ]
         },
         {
-          "name": "Eliminar el viaje de las fotos",
+          "name": "Archivar el viaje de las fotos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar el viaje de las fotos (el último miembro borra también los archivos)",
           "request": {
             "method": "DELETE",
             "header": [
@@ -11010,6 +11856,894 @@
               }
             ],
             "url": "{{baseUrl}}/viajes/{{viajeIdFoto}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Puntos de interés",
+      "item": [
+        {
+          "name": "Crear viaje para los puntos de interés",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Puntos de Roma\",\n  \"presupuesto\": 600,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('viajeIdPunto', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los puntos de un viaje sin puntos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Lista vacía', () => pm.expect(pm.response.json()).to.eql({ puntos_interes: [] }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con nombre, nota, tipo y lugar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\",\n  \"direccion\": \"Fontana di Trevi, Piazza di Trevi, Roma\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const p = pm.response.json();",
+                  "pm.test('Devuelve el punto creado', () => { pm.expect(p.nombre).to.eql('Fontana di Trevi'); pm.expect(p.nota).to.eql('Ir temprano para evitar colas'); pm.expect(p.categoria).to.eql('cultura'); pm.expect(p.latitud).to.eql(41.900932); pm.expect(p.longitud).to.eql(12.483313); pm.expect(p.lugar_externo_id).to.eql('way/24146600'); pm.expect(p.direccion).to.eql('Fontana di Trevi, Piazza di Trevi, Roma'); });",
+                  "pm.test('Queda a nombre de quien lo añade', () => pm.expect(p.creado_por).to.be.a('string'));",
+                  "pm.collectionVariables.set('puntoIdTrevi', p.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto solo con nombre y ubicación",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"  Mirador del Gianicolo  \",\n  \"latitud\": 41.8916,\n  \"longitud\": 12.4614\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "const p = pm.response.json();",
+                  "pm.test('Nombre limpio y datos opcionales vacíos', () => { pm.expect(p.nombre).to.eql('Mirador del Gianicolo'); pm.expect(p.nota).to.eql(null); pm.expect(p.categoria).to.eql(null); pm.expect(p.lugar_externo_id).to.eql(null); pm.expect(p.direccion).to.eql(null); });",
+                  "pm.collectionVariables.set('puntoIdMirador', p.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los puntos del más antiguo al más reciente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "const lista = pm.response.json().puntos_interes;",
+                  "pm.test('Salen los dos en orden de creación', () => { pm.expect(lista.map((p) => p.nombre)).to.eql(['Fontana di Trevi', 'Mirador del Gianicolo']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto sin nombre",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"   \",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"El nombre es obligatorio y tiene un máximo de 120 caracteres\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con un nombre de más de 120 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"El nombre es obligatorio y tiene un máximo de 120 caracteres\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con una nota de más de 300 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La nota debe ser un texto de 300 caracteres como máximo\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con una dirección de más de 300 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\",\n  \"direccion\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La dirección debe ser un texto de 300 caracteres como máximo\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con un tipo desconocido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"museo\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La categoría debe ser comida, cultura, transporte, alojamiento u otro\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto sin latitud",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sin latitud\",\n  \"longitud\": 12.48\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La latitud es obligatoria y debe ser un número entre -90 y 90\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con la longitud fuera de rango",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 181,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La longitud es obligatoria y debe ser un número entre -180 y 180\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con identificador de viaje no válido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"El identificador del viaje no es válido\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto sin sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto a un viaje que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar puntos con identificador de viaje no válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar puntos sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar puntos de un viaje que no existe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un punto",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes/{{puntoIdMirador}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El punto borrado ya no sale en el listado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Solo queda el otro', () => pm.expect(pm.response.json().puntos_interes.map((p) => p.nombre)).to.eql(['Fontana di Trevi']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un punto que ya no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes/{{puntoIdMirador}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código punto_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('punto_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar con identificador de punto no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes/no-es-un-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar con identificador de viaje no válido",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/no-es-un-uuid/puntos-de-interes/{{puntoIdTrevi}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un punto sin sesión",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes/{{puntoIdTrevi}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un punto de un viaje que no existe",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/00000000-0000-4000-8000-000000000000/puntos-de-interes/{{puntoIdTrevi}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar el viaje de los puntos de interés",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/finalizar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto a un viaje finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Borrar un punto de un viaje finalizado",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes/{{puntoIdTrevi}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar los puntos de un viaje finalizado (solo lectura)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sigue el punto', () => pm.expect(pm.response.json().puntos_interes).to.have.length(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Archivar el viaje de los puntos de interés",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/archivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar el viaje de los puntos de interés (se borran con él)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}"
           },
           "event": [
             {
@@ -12322,6 +14056,171 @@
                   "pm.test('Código viaje_no_encontrado', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado');",
                   "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Notificaciones",
+      "item": [
+        {
+          "name": "Obtener la clave pública",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/notificaciones/clave-publica"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200 con la clave, o 503 si no hay push', () => pm.expect([200, 503]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) pm.test('Lleva la clave', () => pm.expect(pm.response.json().clave).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activar las notificaciones push",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/notificaciones/suscripciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endpoint\": \"https://fcm.googleapis.com/fcm/send/ejemplo\",\n  \"keys\": {\n    \"p256dh\": \"BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM\",\n    \"auth\": \"tBHItJI5svbpez7KI4CCXg\"\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Devuelve el endpoint', () => pm.expect(pm.response.json().endpoint).to.eql('https://fcm.googleapis.com/fcm/send/ejemplo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suscripción sin claves",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/notificaciones/suscripciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endpoint\": \"https://fcm.googleapis.com/fcm/send/ejemplo\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desactivar las notificaciones push",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/notificaciones/suscripciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"endpoint\": \"https://fcm.googleapis.com/fcm/send/ejemplo\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Desactivar sin endpoint",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/notificaciones/suscripciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
                 ]
               }
             }

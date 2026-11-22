@@ -1,4 +1,5 @@
 const tareaService = require('../services/tareaService');
+const { avisarEvento } = require('../utils/avisosViaje');
 const { UUID_REGEX, CHECK_VIOLATION, responderError } = require('../utils/validacion');
 
 const MAX_TEXTO = 200;
@@ -31,8 +32,9 @@ const validarTexto = (texto) => {
   return { valor: recortado };
 };
 
+// null es válido: la tarea queda sin asignar
 const validarResponsable = (responsableId) =>
-  typeof responsableId === 'string' && UUID_REGEX.test(responsableId)
+  responsableId === null || (typeof responsableId === 'string' && UUID_REGEX.test(responsableId))
     ? { valor: responsableId }
     : { error: 'El responsable no es válido' };
 
@@ -82,7 +84,8 @@ const crear = async (req, res) => {
 
   const texto = validarTexto(req.body?.texto);
   if (texto.error) return responderError(res, 400, 'datos_invalidos', texto.error);
-  const responsable = validarResponsable(req.body?.responsable_id);
+  // Sin responsable_id (o null) la tarea se crea sin asignar
+  const responsable = validarResponsable(req.body?.responsable_id ?? null);
   if (responsable.error) return responderError(res, 400, 'datos_invalidos', responsable.error);
 
   try {
@@ -98,6 +101,7 @@ const crear = async (req, res) => {
       return responderError(res, 502, 'error_tarea', 'No se ha podido crear la tarea');
     }
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido crear la tarea');
+    void avisarEvento(req.supabase, req.usuario.id, viajeId, 'tarea', resultado.tarea.texto);
     return res.status(201).json(resultado.tarea);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
