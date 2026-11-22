@@ -406,6 +406,16 @@ describe('viajeService.eliminar', () => {
     assert.deepEqual(cliente.llamadasRpc[1], ['borrar_viaje', { p_viaje_id: VIAJE_ID }]);
   });
 
+  it('si es el último borra también la portada del viaje', async () => {
+    const portadas = [`${VIAJE_ID}/p.jpg`];
+    const respuesta = { data: { estado: 'ok', ultimo: true, documentos: [], fotos: [], portadas }, error: null };
+    const cliente = clienteFalso([archivado(), respuesta, { data: true, error: null }]);
+
+    assert.deepEqual(await viajeService.eliminar(cliente, USUARIO, VIAJE_ID), { estado: 'ok' });
+    assert.deepEqual(cliente.llamadasStorage, [['portadas', portadas]]);
+    assert.deepEqual(cliente.orden, ['rpc:eliminar_viaje', 'storage:portadas', 'rpc:borrar_viaje']);
+  });
+
   it('con listas de rutas vacías no llama a Storage y borra el viaje', async () => {
     const cliente = clienteFalso([archivado(), ultimo([], []), { data: true, error: null }]);
 
@@ -513,5 +523,232 @@ describe('viajeService.abandonar', () => {
 
     const vacia = clienteFalso([{ data: null, error: null }]);
     assert.ok((await viajeService.abandonar(vacia, VIAJE_ID)).error);
+  });
+});
+
+// Cliente falso con Storage para las portadas: upload, createSignedUrls y remove
+const clienteConPortadas = (respuestas, { subida = { error: null }, borrado = 'ok' } = {}) => {
+  const cliente = clienteFalso(respuestas);
+  const storage = { subidas: [], firmas: [], borrados: [] };
+  cliente.almacen = storage;
+  cliente.storage = {
+    from: (bucket) => ({
+      upload: async (ruta, contenido, opciones) => {
+        storage.subidas.push({ bucket, ruta, contenido, opciones });
+        cliente.orden.push('storage:upload');
+        return subida;
+      },
+      createSignedUrls: async (rutas, segundos) => {
+        storage.firmas.push({ bucket, rutas, segundos });
+        return { data: rutas.map((ruta) => ({ path: ruta, signedUrl: `https://storage.test/${ruta}?token=abc`, error: null })), error: null };
+      },
+      remove: async (rutas) => {
+        storage.borrados.push({ bucket, rutas });
+        cliente.orden.push('storage:remove');
+        if (borrado === 'falla') throw new Error('fallo de Storage');
+        return { data: [], error: null };
+      },
+    }),
+  };
+  return cliente;
+};
+
+const RUTA_ANTERIOR = `${VIAJE_ID}/anterior.jpg`;
+const archivoPortada = { buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0]), tipoMime: 'image/jpeg' };
+const rutaGuardada = (ruta) => ({ data: { portada_ruta: ruta }, error: null });
+const funcionOk = { data: true, error: null };
+
+describe('viajeService.subirPortada', () => {
+  it('la sube a la carpeta del viaje, la apunta con cambiar_portada y devuelve el viaje con su URL firmada', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(null), funcionOk, encontrado({ portada_ruta: 'x' })]);
+
+    const resultado = await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada);
+
+    assert.equal(resultado.estado, 'ok');
+    const [subida] = cliente.almacen.subidas;
+    assert.equal(subida.bucket, 'portadas');
+    assert.match(subida.ruta, new RegExp(`^${VIAJE_ID}/[0-9a-f-]{36}\\.jpg$`));
+    assert.deepEqual(subida.opciones, { contentType: 'image/jpeg', upsert: false });
+    assert.deepEqual(cliente.llamadasRpc, [['cambiar_portada', { p_viaje_id: VIAJE_ID, p_ruta: subida.ruta }]]);
+    assert.equal(cliente.almacen.borrados.length, 0);
+    assert.equal(resultado.viaje.portada_url, 'https://storage.test/x?token=abc');
+    assert.equal('portada_ruta' in resultado.viaje, false);
+  });
+
+  it('también la puede subir un miembro que no es el creador', async () => {
+    const cliente = clienteConPortadas([encontrado({}, 'miembro'), rutaGuardada(null), funcionOk, encontrado({}, 'miembro')]);
+
+    const resultado = await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.rol, 'miembro');
+  });
+
+  it('guarda un PNG con extensión png', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(null), funcionOk, encontrado()]);
+
+    await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, { ...archivoPortada, tipoMime: 'image/png' });
+
+    assert.match(cliente.almacen.subidas[0].ruta, /\.png$/);
+  });
+
+  it('al cambiar la portada borra el archivo anterior, después de apuntar el nuevo', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(RUTA_ANTERIOR), funcionOk, encontrado()]);
+
+    await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada);
+
+    assert.deepEqual(cliente.almacen.borrados, [{ bucket: 'portadas', rutas: [RUTA_ANTERIOR] }]);
+    assert.deepEqual(cliente.orden, ['storage:upload', 'rpc:cambiar_portada', 'storage:remove']);
+  });
+
+  it('si no puede borrar el archivo anterior, la portada nueva se guarda igualmente', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(RUTA_ANTERIOR), funcionOk, encontrado()], { borrado: 'falla' });
+
+    assert.equal((await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada)).estado, 'ok');
+  });
+
+  it('responde no_existe si el viaje no existe o no es miembro, sin subir nada', async () => {
+    const cliente = clienteConPortadas([{ data: null, error: null }]);
+
+    assert.deepEqual(await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada), { estado: 'no_existe' });
+    assert.equal(cliente.almacen.subidas.length, 0);
+  });
+
+  it('responde no_activo si el viaje está finalizado, sin subir nada', async () => {
+    const cliente = clienteConPortadas([encontrado(FINALIZADO)]);
+
+    assert.deepEqual(await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada), { estado: 'no_activo' });
+    assert.equal(cliente.almacen.subidas.length, 0);
+  });
+
+  it('devuelve el error si falla la consulta o la subida, sin llamar a cambiar_portada', async () => {
+    const consulta = clienteConPortadas([{ data: null, error: { code: 'PGRST000' } }]);
+    assert.deepEqual((await viajeService.subirPortada(consulta, USUARIO, VIAJE_ID, archivoPortada)).error, { code: 'PGRST000' });
+
+    const subida = clienteConPortadas([encontrado()], { subida: { error: { message: 'fallo' } } });
+    assert.deepEqual((await viajeService.subirPortada(subida, USUARIO, VIAJE_ID, archivoPortada)).error, { message: 'fallo' });
+    assert.equal(subida.llamadasRpc.length, 0);
+  });
+
+  it('si falla cambiar_portada borra el archivo subido y conserva el anterior', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(RUTA_ANTERIOR), { data: null, error: { code: 'PGRST001' } }]);
+
+    const resultado = await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada);
+
+    assert.deepEqual(resultado.error, { code: 'PGRST001' });
+    assert.deepEqual(cliente.almacen.borrados, [{ bucket: 'portadas', rutas: [cliente.almacen.subidas[0].ruta] }]);
+  });
+
+  it('trata como error que la función no cambie nada y borra el archivo subido', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(null), { data: false, error: null }]);
+
+    assert.ok((await viajeService.subirPortada(cliente, USUARIO, VIAJE_ID, archivoPortada)).error);
+    assert.equal(cliente.almacen.borrados.length, 1);
+  });
+});
+
+describe('viajeService.quitarPortada', () => {
+  it('la quita con cambiar_portada(null), borra su archivo y devuelve el viaje sin portada', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(RUTA_ANTERIOR), funcionOk, encontrado()]);
+
+    const resultado = await viajeService.quitarPortada(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.portada_url, null);
+    assert.deepEqual(cliente.llamadasRpc, [['cambiar_portada', { p_viaje_id: VIAJE_ID, p_ruta: null }]]);
+    assert.deepEqual(cliente.almacen.borrados, [{ bucket: 'portadas', rutas: [RUTA_ANTERIOR] }]);
+  });
+
+  it('también la puede quitar un miembro que no es el creador', async () => {
+    const cliente = clienteConPortadas([encontrado({}, 'miembro'), rutaGuardada(RUTA_ANTERIOR), funcionOk, encontrado({}, 'miembro')]);
+
+    assert.equal((await viajeService.quitarPortada(cliente, USUARIO, VIAJE_ID)).estado, 'ok');
+  });
+
+  it('si el viaje no tiene portada no cambia nada ni toca Storage', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(null), encontrado()]);
+
+    const resultado = await viajeService.quitarPortada(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(cliente.llamadasRpc.length, 0);
+    assert.equal(cliente.almacen.borrados.length, 0);
+  });
+
+  it('responde no_existe o no_activo sin tocar nada', async () => {
+    const inexistente = clienteConPortadas([{ data: null, error: null }]);
+    assert.deepEqual(await viajeService.quitarPortada(inexistente, USUARIO, VIAJE_ID), { estado: 'no_existe' });
+
+    const finalizado = clienteConPortadas([encontrado(FINALIZADO)]);
+    assert.deepEqual(await viajeService.quitarPortada(finalizado, USUARIO, VIAJE_ID), { estado: 'no_activo' });
+    assert.equal(finalizado.llamadasRpc.length, 0);
+  });
+
+  it('si falla cambiar_portada devuelve el error y no borra el archivo', async () => {
+    const cliente = clienteConPortadas([encontrado(), rutaGuardada(RUTA_ANTERIOR), { data: null, error: { code: 'PGRST001' } }]);
+
+    assert.deepEqual((await viajeService.quitarPortada(cliente, USUARIO, VIAJE_ID)).error, { code: 'PGRST001' });
+    assert.equal(cliente.almacen.borrados.length, 0);
+  });
+});
+
+describe('viajeService: portada_url en obtener, listar y crear', () => {
+  it('obtener devuelve la URL firmada de una hora y no la ruta del archivo', async () => {
+    const cliente = clienteConPortadas([encontrado({ portada_ruta: RUTA_ANTERIOR })]);
+
+    const { viaje } = await viajeService.obtener(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(viaje.portada_url, `https://storage.test/${RUTA_ANTERIOR}?token=abc`);
+    assert.equal('portada_ruta' in viaje, false);
+    assert.deepEqual(cliente.almacen.firmas, [{ bucket: 'portadas', rutas: [RUTA_ANTERIOR], segundos: 3600 }]);
+  });
+
+  it('un viaje sin portada tiene portada_url null y no pide firmas a Storage', async () => {
+    const cliente = clienteConPortadas([encontrado()]);
+
+    const { viaje } = await viajeService.obtener(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(viaje.portada_url, null);
+    assert.equal(cliente.almacen.firmas.length, 0);
+  });
+
+  it('listar firma todas las portadas con una sola petición a Storage', async () => {
+    const otra = `b/otra.png`;
+    const cliente = clienteConPortadas([
+      {
+        data: [fila({ portada_ruta: RUTA_ANTERIOR }), fila({ id: 'b', portada_ruta: otra }), fila({ id: 'c' })],
+        error: null,
+      },
+    ]);
+
+    const { viajes } = await viajeService.listar(cliente, USUARIO);
+
+    assert.deepEqual(viajes.map((v) => v.portada_url), [
+      `https://storage.test/${RUTA_ANTERIOR}?token=abc`,
+      `https://storage.test/${otra}?token=abc`,
+      null,
+    ]);
+    assert.equal(cliente.almacen.firmas.length, 1);
+    assert.deepEqual(cliente.almacen.firmas[0].rutas, [RUTA_ANTERIOR, otra]);
+  });
+
+  it('si Storage no puede firmar una portada, el viaje se ve sin ella en lugar de fallar', async () => {
+    const cliente = clienteConPortadas([encontrado({ portada_ruta: RUTA_ANTERIOR })]);
+    cliente.storage.from = () => ({
+      createSignedUrls: async (rutas) => ({ data: rutas.map((path) => ({ path, signedUrl: null, error: 'Object not found' })), error: null }),
+    });
+
+    const { viaje } = await viajeService.obtener(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(viaje.portada_url, null);
+  });
+
+  it('un viaje recién creado no tiene portada', async () => {
+    const creado = { id: VIAJE_ID, nombre: 'Roma 2027', destino: 'Roma', estado: 'activo' };
+    const cliente = clienteFalso([{ data: { estado: 'ok', viaje: creado }, error: null }]);
+
+    const resultado = await viajeService.crear(cliente, { nombre: 'Roma 2027' });
+
+    assert.equal(resultado.viaje.portada_url, null);
   });
 });
