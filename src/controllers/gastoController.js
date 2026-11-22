@@ -1,4 +1,8 @@
 const gastoService = require('../services/gastoService');
+const viajeService = require('../services/viajeService');
+const ocrService = require('../services/ocrService');
+const { extraerDatosTicket } = require('../utils/ticketOcr');
+const { detectarTipo } = require('./documentoController');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
 const MAX_CONCEPTO = 100;
@@ -285,4 +289,36 @@ const desmarcarSaldada = async (req, res) => {
   }
 };
 
-module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar, marcarSaldada, desmarcarSaldada };
+// Lee la foto de un ticket (campo «archivo», tras el middleware de subida) y devuelve el concepto y el importe
+// que ha encontrado. Nada se guarda: el usuario revisa los datos y crea el gasto después
+const escanear = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  const archivo = req.file;
+  if (!archivo?.buffer?.length) {
+    return responderError(res, 400, 'datos_invalidos', 'Adjunta la foto del ticket en el campo «archivo»');
+  }
+  const tipoMime = detectarTipo(archivo.buffer);
+  if (tipoMime !== 'image/jpeg' && tipoMime !== 'image/png') {
+    return responderError(res, 400, 'tipo_no_permitido', 'Solo se pueden escanear fotos JPEG o PNG');
+  }
+
+  try {
+    const previo = await viajeService.obtener(req.supabase, req.usuario.id, viajeId);
+    if (previo.error) return responderError(res, 502, 'error_gasto', 'No se ha podido leer el viaje');
+    if (!previo.viaje) return responderError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
+
+    let texto;
+    try {
+      texto = await ocrService.reconocerTexto(archivo.buffer);
+    } catch {
+      return responderError(res, 502, 'error_ocr', 'No se ha podido leer el ticket');
+    }
+    return res.status(200).json(extraerDatosTicket(texto));
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, balance, liquidacion, detalle, crear, editar, eliminar, marcarSaldada, desmarcarSaldada, escanear };

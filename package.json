@@ -36,6 +36,7 @@
     "redis": "^6.2.1",
     "socket.io": "^4.8.4",
     "swagger-ui-express": "^5.0.1",
+    "tesseract.js": "^5.1.1",
     "yamljs": "^0.3.0"
   },
   "devDependencies": {
