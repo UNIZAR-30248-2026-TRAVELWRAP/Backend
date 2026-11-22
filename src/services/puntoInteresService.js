@@ -1,7 +1,7 @@
 const viajeService = require('./viajeService');
 
 const CAMPOS_PUNTO =
-  'id, viaje_id, nombre, nota, categoria, latitud, longitud, lugar_externo_id, creado_por, creado_en';
+  'id, viaje_id, nombre, nota, categoria, latitud, longitud, lugar_externo_id, direccion, creado_por, creado_en';
 
 const viajeDelUsuario = async (cliente, usuarioId, viajeId) => {
   const previo = await viajeService.obtener(cliente, usuarioId, viajeId);
@@ -45,6 +45,7 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
       latitud: datos.latitud,
       longitud: datos.longitud,
       lugar_externo_id: datos.lugar_externo_id,
+      direccion: datos.direccion,
       creado_por: usuarioId,
     })
     .select(CAMPOS_PUNTO)

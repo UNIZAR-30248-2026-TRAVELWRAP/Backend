@@ -210,9 +210,15 @@ CREATE TABLE IF NOT EXISTS public.puntos_interes (
   latitud numeric(9,6) NOT NULL CHECK (latitud BETWEEN -90 AND 90),
   longitud numeric(9,6) NOT NULL CHECK (longitud BETWEEN -180 AND 180),
   lugar_externo_id text,
+  direccion text CHECK (direccion IS NULL OR char_length(direccion) <= 300),
   creado_por uuid REFERENCES public.perfiles (id) ON DELETE SET NULL,
   creado_en timestamptz NOT NULL DEFAULT now()
 );
+-- Dirección del lugar cuando se eligió con el buscador (null si se eligió tocando el mapa). Para bases de datos ya creadas
+ALTER TABLE public.puntos_interes ADD COLUMN IF NOT EXISTS direccion text;
+ALTER TABLE public.puntos_interes DROP CONSTRAINT IF EXISTS puntos_interes_direccion_check;
+ALTER TABLE public.puntos_interes ADD CONSTRAINT puntos_interes_direccion_check
+  CHECK (direccion IS NULL OR char_length(direccion) <= 300);
 
 -- Gastos compartidos del viaje. El total, el saldo de cada miembro y la liquidación se calculan
 -- siempre a partir de estas filas, así que al editar o borrar un gasto se recalculan solos

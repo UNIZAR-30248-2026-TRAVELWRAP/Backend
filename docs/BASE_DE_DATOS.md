@@ -15,7 +15,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 | [opciones_votacion](#opciones_votacion) | 5 | Activada | 2 |
 | [votos](#votos) | 5 | Activada | 4 |
 | [actividades](#actividades) | 16 | Activada | 4 |
-| [puntos_interes](#puntos_interes) | 10 | Activada | 3 |
+| [puntos_interes](#puntos_interes) | 11 | Activada | 3 |
 | [gastos](#gastos) | 10 | Activada | 4 |
 | [repartos_gasto](#repartos_gasto) | 4 | Activada | 4 |
 | [documentos](#documentos) | 8 | Activada | 3 |
@@ -258,6 +258,7 @@ Puntos de interés del viaje, los sitios que el grupo quiere tener en el mapa si
 | `latitud` | `numeric(9,6)` | Sí |  |  | Debe cumplir: `latitud BETWEEN -90 AND 90` |
 | `longitud` | `numeric(9,6)` | Sí |  |  | Debe cumplir: `longitud BETWEEN -180 AND 180` |
 | `lugar_externo_id` | `text` | No |  |  |  |
+| `direccion` | `text` | No |  |  | Debe cumplir: `direccion IS NULL OR char_length(direccion) <= 300` |
 | `creado_por` | `uuid` | No | FK → perfiles.id (ON DELETE SET NULL) |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
 

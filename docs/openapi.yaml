@@ -3729,7 +3729,7 @@ paths:
         - Puntos de interés
       summary: Añade un punto de interés al mapa del viaje
       description: |
-        Añade un punto de interés con su ubicación (`latitud` y `longitud`, obligatorias) y un nombre. La nota y la
+        Añade un punto de interés con su ubicación (`latitud` y `longitud`, obligatorias) y un nombre. Si el sitio se eligió con el buscador se envía también su `direccion`, para poder mostrarla; si se eligió tocando el mapa no hay dirección (el servidor no hace geocodificación inversa). La nota y la
         categoría son opcionales, y la categoría usa las mismas que las actividades. Si el punto se eligió con una
         dirección del buscador (GET /direcciones) se puede enviar también su `lugar_externo_id`; si se eligió tocando el
         mapa, no.
@@ -6360,6 +6360,11 @@ components:
           nullable: true
           description: Identificador del lugar en OpenStreetMap, si se eligió con el buscador de direcciones
           example: way/24146600
+        direccion:
+          type: string
+          nullable: true
+          description: Dirección del lugar (el `nombre` que devuelve GET /direcciones), si se eligió con el buscador; null si se eligió tocando el mapa
+          example: Fontana di Trevi, Piazza di Trevi, Roma
         creado_por:
           type: string
           format: uuid
@@ -6411,6 +6416,11 @@ components:
           nullable: true
           maxLength: 100
           example: way/24146600
+        direccion:
+          type: string
+          nullable: true
+          maxLength: 300
+          example: Fontana di Trevi, Piazza di Trevi, Roma
     Foto:
       type: object
       properties:

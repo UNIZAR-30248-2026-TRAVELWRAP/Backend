@@ -54,6 +54,7 @@ const DATOS = {
   latitud: 41.9009,
   longitud: 12.4833,
   lugar_externo_id: null,
+  direccion: 'Fontana di Trevi, Piazza di Trevi, Roma',
 };
 
 const operacion = (consulta, metodo) => consulta.operaciones.find(([m]) => m === metodo);

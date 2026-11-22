@@ -4186,6 +4186,7 @@ Cuerpo (`application/json`):
 | `puntos_interes[].latitud` | number | No | Latitud del punto (6 decimales) | `41.900932` |
 | `puntos_interes[].longitud` | number | No | Longitud del punto (6 decimales) | `12.483313` |
 | `puntos_interes[].lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap, si se eligió con el buscador de direcciones | `way/24146600` |
+| `puntos_interes[].direccion` | string \| null | No | Dirección del lugar (el `nombre` que devuelve GET /direcciones), si se eligió con el buscador; null si se eligió tocando el mapa | `Fontana di Trevi, Piazza di Trevi, Roma` |
 | `puntos_interes[].creado_por` | string (uuid) \| null | No | Usuario que añadió el punto (null si ya no existe su perfil) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `puntos_interes[].creado_en` | string (date-time) | No |  | `2026-11-22T10:00:00Z` |
 
@@ -4224,7 +4225,7 @@ Cuerpo (`application/json`):
 
 **Añade un punto de interés al mapa del viaje**
 
-Añade un punto de interés con su ubicación (`latitud` y `longitud`, obligatorias) y un nombre. La nota y la
+Añade un punto de interés con su ubicación (`latitud` y `longitud`, obligatorias) y un nombre. Si el sitio se eligió con el buscador se envía también su `direccion`, para poder mostrarla; si se eligió tocando el mapa no hay dirección (el servidor no hace geocodificación inversa). La nota y la
 categoría son opcionales, y la categoría usa las mismas que las actividades. Si el punto se eligió con una
 dirección del buscador (GET /direcciones) se puede enviar también su `lugar_externo_id`; si se eligió tocando el
 mapa, no.
@@ -4249,6 +4250,7 @@ pueden editar: para corregir uno se borra y se vuelve a crear.
 | `latitud` | number | Sí |  | `41.900932` |
 | `longitud` | number | Sí |  | `12.483313` |
 | `lugar_externo_id` | string \| null | No |  | `way/24146600` |
+| `direccion` | string \| null | No |  | `Fontana di Trevi, Piazza di Trevi, Roma` |
 
 **Respuestas**
 
@@ -4266,6 +4268,7 @@ Cuerpo (`application/json`):
 | `latitud` | number | No | Latitud del punto (6 decimales) | `41.900932` |
 | `longitud` | number | No | Longitud del punto (6 decimales) | `12.483313` |
 | `lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap, si se eligió con el buscador de direcciones | `way/24146600` |
+| `direccion` | string \| null | No | Dirección del lugar (el `nombre` que devuelve GET /direcciones), si se eligió con el buscador; null si se eligió tocando el mapa | `Fontana di Trevi, Piazza di Trevi, Roma` |
 | `creado_por` | string (uuid) \| null | No | Usuario que añadió el punto (null si ya no existe su perfil) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-11-22T10:00:00Z` |
 

@@ -11648,7 +11648,7 @@
             "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\"\n}"
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\",\n  \"direccion\": \"Fontana di Trevi, Piazza di Trevi, Roma\"\n}"
             }
           },
           "event": [
@@ -11659,7 +11659,7 @@
                 "exec": [
                   "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
                   "const p = pm.response.json();",
-                  "pm.test('Devuelve el punto creado', () => { pm.expect(p.nombre).to.eql('Fontana di Trevi'); pm.expect(p.nota).to.eql('Ir temprano para evitar colas'); pm.expect(p.categoria).to.eql('cultura'); pm.expect(p.latitud).to.eql(41.900932); pm.expect(p.longitud).to.eql(12.483313); pm.expect(p.lugar_externo_id).to.eql('way/24146600'); });",
+                  "pm.test('Devuelve el punto creado', () => { pm.expect(p.nombre).to.eql('Fontana di Trevi'); pm.expect(p.nota).to.eql('Ir temprano para evitar colas'); pm.expect(p.categoria).to.eql('cultura'); pm.expect(p.latitud).to.eql(41.900932); pm.expect(p.longitud).to.eql(12.483313); pm.expect(p.lugar_externo_id).to.eql('way/24146600'); pm.expect(p.direccion).to.eql('Fontana di Trevi, Piazza di Trevi, Roma'); });",
                   "pm.test('Queda a nombre de quien lo añade', () => pm.expect(p.creado_por).to.be.a('string'));",
                   "pm.collectionVariables.set('puntoIdTrevi', p.id);"
                 ]
@@ -11695,7 +11695,7 @@
                 "exec": [
                   "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
                   "const p = pm.response.json();",
-                  "pm.test('Nombre limpio y datos opcionales vacíos', () => { pm.expect(p.nombre).to.eql('Mirador del Gianicolo'); pm.expect(p.nota).to.eql(null); pm.expect(p.categoria).to.eql(null); pm.expect(p.lugar_externo_id).to.eql(null); });",
+                  "pm.test('Nombre limpio y datos opcionales vacíos', () => { pm.expect(p.nombre).to.eql('Mirador del Gianicolo'); pm.expect(p.nota).to.eql(null); pm.expect(p.categoria).to.eql(null); pm.expect(p.lugar_externo_id).to.eql(null); pm.expect(p.direccion).to.eql(null); });",
                   "pm.collectionVariables.set('puntoIdMirador', p.id);"
                 ]
               }
@@ -11825,6 +11825,40 @@
                   "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
                   "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
                   "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La nota debe ser un texto de 300 caracteres como máximo\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Añadir un punto con una dirección de más de 300 caracteres",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPunto}}/puntos-de-interes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Fontana di Trevi\",\n  \"nota\": \"Ir temprano para evitar colas\",\n  \"categoria\": \"cultura\",\n  \"latitud\": 41.900932,\n  \"longitud\": 12.483313,\n  \"lugar_externo_id\": \"way/24146600\",\n  \"direccion\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));",
+                  "pm.test('Mensaje claro', () => pm.expect(pm.response.json().error.mensaje).to.eql(\"La dirección debe ser un texto de 300 caracteres como máximo\"));"
                 ]
               }
             }

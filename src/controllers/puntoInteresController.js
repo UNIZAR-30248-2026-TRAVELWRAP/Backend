@@ -4,6 +4,7 @@ const { UUID_REGEX, CHECK_VIOLATION, responderError, textoOpcional } = require('
 const MAX_NOMBRE = 120;
 const MAX_NOTA = 300;
 const MAX_LUGAR_EXTERNO = 100;
+const MAX_DIRECCION = 300;
 const CATEGORIAS = ['comida', 'cultura', 'transporte', 'alojamiento', 'otro'];
 
 const validarNombre = (valor) => {
@@ -45,6 +46,14 @@ const validarLugarExterno = (valor) => {
   return { valor: lugar };
 };
 
+const validarDireccion = (valor) => {
+  const direccion = textoOpcional(valor);
+  if (direccion === undefined || (direccion !== null && direccion.length > MAX_DIRECCION)) {
+    return { error: `La dirección debe ser un texto de ${MAX_DIRECCION} caracteres como máximo` };
+  }
+  return { valor: direccion };
+};
+
 const validarNuevoPunto = (cuerpo) => {
   const datos = cuerpo !== null && typeof cuerpo === 'object' ? cuerpo : {};
 
@@ -60,6 +69,8 @@ const validarNuevoPunto = (cuerpo) => {
   if (longitud.error) return longitud;
   const lugarExterno = validarLugarExterno(datos.lugar_externo_id);
   if (lugarExterno.error) return lugarExterno;
+  const direccion = validarDireccion(datos.direccion);
+  if (direccion.error) return direccion;
 
   return {
     datos: {
@@ -69,6 +80,7 @@ const validarNuevoPunto = (cuerpo) => {
       latitud: latitud.valor,
       longitud: longitud.valor,
       lugar_externo_id: lugarExterno.valor,
+      direccion: direccion.valor,
     },
   };
 };

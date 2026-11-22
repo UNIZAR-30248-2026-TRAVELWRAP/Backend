@@ -98,7 +98,16 @@ describe('POST /viajes/:viajeId/puntos-de-interes', () => {
       latitud: 41.9009,
       longitud: 12.4833,
       lugar_externo_id: null,
+      direccion: null,
     });
+  });
+
+  it('guarda la dirección elegida con el buscador, limpia de espacios', async () => {
+    const crear = simular('crear', async () => ({ estado: 'ok', punto: {} }));
+
+    await llamar('crear', { body: { ...CUERPO, direccion: '  Piazza del Colosseo, Roma ' } });
+
+    assert.equal(crear.mock.calls[0].arguments[3].direccion, 'Piazza del Colosseo, Roma');
   });
 
   it('la nota, la categoría y el lugar son opcionales', async () => {
@@ -111,6 +120,7 @@ describe('POST /viajes/:viajeId/puntos-de-interes', () => {
     assert.equal(datos.nota, null);
     assert.equal(datos.categoria, null);
     assert.equal(datos.lugar_externo_id, null);
+    assert.equal(datos.direccion, null);
   });
 
   const invalidos = [
@@ -123,6 +133,7 @@ describe('POST /viajes/:viajeId/puntos-de-interes', () => {
     ['latitud fuera de rango', { ...CUERPO, latitud: 91 }, 'La latitud es obligatoria y debe ser un número entre -90 y 90'],
     ['longitud como texto', { ...CUERPO, longitud: '12' }, 'La longitud es obligatoria y debe ser un número entre -180 y 180'],
     ['longitud fuera de rango', { ...CUERPO, longitud: -181 }, 'La longitud es obligatoria y debe ser un número entre -180 y 180'],
+    ['dirección demasiado larga', { ...CUERPO, direccion: 'a'.repeat(301) }, 'La dirección debe ser un texto de 300 caracteres como máximo'],
     ['lugar externo demasiado largo', { ...CUERPO, lugar_externo_id: 'a'.repeat(101) }, 'El identificador del lugar debe ser un texto de 100 caracteres como máximo'],
   ];
 
