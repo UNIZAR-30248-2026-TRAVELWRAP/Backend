@@ -2135,6 +2135,71 @@ paths:
                   codigo: error_actividad
                   mensaje: No se ha podido guardar el orden de las actividades
 
+  /viajes/{viajeId}/actividades/{actividadId}/foto/url:
+    get:
+      tags:
+        - Actividades
+      summary: Enlace temporal para ver la foto del documento escaneado
+      description: |
+        Devuelve un enlace firmado que caduca a los 5 minutos: hay que pedir uno nuevo cada vez que se abre la foto.
+        Solo existe si la actividad se creó desde un escaneo con foto. También funciona en viajes finalizados.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - name: actividadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Enlace temporal a la foto
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  expira_en:
+                    type: string
+                    format: date-time
+              example:
+                url: https://almacenamiento.example/documentos/foto.jpg?token=abc
+                expira_en: '2026-11-22T10:05:00Z'
+        '400':
+          description: El identificador del viaje o del la actividad no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o no es miembro (`viaje_no_encontrado`), no existe en el viaje (`actividad_no_encontrada`) o no tiene foto (`sin_foto`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: sin_foto
+                  mensaje: Este actividad no tiene foto del documento
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: No se ha podido obtener la foto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /viajes/{viajeId}/actividades/{actividadId}:
     patch:
       tags:
@@ -2283,6 +2348,166 @@ paths:
                   codigo: error_actividad
                   mensaje: No se ha podido eliminar la actividad
 
+  /viajes/{viajeId}/playlist:
+    get:
+      tags:
+        - Playlist
+      summary: Devuelve la playlist compartida del viaje
+      description: |
+        La playlist es un enlace de Spotify que todos los miembros ven en el inicio del viaje. Devuelve `playlist: null` si el
+        viaje no tiene ninguna. Sirve también en viajes finalizados.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Playlist del viaje, o null si no tiene ninguna
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistResponse'
+              example:
+                playlist:
+                  url: https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
+                  actualizado_en: '2026-11-22T10:00:00Z'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: No se ha podido obtener la playlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Playlist
+      summary: Enlaza o cambia la playlist del viaje
+      description: |
+        Cualquier miembro puede enlazar o cambiar la playlist, con el viaje activo. El enlace tiene que ser de una playlist de
+        Spotify (`https://open.spotify.com/playlist/...`, también con `intl-es` o `?si=...`, o `spotify:playlist:...`). La API lo
+        guarda en su forma canónica.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardarPlaylistRequest'
+            example:
+              url: https://open.spotify.com/intl-es/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc123
+      responses:
+        '200':
+          description: Playlist guardada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaylistResponse'
+        '400':
+          description: El enlace no es de una playlist de Spotify, o el identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El enlace tiene que ser de una playlist de Spotify (por ejemplo, https://open.spotify.com/playlist/...)
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: El viaje está finalizado y ya no se puede modificar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: No se ha podido guardar la playlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Playlist
+      summary: Quita la playlist del viaje
+      description: Cualquier miembro puede quitarla, con el viaje activo. Responde 204 sin cuerpo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '204':
+          description: Playlist quitada (sin cuerpo)
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: El viaje está finalizado y ya no se puede modificar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: No se ha podido quitar la playlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /viajes/{viajeId}/gastos:
     get:
       tags:
@@ -2694,6 +2919,175 @@ paths:
                 error:
                   codigo: error_gasto
                   mensaje: No se ha podido deshacer la marca
+  /viajes/{viajeId}/gastos/escaneo:
+    post:
+      tags:
+        - Gastos
+      summary: Detecta si una foto es un gasto, una actividad u otro documento, y devuelve sus datos
+      description: |
+        Lee con OCR la foto de un documento (JPEG o PNG, en el campo `archivo`) y detecta su tipo:
+        - `gasto`: un ticket de compra (tiene un total, IVA, factura o un importe en euros). Devuelve el `concepto` y el `importe`.
+        - `actividad`: una reserva, entrada, vuelo o cita (tiene fecha, hora o palabras como «reserva» o «entrada»). Devuelve el
+          `titulo`, la `fecha` y la `hora_inicio`.
+        - `otro`: cualquier otro documento. Devuelve un `resumen` del texto que se ha leído.
+
+        Con pistas insuficientes o empatadas el tipo es `otro`, para no crear un gasto o una actividad equivocados.
+        `fecha` es `null` si el documento no trae el año, porque entonces no se puede saber a qué fecha corresponde, y
+        cualquier campo que no se reconoce también es `null`.
+
+        La petición no guarda nada: la app muestra los datos en la pantalla de confirmación del tipo detectado, el usuario
+        los revisa o corrige, y solo entonces se crea el gasto (`POST /gastos`), la actividad o el documento de resumen.
+        Solo lee, así que también funciona en viajes finalizados. Hace falta ser miembro del viaje.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaEscaneoRequest'
+      responses:
+        '200':
+          description: Tipo detectado y sus datos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscaneoDocumento'
+              examples:
+                gasto:
+                  value:
+                    tipo: gasto
+                    datos:
+                      concepto: RESTAURANTE EL FARO
+                      importe: 11.5
+                actividad:
+                  value:
+                    tipo: actividad
+                    datos:
+                      titulo: Vuelo Madrid a Roma IB3456
+                      fecha: '2027-05-12'
+                      hora_inicio: '08:20'
+                otro:
+                  value:
+                    tipo: otro
+                    datos:
+                      resumen: |-
+                        Póliza de seguro
+                        Cobertura total durante el viaje
+        '400':
+          description: |
+            Falta el archivo o llega más de uno, el archivo no es un JPEG o PNG, ocupa más de 8 MB o el identificador del
+            viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta la foto del ticket en el campo «archivo»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: Solo se pueden escanear fotos JPEG o PNG
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: No se ha podido leer el viaje (`error_gasto`) o el OCR ha fallado al leer la imagen (`error_ocr`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_ocr
+                  mensaje: No se ha podido leer el ticket
+  /viajes/{viajeId}/gastos/{gastoId}/foto/url:
+    get:
+      tags:
+        - Gastos
+      summary: Enlace temporal para ver la foto del ticket
+      description: |
+        Devuelve un enlace firmado que caduca a los 5 minutos: hay que pedir uno nuevo cada vez que se abre la foto.
+        Solo existe si el gasto se creó desde un escaneo con foto. También funciona en viajes finalizados.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+        - name: gastoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Enlace temporal a la foto
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                  expira_en:
+                    type: string
+                    format: date-time
+              example:
+                url: https://almacenamiento.example/documentos/foto.jpg?token=abc
+                expira_en: '2026-11-22T10:05:00Z'
+        '400':
+          description: El identificador del viaje o del gasto no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o no es miembro (`viaje_no_encontrado`), no existe en el viaje (`gasto_no_encontrado`) o no tiene foto (`sin_foto`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: sin_foto
+                  mensaje: Este gasto no tiene foto del ticket
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: No se ha podido obtener la foto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /viajes/{viajeId}/gastos/{gastoId}:
     get:
       tags:
@@ -3867,6 +4261,85 @@ paths:
                   codigo: error_ruta
                   mensaje: No se ha podido calcular la ruta
 
+  /viajes/{viajeId}/documentos/texto:
+    post:
+      tags:
+        - Documentos
+      summary: Guarda en la cartera el resumen en texto de un documento escaneado
+      description: |
+        Lo usa la app al escanear un documento que no es ni un gasto ni una actividad (`POST /gastos/escaneo` devuelve
+        `tipo: otro`). El `texto` se guarda como `Resumen escaneado.txt` (o con el `nombre` indicado) en UTF-8 y aparece en la
+        cartera como un documento más, que se puede abrir, descargar y eliminar. Solo con el viaje activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuardarResumenRequest'
+            example:
+              texto: |-
+                Póliza de seguro
+                Cobertura total durante el viaje
+      responses:
+        '201':
+          description: Resumen guardado en la cartera
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Documento'
+        '400':
+          description: El texto está vacío o ocupa más de 8 MB, el nombre tiene más de 150 caracteres o el identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El resumen no puede estar vacío ni ocupar más de 8 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está finalizado y ya no se puede modificar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Supabase no ha podido guardar el resumen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_documento
+                  mensaje: No se ha podido guardar el resumen
+
   /viajes/{viajeId}/documentos/{documentoId}:
     delete:
       tags:
@@ -4985,6 +5458,10 @@ components:
         - titulo
         - fecha
       properties:
+        foto_ruta:
+          type: string
+          nullable: true
+          description: Ruta de la foto del ticket o documento escaneado (la devuelve POST /gastos/escaneo). Solo se acepta si es de este viaje
         titulo:
           type: string
           maxLength: 200
@@ -5099,6 +5576,9 @@ components:
     Actividad:
       type: object
       properties:
+        tiene_foto:
+          type: boolean
+          description: Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url
         id:
           type: string
           format: uuid
@@ -5251,6 +5731,10 @@ components:
         - pagado_por
         - participantes
       properties:
+        foto_ruta:
+          type: string
+          nullable: true
+          description: Ruta de la foto del ticket o documento escaneado (la devuelve POST /gastos/escaneo). Solo se acepta si es de este viaje
         concepto:
           type: string
           minLength: 1
@@ -5309,6 +5793,9 @@ components:
     Gasto:
       type: object
       properties:
+        tiene_foto:
+          type: boolean
+          description: Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url
         id:
           type: string
           format: uuid
@@ -5599,6 +6086,24 @@ components:
           items:
             $ref: '#/components/schemas/RepartoDetalle'
 
+    GuardarResumenRequest:
+      type: object
+      required:
+        - texto
+      properties:
+        texto:
+          type: string
+          minLength: 1
+          description: Texto del resumen en UTF-8. Se recorta de espacios al principio y al final, y no puede ocupar más de 8 MB
+          example: |-
+            Póliza de seguro
+            Cobertura total durante el viaje
+        nombre:
+          type: string
+          maxLength: 150
+          description: Nombre del documento. Si no se indica, es «Resumen escaneado.txt»
+          example: Póliza del seguro
+
     SubidaDocumentoRequest:
       type: object
       required:
@@ -5613,6 +6118,128 @@ components:
           maxLength: 150
           description: Nombre que verán los miembros. Si no se indica, se usa el del archivo (recortado a 150 caracteres)
           example: Billete de tren Madrid-Roma
+
+    SubidaEscaneoRequest:
+      type: object
+      required:
+        - archivo
+      properties:
+        archivo:
+          type: string
+          format: binary
+          description: Foto de un documento en JPEG o PNG de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición
+
+    EscaneoDocumento:
+      description: Tipo detectado en la foto (campo `tipo`) y los datos para su pantalla de confirmación
+      oneOf:
+        - $ref: '#/components/schemas/EscaneoGasto'
+        - $ref: '#/components/schemas/EscaneoActividad'
+        - $ref: '#/components/schemas/EscaneoOtro'
+      discriminator:
+        propertyName: tipo
+        mapping:
+          gasto: '#/components/schemas/EscaneoGasto'
+          actividad: '#/components/schemas/EscaneoActividad'
+          otro: '#/components/schemas/EscaneoOtro'
+
+    EscaneoGasto:
+      type: object
+      required:
+        - tipo
+        - datos
+      properties:
+        foto_ruta:
+          type: string
+          nullable: true
+          description: Ruta de la foto guardada con el gasto o la actividad. Es null si no se guarda foto (un resumen de texto no la necesita, ni los datos que no se han podido guardar)
+        tipo:
+          type: string
+          enum:
+            - gasto
+        datos:
+          type: object
+          required:
+            - concepto
+            - importe
+          properties:
+            concepto:
+              type: string
+              nullable: true
+              maxLength: 100
+              description: Nombre del comercio o del gasto, tal como aparece en el ticket
+              example: RESTAURANTE EL FARO
+            importe:
+              type: number
+              nullable: true
+              description: Total del ticket en euros (la línea de «total», o el mayor importe si no hay ninguna)
+              example: 11.5
+
+    EscaneoActividad:
+      type: object
+      required:
+        - tipo
+        - datos
+      properties:
+        foto_ruta:
+          type: string
+          nullable: true
+          description: Ruta de la foto guardada con el gasto o la actividad. Es null si no se guarda foto (un resumen de texto no la necesita, ni los datos que no se han podido guardar)
+        tipo:
+          type: string
+          enum:
+            - actividad
+        datos:
+          type: object
+          required:
+            - titulo
+            - fecha
+            - hora_inicio
+          properties:
+            titulo:
+              type: string
+              nullable: true
+              maxLength: 100
+              description: Título de la actividad, tomado de la primera línea del documento
+              example: Vuelo Madrid a Roma IB3456
+            fecha:
+              type: string
+              format: date
+              nullable: true
+              description: Fecha en AAAA-MM-DD. Es null si el documento no trae el año o la fecha no existe
+              example: '2027-05-12'
+            hora_inicio:
+              type: string
+              nullable: true
+              pattern: '^\d{2}:\d{2}$'
+              description: Hora de inicio en HH:MM (también se admite 10h30 en el documento)
+              example: '08:20'
+
+    EscaneoOtro:
+      type: object
+      required:
+        - tipo
+        - datos
+      properties:
+        foto_ruta:
+          type: string
+          nullable: true
+          description: Ruta de la foto guardada con el gasto o la actividad. Es null si no se guarda foto (un resumen de texto no la necesita, ni los datos que no se han podido guardar)
+        tipo:
+          type: string
+          enum:
+            - otro
+        datos:
+          type: object
+          required:
+            - resumen
+          properties:
+            resumen:
+              type: string
+              maxLength: 1000
+              description: Texto que se ha leído en el documento, con sus líneas, recortado a 1000 caracteres. Vacío si el OCR no ha leído nada
+              example: |-
+                Póliza de seguro
+                Cobertura total durante el viaje
 
     Documento:
       type: object
@@ -5630,8 +6257,8 @@ components:
           example: Billete de tren Madrid-Roma
         tipo_mime:
           type: string
-          enum: [application/pdf, image/jpeg, image/png]
-          description: Tipo reconocido a partir del contenido del archivo
+          enum: [application/pdf, image/jpeg, image/png, text/plain]
+          description: Tipo reconocido a partir del contenido del archivo. `text/plain` son los resúmenes guardados desde el escaneo
           example: application/pdf
         tamano_bytes:
           type: integer
@@ -6020,6 +6647,39 @@ components:
       properties:
         usuario:
           $ref: '#/components/schemas/Usuario'
+
+    GuardarPlaylistRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          maxLength: 300
+          description: Enlace de una playlist de Spotify (web o spotify:playlist:...)
+          example: https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
+
+    PlaylistResponse:
+      type: object
+      required:
+        - playlist
+      properties:
+        playlist:
+          nullable: true
+          type: object
+          description: Playlist del viaje, o null si no tiene ninguna
+          required:
+            - url
+            - actualizado_en
+          properties:
+            url:
+              type: string
+              format: uri
+              example: https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
+            actualizado_en:
+              type: string
+              format: date-time
+              example: '2026-11-22T10:00:00Z'
 
     Error:
       type: object
