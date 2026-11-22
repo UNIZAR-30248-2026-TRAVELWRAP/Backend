@@ -45,14 +45,20 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/actividades`](#get-viajesviajeidactividades) | Lista las actividades del itinerario de un viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/actividades`](#post-viajesviajeidactividades) | Crea una actividad del itinerario | Token de sesión |
 | PUT | [`/viajes/{viajeId}/actividades/orden`](#put-viajesviajeidactividadesorden) | Guarda el orden de las actividades de un día | Token de sesión |
+| GET | [`/viajes/{viajeId}/actividades/{actividadId}/foto/url`](#get-viajesviajeidactividadesactividadidfotourl) | Enlace temporal para ver la foto del documento escaneado | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/actividades/{actividadId}`](#patch-viajesviajeidactividadesactividadid) | Modifica una actividad del itinerario | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/actividades/{actividadId}`](#delete-viajesviajeidactividadesactividadid) | Elimina una actividad del itinerario | Token de sesión |
+| GET | [`/viajes/{viajeId}/playlist`](#get-viajesviajeidplaylist) | Devuelve la playlist compartida del viaje | Token de sesión |
+| PUT | [`/viajes/{viajeId}/playlist`](#put-viajesviajeidplaylist) | Enlaza o cambia la playlist del viaje | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/playlist`](#delete-viajesviajeidplaylist) | Quita la playlist del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos`](#get-viajesviajeidgastos) | Lista el historial de gastos del viaje con el total | Token de sesión |
 | POST | [`/viajes/{viajeId}/gastos`](#post-viajesviajeidgastos) | Registra un gasto compartido | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/balance`](#get-viajesviajeidgastosbalance) | Saldo de cada miembro del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/liquidacion`](#get-viajesviajeidgastosliquidacion) | Transferencias para saldar las cuentas del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/gastos/saldadas`](#post-viajesviajeidgastossaldadas) | Marca como saldada la deuda que un miembro tiene con quien usa la app | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/gastos/saldadas/{deudorId}`](#delete-viajesviajeidgastossaldadasdeudorid) | Deshace la marca de saldado de una deuda | Token de sesión |
+| POST | [`/viajes/{viajeId}/gastos/escaneo`](#post-viajesviajeidgastosescaneo) | Detecta si una foto es un gasto, una actividad u otro documento, y devuelve sus datos | Token de sesión |
+| GET | [`/viajes/{viajeId}/gastos/{gastoId}/foto/url`](#get-viajesviajeidgastosgastoidfotourl) | Enlace temporal para ver la foto del ticket | Token de sesión |
 | GET | [`/viajes/{viajeId}/gastos/{gastoId}`](#get-viajesviajeidgastosgastoid) | Detalle de un gasto con la parte de cada miembro | Token de sesión |
 | PATCH | [`/viajes/{viajeId}/gastos/{gastoId}`](#patch-viajesviajeidgastosgastoid) | Edita un gasto y recalcula su reparto | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/gastos/{gastoId}`](#delete-viajesviajeidgastosgastoid) | Borra un gasto y sus repartos | Token de sesión |
@@ -69,6 +75,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto a la galería del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/resumen`](#get-viajesviajeidresumen) | Resumen «Fin de viaje» (Wrap) del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/ruta`](#get-viajesviajeidruta) | Calcula la ruta a pie del día entre las actividades con ubicación | Token de sesión |
+| POST | [`/viajes/{viajeId}/documentos/texto`](#post-viajesviajeiddocumentostexto) | Guarda en la cartera el resumen en texto de un documento escaneado | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/documentos/{documentoId}`](#delete-viajesviajeiddocumentosdocumentoid) | Elimina un documento de la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
 | PATCH | [`/perfil`](#patch-perfil) | Cambia el nombre del perfil | Token de sesión |
@@ -1997,6 +2004,7 @@ Cuerpo (`application/json`):
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `actividades` | array<Actividad> | No |  |  |
+| `actividades[].tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `actividades[].id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
 | `actividades[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `actividades[].titulo` | string | No |  | `Visita al Coliseo` |
@@ -2066,6 +2074,7 @@ y su `lugar_externo_id`.
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `foto_ruta` | string \| null | No | Ruta de la foto del ticket o documento escaneado (la devuelve POST /gastos/escaneo). Solo se acepta si es de este viaje |  |
 | `titulo` | string | Sí | Nombre de la actividad | `Visita al Coliseo` |
 | `fecha` | string (date) | Sí | Día de la actividad (AAAA-MM-DD) | `2027-05-12` |
 | `hora_inicio` | string \| null | No | Hora de inicio (HH:MM). Opcional | `10:00` |
@@ -2084,6 +2093,7 @@ Cuerpo (`application/json`):
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
 | `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `titulo` | string | No |  | `Visita al Coliseo` |
@@ -2177,6 +2187,7 @@ Cuerpo (`application/json`):
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `actividades` | array<Actividad> | No |  |  |
+| `actividades[].tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `actividades[].id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
 | `actividades[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `actividades[].titulo` | string | No |  | `Visita al Coliseo` |
@@ -2233,6 +2244,52 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `error_actividad` | No se ha podido guardar el orden de las actividades |
 
+### GET /viajes/{viajeId}/actividades/{actividadId}/foto/url
+
+**Enlace temporal para ver la foto del documento escaneado**
+
+Devuelve un enlace firmado que caduca a los 5 minutos: hay que pedir uno nuevo cada vez que se abre la foto.
+Solo existe si la actividad se creó desde un escaneo con foto. También funciona en viajes finalizados.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `actividadId` | path | Sí | string (uuid) |  |  |
+
+**Respuestas**
+
+**200** — Enlace temporal a la foto
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `url` | string (uri) | No |  |  |
+| `expira_en` | string (date-time) | No |  |  |
+
+**400** — El identificador del viaje o del la actividad no es un UUID
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o no es miembro (`viaje_no_encontrado`), no existe en el viaje (`actividad_no_encontrada`) o no tiene foto (`sin_foto`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_foto` | Este actividad no tiene foto del documento |
+
+**500** — Error interno del servidor
+
+**502** — No se ha podido obtener la foto
+
 ### PATCH /viajes/{viajeId}/actividades/{actividadId}
 
 **Modifica una actividad del itinerario**
@@ -2275,6 +2332,7 @@ Cuerpo (`application/json`):
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `id` | string (uuid) | No |  | `8a1b2c3d-0000-4000-8000-000000000020` |
 | `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `titulo` | string | No |  | `Visita al Coliseo` |
@@ -2388,6 +2446,144 @@ está activo. Responde 204 sin cuerpo.
 | --- | --- |
 | `error_actividad` | No se ha podido eliminar la actividad |
 
+## Playlist
+
+### GET /viajes/{viajeId}/playlist
+
+**Devuelve la playlist compartida del viaje**
+
+La playlist es un enlace de Spotify que todos los miembros ven en el inicio del viaje. Devuelve `playlist: null` si el
+viaje no tiene ninguna. Sirve también en viajes finalizados.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Playlist del viaje, o null si no tiene ninguna
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `playlist` | object \| null | Sí | Playlist del viaje, o null si no tiene ninguna |  |
+| `playlist.url` | string (uri) | Sí |  | `https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M` |
+| `playlist.actualizado_en` | string (date-time) | Sí |  | `2026-11-22T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+**500** — Error interno del servidor
+
+**502** — No se ha podido obtener la playlist
+
+### PUT /viajes/{viajeId}/playlist
+
+**Enlaza o cambia la playlist del viaje**
+
+Cualquier miembro puede enlazar o cambiar la playlist, con el viaje activo. El enlace tiene que ser de una playlist de
+Spotify (`https://open.spotify.com/playlist/...`, también con `intl-es` o `?si=...`, o `spotify:playlist:...`). La API lo
+guarda en su forma canónica.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `url` | string | Sí | Enlace de una playlist de Spotify (web o spotify:playlist:...) | `https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M` |
+
+**Respuestas**
+
+**200** — Playlist guardada
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `playlist` | object \| null | Sí | Playlist del viaje, o null si no tiene ninguna |  |
+| `playlist.url` | string (uri) | Sí |  | `https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M` |
+| `playlist.actualizado_en` | string (date-time) | Sí |  | `2026-11-22T10:00:00Z` |
+
+**400** — El enlace no es de una playlist de Spotify, o el identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El enlace tiene que ser de una playlist de Spotify (por ejemplo, https://open.spotify.com/playlist/...) |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+**409** — El viaje está finalizado y ya no se puede modificar
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+**502** — No se ha podido guardar la playlist
+
+### DELETE /viajes/{viajeId}/playlist
+
+**Quita la playlist del viaje**
+
+Cualquier miembro puede quitarla, con el viaje activo. Responde 204 sin cuerpo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**204** — Playlist quitada (sin cuerpo)
+
+**400** — El identificador del viaje no es un UUID
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+**409** — El viaje está finalizado y ya no se puede modificar
+
+**500** — Error interno del servidor
+
+**502** — No se ha podido quitar la playlist
+
 ## Gastos
 
 ### GET /viajes/{viajeId}/gastos
@@ -2416,6 +2612,7 @@ Cuerpo (`application/json`):
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
 | `gastos` | array<Gasto> | No | Gastos del viaje, del más reciente al más antiguo |  |
+| `gastos[].tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `gastos[].id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
 | `gastos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `gastos[].concepto` | string | No |  | `Cena en el Trastevere` |
@@ -2485,6 +2682,7 @@ ser miembros; quien hace la petición queda marcado como `creado_por`.
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `foto_ruta` | string \| null | No | Ruta de la foto del ticket o documento escaneado (la devuelve POST /gastos/escaneo). Solo se acepta si es de este viaje |  |
 | `concepto` | string | Sí | Qué se ha pagado. Se guardan sin los espacios del principio y del final | `Cena en el Trastevere` |
 | `importe` | number | Sí | Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo | `60.5` |
 | `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) \| null | No | Tipo de gasto. Opcional; si no se envía se guarda «otros» | `comida` |
@@ -2500,6 +2698,7 @@ Cuerpo (`application/json`):
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
 | `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `concepto` | string | No |  | `Cena en el Trastevere` |
@@ -2806,6 +3005,152 @@ vuelven a contar la deuda por el importe que quedaba.
 | --- | --- |
 | `error_gasto` | No se ha podido deshacer la marca |
 
+### POST /viajes/{viajeId}/gastos/escaneo
+
+**Detecta si una foto es un gasto, una actividad u otro documento, y devuelve sus datos**
+
+Lee con OCR la foto de un documento (JPEG o PNG, en el campo `archivo`) y detecta su tipo:
+- `gasto`: un ticket de compra (tiene un total, IVA, factura o un importe en euros). Devuelve el `concepto` y el `importe`.
+- `actividad`: una reserva, entrada, vuelo o cita (tiene fecha, hora o palabras como «reserva» o «entrada»). Devuelve el
+  `titulo`, la `fecha` y la `hora_inicio`.
+- `otro`: cualquier otro documento. Devuelve un `resumen` del texto que se ha leído.
+
+Con pistas insuficientes o empatadas el tipo es `otro`, para no crear un gasto o una actividad equivocados.
+`fecha` es `null` si el documento no trae el año, porque entonces no se puede saber a qué fecha corresponde, y
+cualquier campo que no se reconoce también es `null`.
+
+La petición no guarda nada: la app muestra los datos en la pantalla de confirmación del tipo detectado, el usuario
+los revisa o corrige, y solo entonces se crea el gasto (`POST /gastos`), la actividad o el documento de resumen.
+Solo lee, así que también funciona en viajes finalizados. Hace falta ser miembro del viaje.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`multipart/form-data`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `archivo` | string (binary) | Sí | Foto de un documento en JPEG o PNG de 8 MB (8.000.000 bytes) como máximo. Un solo archivo por petición |  |
+
+**Respuestas**
+
+**200** — Tipo detectado y sus datos
+
+Cuerpo (`application/json`):
+
+Una de estas variantes:
+
+- **EscaneoGasto**
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `foto_ruta` | string \| null | No | Ruta de la foto guardada con el gasto o la actividad. Es null si no se guarda foto (un resumen de texto no la necesita, ni los datos que no se han podido guardar) |  |
+| `tipo` | enum (gasto) | Sí |  |  |
+| `datos` | object | Sí |  |  |
+| `datos.concepto` | string \| null | Sí | Nombre del comercio o del gasto, tal como aparece en el ticket | `RESTAURANTE EL FARO` |
+| `datos.importe` | number \| null | Sí | Total del ticket en euros (la línea de «total», o el mayor importe si no hay ninguna) | `11.5` |
+
+- **EscaneoActividad**
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `foto_ruta` | string \| null | No | Ruta de la foto guardada con el gasto o la actividad. Es null si no se guarda foto (un resumen de texto no la necesita, ni los datos que no se han podido guardar) |  |
+| `tipo` | enum (actividad) | Sí |  |  |
+| `datos` | object | Sí |  |  |
+| `datos.titulo` | string \| null | Sí | Título de la actividad, tomado de la primera línea del documento | `Vuelo Madrid a Roma IB3456` |
+| `datos.fecha` | string (date) \| null | Sí | Fecha en AAAA-MM-DD. Es null si el documento no trae el año o la fecha no existe | `2027-05-12` |
+| `datos.hora_inicio` | string \| null | Sí | Hora de inicio en HH:MM (también se admite 10h30 en el documento) | `08:20` |
+
+- **EscaneoOtro**
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `foto_ruta` | string \| null | No | Ruta de la foto guardada con el gasto o la actividad. Es null si no se guarda foto (un resumen de texto no la necesita, ni los datos que no se han podido guardar) |  |
+| `tipo` | enum (otro) | Sí |  |  |
+| `datos` | object | Sí |  |  |
+| `datos.resumen` | string | Sí | Texto que se ha leído en el documento, con sus líneas, recortado a 1000 caracteres. Vacío si el OCR no ha leído nada | `Póliza de seguro<br>Cobertura total durante el viaje` |
+
+**400** — Falta el archivo o llega más de uno, el archivo no es un JPEG o PNG, ocupa más de 8 MB o el identificador del
+viaje no es un UUID
+
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | Adjunta la foto del ticket en el campo «archivo» |
+| `tipo_no_permitido` | Solo se pueden escanear fotos JPEG o PNG |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+**502** — No se ha podido leer el viaje (`error_gasto`) o el OCR ha fallado al leer la imagen (`error_ocr`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_ocr` | No se ha podido leer el ticket |
+
+### GET /viajes/{viajeId}/gastos/{gastoId}/foto/url
+
+**Enlace temporal para ver la foto del ticket**
+
+Devuelve un enlace firmado que caduca a los 5 minutos: hay que pedir uno nuevo cada vez que se abre la foto.
+Solo existe si el gasto se creó desde un escaneo con foto. También funciona en viajes finalizados.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `gastoId` | path | Sí | string (uuid) |  |  |
+
+**Respuestas**
+
+**200** — Enlace temporal a la foto
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `url` | string (uri) | No |  |  |
+| `expira_en` | string (date-time) | No |  |  |
+
+**400** — El identificador del viaje o del gasto no es un UUID
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o no es miembro (`viaje_no_encontrado`), no existe en el viaje (`gasto_no_encontrado`) o no tiene foto (`sin_foto`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_foto` | Este gasto no tiene foto del ticket |
+
+**500** — Error interno del servidor
+
+**502** — No se ha podido obtener la foto
+
 ### GET /viajes/{viajeId}/gastos/{gastoId}
 
 **Detalle de un gasto con la parte de cada miembro**
@@ -2900,6 +3245,7 @@ Solo pueden editarlo quien registró el gasto y el creador del viaje, y solo mie
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `foto_ruta` | string \| null | No | Ruta de la foto del ticket o documento escaneado (la devuelve POST /gastos/escaneo). Solo se acepta si es de este viaje |  |
 | `concepto` | string | Sí | Qué se ha pagado. Se guardan sin los espacios del principio y del final | `Cena en el Trastevere` |
 | `importe` | number | Sí | Importe total en la moneda del viaje, mayor que 0 y con dos decimales como máximo | `60.5` |
 | `categoria` | enum (comida, transporte, entradas, alojamiento, ocio, otros) \| null | No | Tipo de gasto. Opcional; si no se envía se guarda «otros» | `comida` |
@@ -2915,6 +3261,7 @@ Cuerpo (`application/json`):
 
 | Campo | Tipo | Obligatorio | Descripción | Ejemplo |
 | --- | --- | --- | --- | --- |
+| `tiene_foto` | boolean | No | Si el gasto o la actividad tiene la foto del ticket o documento escaneado. La imagen se pide con GET .../foto/url |  |
 | `id` | string (uuid) | No |  | `9f3c2a1b-7d6e-4f5a-8b9c-0d1e2f3a4b5c` |
 | `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `concepto` | string | No |  | `Cena en el Trastevere` |
@@ -3061,7 +3408,7 @@ Cuerpo (`application/json`):
 | `documentos[].id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
 | `documentos[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `documentos[].nombre` | string | No |  | `Billete de tren Madrid-Roma` |
-| `documentos[].tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
+| `documentos[].tipo_mime` | enum (application/pdf, image/jpeg, image/png, text/plain) | No | Tipo reconocido a partir del contenido del archivo. `text/plain` son los resúmenes guardados desde el escaneo | `application/pdf` |
 | `documentos[].tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
 | `documentos[].subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `documentos[].creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
@@ -3136,7 +3483,7 @@ Cuerpo (`application/json`):
 | `id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
 | `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
 | `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
-| `tipo_mime` | enum (application/pdf, image/jpeg, image/png) | No | Tipo reconocido a partir del contenido del archivo | `application/pdf` |
+| `tipo_mime` | enum (application/pdf, image/jpeg, image/png, text/plain) | No | Tipo reconocido a partir del contenido del archivo. `text/plain` son los resúmenes guardados desde el escaneo | `application/pdf` |
 | `tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
 | `subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
@@ -3181,6 +3528,78 @@ no es válido o el identificador del viaje no es un UUID
 | Código de error | Mensaje |
 | --- | --- |
 | `error_documento` | No se ha podido subir el documento |
+
+### POST /viajes/{viajeId}/documentos/texto
+
+**Guarda en la cartera el resumen en texto de un documento escaneado**
+
+Lo usa la app al escanear un documento que no es ni un gasto ni una actividad (`POST /gastos/escaneo` devuelve
+`tipo: otro`). El `texto` se guarda como `Resumen escaneado.txt` (o con el `nombre` indicado) en UTF-8 y aparece en la
+cartera como un documento más, que se puede abrir, descargar y eliminar. Solo con el viaje activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `texto` | string | Sí | Texto del resumen en UTF-8. Se recorta de espacios al principio y al final, y no puede ocupar más de 8 MB | `Póliza de seguro<br>Cobertura total durante el viaje` |
+| `nombre` | string | No | Nombre del documento. Si no se indica, es «Resumen escaneado.txt» | `Póliza del seguro` |
+
+**Respuestas**
+
+**201** — Resumen guardado en la cartera
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `4a7b9c2d-1e3f-4a5b-8c6d-7e8f9a0b1c2d` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Billete de tren Madrid-Roma` |
+| `tipo_mime` | enum (application/pdf, image/jpeg, image/png, text/plain) | No | Tipo reconocido a partir del contenido del archivo. `text/plain` son los resúmenes guardados desde el escaneo | `application/pdf` |
+| `tamano_bytes` | integer | No | Tamaño del archivo en bytes (8.000.000 como máximo) | `248731` |
+| `subido_por` | string (uuid) \| null | No | Quién subió el documento (null si su cuenta se ha eliminado) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-11-08T10:00:00Z` |
+
+**400** — El texto está vacío o ocupa más de 8 MB, el nombre tiene más de 150 caracteres o el identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El resumen no puede estar vacío ni ocupar más de 8 MB |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado y ya no se puede modificar
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+**502** — Supabase no ha podido guardar el resumen
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_documento` | No se ha podido guardar el resumen |
 
 ### DELETE /viajes/{viajeId}/documentos/{documentoId}
 

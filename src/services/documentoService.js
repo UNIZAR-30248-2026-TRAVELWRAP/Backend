@@ -10,6 +10,8 @@ const EXTENSIONES = {
   'application/pdf': 'pdf',
   'image/jpeg': 'jpg',
   'image/png': 'png',
+  // Resúmenes que la app guarda al escanear un documento que no es ni gasto ni actividad (scripts/04)
+  'text/plain': 'txt',
 };
 
 // Ruta del archivo dentro del bucket: la carpeta del viaje (la que comprueban las políticas de Storage)

@@ -2,6 +2,8 @@ const documentoService = require('../services/documentoService');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, textoOpcional } = require('../utils/validacion');
 
 const MAX_NOMBRE = 150;
+// Mismo límite que los archivos de la cartera (8 MB)
+const MAX_BYTES_TEXTO = 8_000_000;
 
 // Tipos admitidos, reconocidos por los primeros bytes del archivo (su «firma»): el tipo y la extensión
 // que manda el navegador los puede poner cualquiera, así que no bastan para saber qué es el archivo
@@ -143,4 +145,39 @@ const eliminar = async (req, res) => {
   }
 };
 
-module.exports = { listar, subir, obtenerUrl, eliminar, detectarTipo };
+// Guarda en la cartera el resumen en texto de un documento escaneado que no es ni gasto ni actividad.
+// Llega como JSON ({ nombre?, texto }): el texto se guarda como .txt en UTF-8, y el nombre por defecto es «Resumen escaneado.txt»
+const guardarTexto = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
+
+  const texto = typeof req.body?.texto === 'string' ? req.body.texto.trim() : '';
+  const buffer = Buffer.from(texto, 'utf8');
+  if (texto === '' || buffer.length > MAX_BYTES_TEXTO) {
+    return responderError(res, 400, 'datos_invalidos', 'El resumen no puede estar vacío ni ocupar más de 8 MB');
+  }
+
+  const nombre = validarNombre(req.body?.nombre, 'Resumen escaneado.txt');
+  if (nombre.error) return responderError(res, 400, 'datos_invalidos', nombre.error);
+
+  try {
+    const resultado = await documentoService.subir(req.supabase, req.usuario.id, viajeId, {
+      nombre: nombre.valor,
+      buffer,
+      tipoMime: 'text/plain',
+    });
+
+    if (resultado.error) {
+      if (resultado.error.code === CHECK_VIOLATION) {
+        return responderError(res, 400, 'datos_invalidos', 'Los datos del documento no son válidos');
+      }
+      return responderError(res, 502, 'error_documento', 'No se ha podido guardar el resumen');
+    }
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido guardar el resumen');
+    return res.status(201).json(resultado.documento);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, subir, obtenerUrl, eliminar, detectarTipo, guardarTexto };
