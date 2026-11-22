@@ -8,7 +8,7 @@ El servidor usa Socket.io 4 en el mismo puerto que la API (`http://localhost:300
 | --- | --- | --- |
 | `/votaciones` | Implementado | Cambios en las votaciones de un viaje |
 | `/chat` | Implementado | Mensajes nuevos del chat del grupo |
-| `/notificaciones` | Esqueleto | Notificaciones al usuario |
+| `/notificaciones` | Implementado | Avisos de votaciones, gastos, tareas y mensajes nuevos |
 
 ## `/chat`
 
@@ -115,3 +115,31 @@ El aviso **no lleva los datos de la votación**: el cliente la vuelve a pedir co
 
 - Servidor: `src/sockets/votacionesSocket.js`, configurado en `src/index.js`. Los controladores de votaciones avisan después de cada cambio que sale bien, y el de invitaciones cuando se une un miembro nuevo.
 - Pruebas: `test/votacionesSocket.test.js`, con un servidor de Socket.io y clientes reales, y los avisos de `test/votacion.test.js` y `test/invitationController.test.js`.
+
+## `/notificaciones`
+
+Avisa a cada usuario de lo que pasa en sus viajes. Se conecta igual que `/chat` (`auth: { token }`, `transports: ["websocket"]`), pero **no hace falta unirse a ningún viaje**: el servidor mete a cada usuario en su sala personal y le envía los avisos de todos sus viajes.
+
+### Eventos que envía el cliente
+
+Ninguno.
+
+### Eventos que envía el servidor
+
+**`notificacion`**: otro miembro ha creado una votación, registrado un gasto, añadido una tarea o enviado un mensaje. Se envía a los demás miembros activos del viaje, nunca a quien lo ha generado.
+
+```json
+{
+  "viaje_id": "123e4567-e89b-12d3-a456-426614174000",
+  "viaje_nombre": "Roma 2027",
+  "tipo": "gasto",
+  "pantalla": "gastos",
+  "texto": "Ana ha registrado un gasto: Cena"
+}
+```
+
+`tipo` es `votacion`, `gasto`, `tarea` o `mensaje`, y `pantalla` (a la que lleva el aviso) es `votaciones`, `gastos`, `tareas` o `chat`.
+
+### Notificaciones push
+
+La misma carga se envía con Web Push a los dispositivos que han activado las notificaciones (`POST /notificaciones/suscripciones`). El servidor necesita `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` en su entorno; sin ellas no hay push, pero los avisos por socket siguen funcionando. El service worker no muestra la notificación si la app está abierta y a la vista, porque ya sale el aviso dentro de la app.
