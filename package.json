@@ -34,6 +34,7 @@
     "express": "^5.2.1",
     "multer": "^2.5.0",
     "redis": "^6.2.1",
+    "sharp": "0.35.5",
     "socket.io": "^4.8.4",
     "swagger-ui-express": "^5.0.1",
     "tesseract.js": "^5.1.1",
