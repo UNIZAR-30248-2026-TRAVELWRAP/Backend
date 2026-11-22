@@ -1106,6 +1106,158 @@ paths:
                 error:
                   codigo: error_viaje
                   mensaje: No se ha podido abandonar el viaje
+  /viajes/{viajeId}/portada:
+    put:
+      tags:
+        - Viajes
+      summary: Sube o cambia la foto de portada del viaje
+      description: |
+        Sube una foto JPEG o PNG de 5 MB como máximo como portada del viaje. El archivo se guarda en el bucket privado
+        `portadas` de Supabase Storage, en la carpeta del viaje y con un nombre aleatorio, y su ruta queda en
+        `viajes.portada_ruta`. Si el viaje ya tenía portada, la nueva la sustituye y el archivo anterior se borra.
+        Si no se puede registrar, el archivo subido se borra del bucket.
+
+        El tipo se reconoce por el contenido del archivo, no por su extensión ni por el tipo que indica el navegador.
+        La puede cambiar cualquier miembro del viaje (no solo el creador) y solo con el viaje activo. Devuelve el viaje con `portada_url`, una URL
+        firmada de 1 hora que pueden usar los miembros.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubidaPortadaRequest'
+      responses:
+        '200':
+          description: Portada guardada. Devuelve el viaje actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: |
+            Falta el archivo o llega más de uno, el archivo no es un JPEG o PNG, ocupa más de 5 MB o el identificador
+            del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                sinArchivo:
+                  value:
+                    error:
+                      codigo: datos_invalidos
+                      mensaje: Adjunta la foto de portada en el campo «archivo»
+                tipoNoPermitido:
+                  value:
+                    error:
+                      codigo: tipo_no_permitido
+                      mensaje: La portada tiene que ser una imagen JPEG o PNG
+                demasiadoGrande:
+                  value:
+                    error:
+                      codigo: archivo_demasiado_grande
+                      mensaje: La portada no puede ocupar más de 5 MB
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase (al subir el archivo o al registrarlo)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido guardar la portada
+    delete:
+      tags:
+        - Viajes
+      summary: Quita la foto de portada del viaje
+      description: |
+        Quita la portada del viaje y borra su archivo del bucket `portadas`. El viaje vuelve a verse con su aspecto de
+        siempre. Si no tenía portada, no cambia nada. La puede quitar cualquier miembro del viaje y solo con el viaje activo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ViajeId'
+      responses:
+        '200':
+          description: Portada quitada. Devuelve el viaje actualizado, con `portada_url` a null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje está finalizado (solo lectura)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_activo
+                  mensaje: El viaje está finalizado y ya no se puede modificar
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido quitar la portada
+
   /viajes/{viajeId}/mensajes:
     get:
       tags:
@@ -4702,6 +4854,14 @@ components:
           type: boolean
           description: true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda
           example: false
+        portada_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.
+            La ruta del archivo en Storage no sale del servidor
+          example: null
 
     MiembroViaje:
       type: object
@@ -5598,6 +5758,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RepartoDetalle'
+
+    SubidaPortadaRequest:
+      type: object
+      required:
+        - archivo
+      properties:
+        archivo:
+          type: string
+          format: binary
+          description: JPEG o PNG de 5 MB (5.000.000 bytes) como máximo. Un solo archivo por petición
 
     SubidaDocumentoRequest:
       type: object
