@@ -48,13 +48,13 @@ const viaje = (datos = {}) =>
 afterEach(() => mock.restoreAll());
 
 describe('resumenService.obtener', () => {
-  it('calcula los días, los gastos y la actividad más votada del viaje', async () => {
+  it('calcula los días, la actividad más votada y el alma del grupo del viaje', async () => {
     viaje();
     const { cliente, consultas } = clienteFalso({
       gastos: {
         data: [
-          { concepto: 'Cena', importe: '120.50', pagado_por: 'u2' },
-          { concepto: 'Taxi', importe: '12.40', pagado_por: 'u1' },
+          { importe: '120.50', pagado_por: 'u2' },
+          { importe: '12.40', pagado_por: 'u1' },
         ],
         error: null,
       },
@@ -71,8 +71,6 @@ describe('resumenService.obtener', () => {
       estado: 'ok',
       resumen: {
         dias: 4,
-        gasto_total: 132.9,
-        gasto_mayor: { concepto: 'Cena', importe: 120.5 },
         actividad_mas_votada: { titulo: 'Coliseo', votos: 2 },
         alma_del_grupo: { usuario_id: 'u2', nombre: 'Berta', pagos: 1, planes_propuestos: 2, fotos_subidas: 1 },
       },
@@ -87,7 +85,7 @@ describe('resumenService.obtener', () => {
 
     const { resumen } = await resumenService.obtener(cliente, USUARIO_ID, VIAJE_ID);
 
-    assert.deepEqual(resumen, { dias: 4, gasto_total: 0, gasto_mayor: null, actividad_mas_votada: null, alma_del_grupo: null });
+    assert.deepEqual(resumen, { dias: 4, actividad_mas_votada: null, alma_del_grupo: null });
     assert.ok(!consultas.some((c) => c.tabla === 'opciones_votacion' || c.tabla === 'votos'));
   });
 

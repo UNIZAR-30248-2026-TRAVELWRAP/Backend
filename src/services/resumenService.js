@@ -1,10 +1,10 @@
 const viajeService = require('./viajeService');
-const { contarDias, resumirGastos, actividadMasVotada, almaDelGrupo } = require('../utils/resumenViaje');
+const { contarDias, actividadMasVotada, almaDelGrupo } = require('../utils/resumenViaje');
 
 const TIPO_ACTIVIDAD = 'actividad';
 
 const gastosDelViaje = (cliente, viajeId) =>
-  cliente.from('gastos').select('concepto, importe, pagado_por').eq('viaje_id', viajeId);
+  cliente.from('gastos').select('importe, pagado_por').eq('viaje_id', viajeId);
 
 const actividadesDelViaje = (cliente, viajeId) =>
   cliente.from('actividades').select('fecha, creado_por').eq('viaje_id', viajeId);
@@ -49,7 +49,6 @@ const obtener = async (cliente, usuarioId, viajeId) => {
         fin,
         (actividades.data ?? []).map((actividad) => actividad.fecha),
       ),
-      ...resumirGastos(gastos.data ?? []),
       actividad_mas_votada: actividadMasVotada(votaciones.opciones, votaciones.votos),
       alma_del_grupo: almaDelGrupo(previo.viaje.miembros, gastos.data ?? [], actividades.data ?? [], fotos.data ?? []),
     },

@@ -10,18 +10,6 @@ const contarDias = (fechaInicio, fechaFin, fechasActividades = []) => {
   return new Set(fechasActividades).size;
 };
 
-const resumirGastos = (gastos) => {
-  const total = gastos.reduce((suma, gasto) => suma + aCentimos(gasto.importe), 0) / 100;
-  const mayor = gastos.reduce(
-    (actual, gasto) => (actual === null || aCentimos(gasto.importe) > aCentimos(actual.importe) ? gasto : actual),
-    null,
-  );
-  return {
-    gasto_total: total,
-    gasto_mayor: mayor === null ? null : { concepto: mayor.concepto, importe: Number(mayor.importe) },
-  };
-};
-
 const actividadMasVotada = (opciones, votos) => {
   const recuento = new Map();
   for (const voto of votos) recuento.set(voto.opcion_id, (recuento.get(voto.opcion_id) ?? 0) + 1);
@@ -68,4 +56,4 @@ const almaDelGrupo = (miembros, gastos, actividades, fotos) => {
   };
 };
 
-module.exports = { contarDias, resumirGastos, actividadMasVotada, almaDelGrupo };
+module.exports = { contarDias, actividadMasVotada, almaDelGrupo };

@@ -35,7 +35,7 @@ afterEach(() => mock.restoreAll());
 
 describe('GET /viajes/:viajeId/resumen', () => {
   it('devuelve 200 con el resumen', async () => {
-    const resumen = { dias: 4, gasto_total: 850, gasto_mayor: null, actividad_mas_votada: null };
+    const resumen = { dias: 4, actividad_mas_votada: null, alma_del_grupo: null };
     const obtener = mock.method(resumenService, 'obtener', async () => ({ estado: 'ok', resumen }));
 
     const res = await llamar();
