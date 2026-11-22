@@ -67,6 +67,9 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | GET | [`/viajes/{viajeId}/sello`](#get-viajesviajeidsello) | Consulta el sello que el usuario ha elegido para el viaje | Token de sesión |
 | PUT | [`/viajes/{viajeId}/sello`](#put-viajesviajeidsello) | Elige o cambia el sello del viaje | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/sello`](#delete-viajesviajeidsello) | Quita el sello del viaje | Token de sesión |
+| GET | [`/viajes/{viajeId}/puntos-de-interes`](#get-viajesviajeidpuntos-de-interes) | Lista los puntos de interés de un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/puntos-de-interes`](#post-viajesviajeidpuntos-de-interes) | Añade un punto de interés al mapa del viaje | Token de sesión |
+| DELETE | [`/viajes/{viajeId}/puntos-de-interes/{puntoId}`](#delete-viajesviajeidpuntos-de-interespuntoid) | Borra un punto de interés del mapa del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/fotos`](#get-viajesviajeidfotos) | Lista las fotos y los vídeos de la galería del viaje | Token de sesión |
 | POST | [`/viajes/{viajeId}/fotos`](#post-viajesviajeidfotos) | Sube una foto o un vídeo a la galería del viaje | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/fotos/{fotoId}`](#delete-viajesviajeidfotosfotoid) | Borra una foto o un vídeo de la galería del viaje | Token de sesión |
@@ -4145,6 +4148,221 @@ sellos de los demás usuarios.
 | Código de error | Mensaje |
 | --- | --- |
 | `error_sello` | No se ha podido quitar el sello |
+
+## Puntos de interés
+
+### GET /viajes/{viajeId}/puntos-de-interes
+
+**Lista los puntos de interés de un viaje**
+
+Devuelve los puntos de interés del viaje, del más antiguo al más reciente. Son los sitios que el grupo quiere
+tener en el mapa sin que sean una actividad del itinerario: la pestaña «Puntos de interés» del Itinerario los
+dibuja en un mapa aparte, con un marcador por punto.
+Solo lo pueden pedir los miembros del viaje, y también funciona con un viaje finalizado o archivado (solo lectura).
+No hay notificaciones en tiempo real: para ver los cambios de otros miembros basta con volver a pedir el listado.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Puntos de interés del viaje (lista vacía si no tiene ninguno)
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `puntos_interes` | array<PuntoInteres> | No |  |  |
+| `puntos_interes[].id` | string (uuid) | No |  | `6c7d8e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f` |
+| `puntos_interes[].viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `puntos_interes[].nombre` | string | No |  | `Fontana di Trevi` |
+| `puntos_interes[].nota` | string \| null | No |  | `Ir temprano para evitar colas` |
+| `puntos_interes[].categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+| `puntos_interes[].latitud` | number | No | Latitud del punto (6 decimales) | `41.900932` |
+| `puntos_interes[].longitud` | number | No | Longitud del punto (6 decimales) | `12.483313` |
+| `puntos_interes[].lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap, si se eligió con el buscador de direcciones | `way/24146600` |
+| `puntos_interes[].creado_por` | string (uuid) \| null | No | Usuario que añadió el punto (null si ya no existe su perfil) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `puntos_interes[].creado_en` | string (date-time) | No |  | `2026-11-22T10:00:00Z` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_punto_interes` | No se han podido obtener los puntos de interés |
+
+### POST /viajes/{viajeId}/puntos-de-interes
+
+**Añade un punto de interés al mapa del viaje**
+
+Añade un punto de interés con su ubicación (`latitud` y `longitud`, obligatorias) y un nombre. La nota y la
+categoría son opcionales, y la categoría usa las mismas que las actividades. Si el punto se eligió con una
+dirección del buscador (GET /direcciones) se puede enviar también su `lugar_externo_id`; si se eligió tocando el
+mapa, no.
+Lo puede añadir cualquier miembro mientras el viaje está activo; queda a su nombre (`creado_por`). Los puntos no se
+pueden editar: para corregir uno se borra y se vuelve a crear.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Cuerpo de la petición** (`application/json`, obligatorio)
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `nombre` | string | Sí |  | `Fontana di Trevi` |
+| `nota` | string \| null | No |  | `Ir temprano para evitar colas` |
+| `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+| `latitud` | number | Sí |  | `41.900932` |
+| `longitud` | number | Sí |  | `12.483313` |
+| `lugar_externo_id` | string \| null | No |  | `way/24146600` |
+
+**Respuestas**
+
+**201** — Punto de interés creado
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `6c7d8e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f` |
+| `viaje_id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Fontana di Trevi` |
+| `nota` | string \| null | No |  | `Ir temprano para evitar colas` |
+| `categoria` | enum (comida, cultura, transporte, alojamiento, otro) \| null | No |  | `cultura` |
+| `latitud` | number | No | Latitud del punto (6 decimales) | `41.900932` |
+| `longitud` | number | No | Longitud del punto (6 decimales) | `12.483313` |
+| `lugar_externo_id` | string \| null | No | Identificador del lugar en OpenStreetMap, si se eligió con el buscador de direcciones | `way/24146600` |
+| `creado_por` | string (uuid) \| null | No | Usuario que añadió el punto (null si ya no existe su perfil) | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `creado_en` | string (date-time) | No |  | `2026-11-22T10:00:00Z` |
+
+**400** — Faltan datos, no son válidos o el identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | La latitud es obligatoria y debe ser un número entre -90 y 90 |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_punto_interes` | No se ha podido crear el punto de interés |
+
+### DELETE /viajes/{viajeId}/puntos-de-interes/{puntoId}
+
+**Borra un punto de interés del mapa del viaje**
+
+Borra el punto de interés para todos los miembros. No se puede deshacer.
+Cualquier miembro puede borrar cualquier punto, no solo quien lo añadió, y solo mientras el viaje esté activo.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+| `puntoId` | path | Sí | string (uuid) | Identificador del punto de interés | `6c7d8e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f` |
+
+**Respuestas**
+
+**204** — Punto de interés borrado (sin cuerpo)
+
+**400** — El identificador del viaje o del punto de interés no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje o del punto de interés no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (`viaje_no_encontrado`), o el punto no existe en este viaje, por ejemplo porque otro miembro ya lo borró (`punto_no_encontrado`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+| `punto_no_encontrado` | El punto de interés no existe en este viaje |
+
+**409** — El viaje está finalizado (solo lectura)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_activo` | El viaje está finalizado y ya no se puede modificar |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_punto_interes` | No se ha podido eliminar el punto de interés |
 
 ## Fotos
 
