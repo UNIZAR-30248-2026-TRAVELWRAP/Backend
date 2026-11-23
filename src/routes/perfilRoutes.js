@@ -31,6 +31,7 @@ const recibirAvatar = (req, res, next) => {
 
 // Perfil del usuario con sesión: las rutas no llevan id, así que solo se puede editar el propio
 router.patch('/', requiereSesion, perfilController.actualizarNombre);
+router.delete('/', requiereSesion, perfilController.eliminarCuenta);
 router.put('/avatar', requiereSesion, recibirAvatar, perfilController.cambiarAvatar);
 router.delete('/avatar', requiereSesion, perfilController.quitarAvatar);
 

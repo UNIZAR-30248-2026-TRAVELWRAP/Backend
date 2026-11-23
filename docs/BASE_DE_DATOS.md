@@ -8,7 +8,7 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 
 | Tabla | Columnas | RLS | Políticas |
 | --- | --- | --- | --- |
-| [perfiles](#perfiles) | 5 | Activada | 3 |
+| [perfiles](#perfiles) | 6 | Activada | 3 |
 | [viajes](#viajes) | 16 | Activada | 3 |
 | [miembros_viaje](#miembros_viaje) | 7 | Activada | 2 |
 | [votaciones](#votaciones) | 10 | Activada | 3 |
@@ -30,7 +30,6 @@ Base de datos PostgreSQL gestionada en Supabase. La autenticación usa Supabase 
 
 ```mermaid
 erDiagram
-    auth_users ||--o{ perfiles : "id"
     perfiles |o--o{ viajes : "creador_id"
     viajes ||--o{ miembros_viaje : "viaje_id"
     perfiles ||--o{ miembros_viaje : "usuario_id"
@@ -86,11 +85,12 @@ erDiagram
 
 | Columna | Tipo | Obligatoria | Clave | Por defecto | Notas |
 | --- | --- | --- | --- | --- | --- |
-| `id` | `uuid` | Sí | PK, FK → auth.users.id (ON DELETE CASCADE) |  |  |
+| `id` | `uuid` | Sí | PK |  | Es el id del usuario de Supabase Auth, pero sin clave foránea (PB-47): al eliminar la cuenta se borra el usuario y el perfil se queda anonimizado como «Un antiguo miembro», porque los gastos, repartos y mensajes del usuario en viajes compartidos siguen apuntando a él |
 | `nombre` | `text` | Sí |  |  | Entre 1 y 100 caracteres sin contar los espacios de los extremos (restricción perfiles_nombre_valido) |
 | `email` | `text` | No |  |  |  |
 | `avatar_url` | `text` | No |  |  |  |
 | `creado_en` | `timestamptz` | Sí |  | `now()` |  |
+| `eliminado_en` | `timestamptz` | No |  |  | Momento en que el usuario eliminó su cuenta (PB-47). Su perfil queda anonimizado (nombre «Un antiguo miembro», sin email ni foto) y sigue siendo miembro de sus viajes, pero ya no cuenta como miembro que queda en ellos |
 
 ### viajes
 
@@ -504,6 +504,8 @@ Suscripciones de notificaciones push (PB-54). Cada fila es un dispositivo de un 
 | `eliminar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve: { "estado": "no_permitido" }  sin cambios { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan { "estado": "ok", "ultimo": true, "documentos": [...], "fotos": [...], "portadas": [...] }  sin cambios todavía: es el último miembro, así que el backend borra esos archivos con su propio token y después llama a borrar_viaje. Las rutas salen de storage.objects (no de las tablas) para incluir también archivos sin fila por una subida fallida |
 | `borrar_viaje` | `p_viaje_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Borra de verdad el viaje y todo lo suyo (en cascada: miembros, gastos, documentos, fotos, votaciones, tareas...; los sellos no, son de cada usuario). Solo lo puede hacer el último miembro y solo cuando ya no queda ningún archivo suyo en Storage: Storage no da error cuando una política le impide borrar (devuelve la lista vacía), y sin esta comprobación un borrado rechazado dejaría archivos huérfanos sin viaje. Devuelve false si no borra nada |
 | `abandonar_viaje` | `p_viaje_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | authenticated | Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca de cada gasto). Devuelve: { "estado": "no_miembro" }, { "estado": "es_creador" } o { "estado": "no_activo" }  sin cambios { "estado": "saldo_pendiente", "saldo": n }  sin cambios { "estado": "ok" }  ya no es miembro del viaje |
+| `viajes_en_solitario` | `p_usuario_id uuid` | `jsonb` | su propietario (SECURITY DEFINER) | service_role | Viajes en los que el usuario es el único miembro que queda (los demás los abandonaron, los eliminaron o eliminaron su cuenta), con las rutas de sus archivos en Storage para que el backend los borre antes de eliminar el viaje: [ { "id": uuid, "documentos": [...], "fotos": [...], "portadas": [...] } ] |
+| `eliminar_datos_cuenta` | `p_usuario_id uuid` | `boolean` | su propietario (SECURITY DEFINER) | service_role | Borra los datos personales del usuario antes de eliminar su usuario de Supabase Auth: - Borra (en cascada) los viajes de los que es el único miembro, solo si ya no queda ningún archivo suyo en Storage - En los demás viajes sigue como miembro, pero anonimizado: conserva sus tareas, gastos, repartos, mensajes y votos - Borra sus sellos y sus suscripciones push - Anonimiza el perfil (nombre «Un antiguo miembro», sin email ni foto) y anota cuándo se eliminó Devuelve false, sin cambiar nada, si quedan archivos de un viaje en solitario |
 | `cambiar_portada` | `p_viaje_id uuid, p_ruta text` | `boolean` | su propietario (SECURITY DEFINER) | authenticated | Cambia la foto de portada del viaje (o la quita con null). La puede cambiar cualquier miembro mientras el viaje está activo, aunque no sea el creador (que es el único que modifica el resto de datos del viaje, por eso no basta viajes_update). La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada |
 | `suscripciones_push_del_viaje` | `p_viaje_id uuid` | `TABLE` | su propietario (SECURITY DEFINER) | authenticated | Suscripciones de los demás miembros activos del viaje, para enviarles el aviso. Solo las puede pedir un miembro activo del viaje, y nunca devuelve las suyas |
 | `borrar_suscripcion_caducada` | `p_endpoint text` | `void` | su propietario (SECURITY DEFINER) | authenticated | Borra una suscripción que el servicio push ha dado por caducada (404 o 410), siempre que sea de un miembro de un viaje que comparte con quien la pide |

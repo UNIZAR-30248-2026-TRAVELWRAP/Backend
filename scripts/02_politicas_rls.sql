@@ -71,6 +71,8 @@ AS $$
       AND otro.usuario_id <> auth.uid()
       AND otro.abandonado_en IS NULL
       AND otro.eliminado_en IS NULL
+      -- Los miembros que eliminaron su cuenta no cuentan
+      AND NOT EXISTS (SELECT 1 FROM public.perfiles p WHERE p.id = otro.usuario_id AND p.eliminado_en IS NOT NULL)
   );
 $$;
 
@@ -943,11 +945,11 @@ BEGIN
   SELECT * INTO v_gasto FROM public.gastos WHERE id = p_gasto_id AND viaje_id = p_viaje_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('estado', 'no_encontrado');
-  END IF;
-
   -- Solo quien registró el gasto o el creador del viaje pueden editarlo
   IF v_gasto.creado_por IS DISTINCT FROM auth.uid() AND NOT public.es_creador(p_viaje_id) THEN
     RETURN jsonb_build_object('estado', 'sin_permiso');
+  END IF;
+
   END IF;
 
   -- Quien paga y todos los participantes tienen que ser miembros actuales del viaje
@@ -1182,13 +1184,13 @@ BEGIN
       AND eliminado_en IS NULL
   ) THEN
     RETURN jsonb_build_object('estado', 'no_miembro');
-  END IF;
-
   IF EXISTS (
     SELECT 1 FROM public.miembros_viaje
     WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid() AND rol = 'creador'
   ) THEN
     RETURN jsonb_build_object('estado', 'es_creador');
+  END IF;
+
   END IF;
 
   IF EXISTS (SELECT 1 FROM public.viajes WHERE id = p_viaje_id AND estado <> 'activo') THEN
@@ -1221,6 +1223,83 @@ $$;
 
 REVOKE ALL ON FUNCTION public.abandonar_viaje(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.abandonar_viaje(uuid) TO authenticated;
+
+-- ELIMINAR CUENTA (PB-47)
+-- Las dos funciones las llama solo el backend con la service key (rol service_role) después de comprobar la sesión:
+-- reciben el id del usuario como parámetro, así que ningún usuario puede llamarlas con su token.
+
+-- Viajes en los que el usuario es el único miembro que queda (los demás los abandonaron, los eliminaron o eliminaron
+-- su cuenta), con las
+-- rutas de sus archivos en Storage para que el backend los borre antes de eliminar el viaje:
+--   [ { "id": uuid, "documentos": [...], "fotos": [...], "portadas": [...] } ]
+CREATE OR REPLACE FUNCTION public.viajes_en_solitario(p_usuario_id uuid)
+RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+    'id', v.id,
+    'documentos', (SELECT coalesce(jsonb_agg(o.name), '[]'::jsonb) FROM storage.objects o
+                   WHERE o.bucket_id = 'documentos' AND public.viaje_de_ruta(o.name) = v.id),
+    'fotos', (SELECT coalesce(jsonb_agg(o.name), '[]'::jsonb) FROM storage.objects o
+              WHERE o.bucket_id = 'fotos' AND public.viaje_de_ruta(o.name) = v.id),
+    'portadas', (SELECT coalesce(jsonb_agg(o.name), '[]'::jsonb) FROM storage.objects o
+                 WHERE o.bucket_id = 'portadas' AND public.viaje_de_ruta(o.name) = v.id)
+  )), '[]'::jsonb)
+  FROM public.viajes v
+  WHERE EXISTS (SELECT 1 FROM public.miembros_viaje m WHERE m.viaje_id = v.id AND m.usuario_id = p_usuario_id)
+    AND NOT EXISTS (
+      SELECT 1 FROM public.miembros_viaje otro
+      WHERE otro.viaje_id = v.id
+        AND otro.usuario_id <> p_usuario_id
+        AND otro.abandonado_en IS NULL
+        AND otro.eliminado_en IS NULL
+        AND NOT EXISTS (SELECT 1 FROM public.perfiles p WHERE p.id = otro.usuario_id AND p.eliminado_en IS NOT NULL)
+    );
+$$;
+
+-- Borra los datos personales del usuario antes de eliminar su usuario de Supabase Auth:
+--   - Borra (en cascada) los viajes de los que es el único miembro, solo si ya no queda ningún archivo suyo en Storage
+--   - En los demás viajes sigue como miembro, pero anonimizado: conserva sus tareas, gastos, repartos, mensajes y votos
+--   - Borra sus sellos y sus suscripciones push
+--   - Anonimiza el perfil (nombre «Un antiguo miembro», sin email ni foto) y anota cuándo se eliminó
+-- Devuelve false, sin cambiar nada, si quedan archivos de un viaje en solitario
+CREATE OR REPLACE FUNCTION public.eliminar_datos_cuenta(p_usuario_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_viajes uuid[];
+BEGIN
+  SELECT coalesce(array_agg((e ->> 'id')::uuid), '{}') INTO v_viajes
+  FROM jsonb_array_elements(public.viajes_en_solitario(p_usuario_id)) AS e;
+
+  IF EXISTS (
+    SELECT 1 FROM storage.objects
+    WHERE bucket_id IN ('documentos', 'fotos', 'portadas') AND public.viaje_de_ruta(name) = ANY (v_viajes)
+  ) THEN
+    RETURN false;
+  END IF;
+
+  DELETE FROM public.viajes WHERE id = ANY (v_viajes);
+
+  DELETE FROM public.sellos WHERE usuario_id = p_usuario_id;
+  DELETE FROM public.suscripciones_push WHERE usuario_id = p_usuario_id;
+
+  UPDATE public.perfiles
+  SET nombre = 'Un antiguo miembro', email = NULL, avatar_url = NULL, eliminado_en = coalesce(eliminado_en, now())
+  WHERE id = p_usuario_id;
+
+  RETURN true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.viajes_en_solitario(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.viajes_en_solitario(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.eliminar_datos_cuenta(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.eliminar_datos_cuenta(uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.es_ultimo_miembro(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.es_ultimo_miembro(uuid) TO authenticated;

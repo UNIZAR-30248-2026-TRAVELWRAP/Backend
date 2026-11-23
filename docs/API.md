@@ -85,6 +85,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | DELETE | [`/viajes/{viajeId}/documentos/{documentoId}`](#delete-viajesviajeiddocumentosdocumentoid) | Elimina un documento de la cartera del viaje | Token de sesión |
 | GET | [`/viajes/{viajeId}/documentos/{documentoId}/url`](#get-viajesviajeiddocumentosdocumentoidurl) | Obtiene un enlace temporal para abrir o descargar un documento | Token de sesión |
 | PATCH | [`/perfil`](#patch-perfil) | Cambia el nombre del perfil | Token de sesión |
+| DELETE | [`/perfil`](#delete-perfil) | Elimina la cuenta | Token de sesión |
 | PUT | [`/perfil/avatar`](#put-perfilavatar) | Cambia la foto del perfil | Token de sesión |
 | DELETE | [`/perfil/avatar`](#delete-perfilavatar) | Quita la foto del perfil | Token de sesión |
 | GET | [`/perfil/sellos`](#get-perfilsellos) | Lista los sellos del usuario (pasaporte de viajes) | Token de sesión |
@@ -5253,6 +5254,55 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_interno` | Error interno del servidor |
+
+### DELETE /perfil
+
+**Elimina la cuenta**
+
+Elimina la cuenta de quien hace la petición. La ruta no lleva ningún identificador: el servidor usa siempre el
+usuario del token, así que solo se puede eliminar la cuenta propia. Es la única operación que usa la service key
+de Supabase (borrar un usuario de Supabase Auth no se puede hacer con su propio token). Pasos, en este orden:
+
+1. Borra los archivos de Storage de los viajes en los que es el único miembro que queda.
+2. Borra esos viajes con todo lo suyo, borra sus sellos y sus suscripciones push y anonimiza su perfil: el
+   nombre pasa a «Un antiguo miembro» y se borran el email y la foto. En los demás viajes sigue como miembro
+   anonimizado y conserva sus tareas, gastos, repartos, mensajes y votos (ya no cuenta como miembro que queda
+   para decidir si el viaje se elimina).
+3. Borra sus fotos del bucket `avatares`.
+4. Elimina el usuario en Supabase Auth.
+
+Si un paso falla se para y la petición se puede repetir. Tras un 204 el token deja de ser válido.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Respuestas**
+
+**204** — Cuenta eliminada
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**500** — Error interno del servidor
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_interno` | Error interno del servidor |
+
+**502** — Error al comunicarse con Supabase. La cuenta no se ha eliminado del todo y se puede volver a intentar
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_cuenta` | No se ha podido eliminar la cuenta |
+
+**503** — El servidor no tiene configurada la service key de Supabase (`SUPABASE_SERVICE_ROLE_KEY`)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `eliminacion_no_disponible` | La eliminación de cuentas no está disponible |
 
 ### PUT /perfil/avatar
 

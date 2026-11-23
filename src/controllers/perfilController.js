@@ -1,4 +1,6 @@
 const perfilService = require('../services/perfilService');
+const cuentaService = require('../services/cuentaService');
+const { crearClienteAdmin } = require('../config/supabaseAdmin');
 const { detectarTipo } = require('./documentoController');
 const { CHECK_VIOLATION, responderError } = require('../utils/validacion');
 
@@ -71,4 +73,20 @@ const quitarAvatar = async (req, res) => {
   }
 };
 
-module.exports = { actualizarNombre, cambiarAvatar, quitarAvatar };
+// Elimina la cuenta de quien hace la petición: el id sale siempre del token, nunca de la petición
+const eliminarCuenta = async (req, res) => {
+  try {
+    const admin = crearClienteAdmin();
+    if (!admin) {
+      return responderError(res, 503, 'eliminacion_no_disponible', 'La eliminación de cuentas no está disponible');
+    }
+
+    const resultado = await cuentaService.eliminarCuenta(admin, req.usuario.id);
+    if (resultado.error) return responderError(res, 502, 'error_cuenta', 'No se ha podido eliminar la cuenta');
+    return res.status(204).end();
+  } catch {
+    return errorInterno(res);
+  }
+};
+
+module.exports = { actualizarNombre, cambiarAvatar, quitarAvatar, eliminarCuenta };

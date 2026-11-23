@@ -42,13 +42,23 @@ $$;
 
 -- 2. TABLAS
 CREATE TABLE IF NOT EXISTS public.perfiles (
-  id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+  -- Es el id del usuario de Supabase Auth, pero sin clave foránea (PB-47): al eliminar la cuenta se borra el usuario
+  -- y el perfil se queda anonimizado como «Un antiguo miembro», porque los gastos, repartos y mensajes del usuario
+  -- en viajes compartidos siguen apuntando a él
+  id uuid PRIMARY KEY,
   -- Entre 1 y 100 caracteres sin contar los espacios de los extremos (restricción perfiles_nombre_valido)
   nombre text NOT NULL,
   email text,
   avatar_url text,
-  creado_en timestamptz NOT NULL DEFAULT now()
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  -- Momento en que el usuario eliminó su cuenta (PB-47). Su perfil queda anonimizado (nombre «Un antiguo miembro»,
+  -- sin email ni foto) y sigue siendo miembro de sus viajes, pero ya no cuenta como miembro que queda en ellos
+  eliminado_en timestamptz
 );
+
+-- Bases creadas antes de PB-47: quita la clave foránea del perfil a auth.users
+ALTER TABLE public.perfiles DROP CONSTRAINT IF EXISTS perfiles_id_fkey;
+ALTER TABLE public.perfiles ADD COLUMN IF NOT EXISTS eliminado_en timestamptz;
 
 -- El nombre del perfil tiene entre 1 y 100 caracteres sin contar los espacios de los extremos (como en el registro)
 DO $$
