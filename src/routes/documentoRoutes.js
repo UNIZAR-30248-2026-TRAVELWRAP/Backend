@@ -34,6 +34,8 @@ const recibirArchivo = (req, res, next) => {
 // Rutas de la cartera de documentos del viaje
 router.get('/', requiereSesion, documentoController.listar);
 router.post('/', requiereSesion, recibirArchivo, documentoController.subir);
+// Resumen en texto de un documento escaneado (JSON), guardado como .txt en la cartera
+router.post('/texto', requiereSesion, documentoController.guardarTexto);
 router.get('/:documentoId/url', requiereSesion, documentoController.obtenerUrl);
 router.delete('/:documentoId', requiereSesion, documentoController.eliminar);
 

@@ -7168,6 +7168,171 @@
           ]
         },
         {
+          "name": "Escanear una foto de un documento (viaje activo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/escaneo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.png"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tipo gasto, actividad u otro', () => pm.expect(['gasto','actividad','otro']).to.include(pm.response.json().tipo));",
+                  "pm.test('Lleva los datos del tipo', () => pm.expect(pm.response.json().datos).to.be.an('object'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Escanear una foto sin archivo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/escaneo",
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Escanear un documento que no es una foto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/escaneo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/no_es_una_foto.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código tipo_no_permitido', () => pm.expect(pm.response.json().error.codigo).to.eql('tipo_no_permitido'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Escanear una foto de un viaje que no existe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/123e4567-e89b-12d3-a456-426614174000/gastos/escaneo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.png"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código viaje_no_encontrado', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_encontrado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Escanear una foto sin sesión",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/escaneo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.png"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código sin_sesion', () => pm.expect(pm.response.json().error.codigo).to.eql('sin_sesion'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Finalizar el viaje de los gastos",
           "request": {
             "method": "POST",
@@ -7224,6 +7389,42 @@
                   "pm.test('Código viaje_no_activo', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Escanear una foto en un viaje finalizado (solo lectura)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGasto}}/gastos/escaneo",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "archivo",
+                  "type": "file",
+                  "src": "archivos_prueba/foto.png"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Tipo gasto, actividad u otro', () => pm.expect(['gasto','actividad','otro']).to.include(pm.response.json().tipo));",
+                  "pm.test('Lleva los datos del tipo', () => pm.expect(pm.response.json().datos).to.be.an('object'));"
                 ]
               }
             }
@@ -9019,6 +9220,73 @@
           ]
         },
         {
+          "name": "Guardar el resumen de un documento escaneado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/texto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Póliza de seguro\\nCobertura total durante el viaje\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Se guarda como texto plano', () => pm.expect(pm.response.json().tipo_mime).to.eql('text/plain'));",
+                  "pm.test('Nombre por defecto', () => pm.expect(pm.response.json().nombre).to.eql('Resumen escaneado.txt'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Guardar un resumen vacío",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/texto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"   \"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Finalizar el viaje de los documentos",
           "request": {
             "method": "POST",
@@ -9077,6 +9345,39 @@
                   "pm.test('Código viaje_no_activo', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Guardar un resumen en un viaje finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdDocumento}}/documentos/texto",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texto\": \"Resumen\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_activo', () => pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_activo'));"
                 ]
               }
             }

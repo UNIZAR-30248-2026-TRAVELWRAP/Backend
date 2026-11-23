@@ -1,4 +1,5 @@
 const actividadService = require('../services/actividadService');
+const fotoEscaneoService = require('../services/fotoEscaneoService');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
 const HORA_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -76,7 +77,7 @@ const validarLugarExterno = (valor) => {
 
 const MENSAJE_COORDENADAS_JUNTAS = 'La latitud y la longitud se envían juntas o ninguna';
 
-const validarNuevaActividad = (cuerpo) => {
+const validarNuevaActividad = (cuerpo, viajeId) => {
   const datos = cuerpo !== null && typeof cuerpo === 'object' ? cuerpo : {};
 
   const titulo = validarTitulo(datos.titulo);
@@ -107,6 +108,8 @@ const validarNuevaActividad = (cuerpo) => {
   if ((latitud.valor === null) !== (longitud.valor === null)) return { error: MENSAJE_COORDENADAS_JUNTAS };
   const lugarExterno = validarLugarExterno(datos.lugar_externo_id);
   if (lugarExterno.error) return lugarExterno;
+  const fotoRuta = fotoEscaneoService.validarRutaOpcional(datos.foto_ruta, viajeId);
+  if (fotoRuta.error) return fotoRuta;
 
   return {
     datos: {
@@ -119,6 +122,8 @@ const validarNuevaActividad = (cuerpo) => {
       latitud: latitud.valor,
       longitud: longitud.valor,
       lugar_externo_id: lugarExterno.valor,
+      // Solo si hay foto del documento: sin ella la actividad se crea como antes
+      ...(fotoRuta.valor ? { foto_ruta: fotoRuta.valor } : {}),
     },
   };
 };
@@ -206,7 +211,7 @@ const crear = async (req, res) => {
   const { viajeId } = req.params;
   if (!UUID_REGEX.test(viajeId)) return idViajeInvalido(res);
 
-  const validacion = validarNuevaActividad(req.body);
+  const validacion = validarNuevaActividad(req.body, viajeId);
   if (validacion.error) return responderError(res, 400, 'datos_invalidos', validacion.error);
 
   try {
@@ -308,4 +313,21 @@ const reordenar = async (req, res) => {
   }
 };
 
-module.exports = { listar, crear, editar, eliminar, reordenar };
+// Enlace temporal para ver la foto del documento escaneado de una actividad
+const fotoUrl = async (req, res) => {
+  const { viajeId, actividadId } = req.params;
+  if (!UUID_REGEX.test(viajeId) || !UUID_REGEX.test(actividadId)) return idsInvalidos(res);
+
+  try {
+    const resultado = await actividadService.obtenerFoto(req.supabase, req.usuario.id, viajeId, actividadId);
+    if (resultado.error) return responderError(res, 502, 'error_actividad', 'No se ha podido obtener la foto de la actividad');
+    if (resultado.estado === 'no_existe') return responderError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
+    if (resultado.estado === 'no_encontrada') return responderError(res, 404, 'actividad_no_encontrada', 'La actividad no existe en este viaje');
+    if (resultado.estado === 'sin_foto') return responderError(res, 404, 'sin_foto', 'Esta actividad no tiene foto del documento');
+    return res.status(200).json({ url: resultado.url, expira_en: resultado.expira_en });
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+module.exports = { listar, crear, editar, eliminar, reordenar, fotoUrl };
