@@ -470,7 +470,7 @@ paths:
         Crea un viaje activo y añade al usuario como miembro con rol `creador`, en una sola operación.
         El nombre y el presupuesto son obligatorios. Las fechas y el destino son opcionales.
         Si no se indica destino (`null`, ausente o cadena vacía) el viaje queda **pendiente de destino**
-        (`pendiente_destino: true`): hasta que el creador fije el destino por votación, solo se podrá votar e invitar.
+        (`pendiente_destino: true`): hasta que se fije el destino por votación, solo se podrá votar e invitar.
       security:
         - bearerAuth: []
       requestBody:
@@ -597,7 +597,7 @@ paths:
       summary: Edita los datos de un viaje
       description: |
         Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
-        Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
+        Lo puede hacer cualquier miembro del viaje. Se envían únicamente los campos que cambian (al menos uno);
         los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
         Un viaje finalizado es de solo lectura y no se puede editar.
       security:
@@ -653,16 +653,6 @@ paths:
                       mensaje: La fecha de fin no puede ser anterior a la de inicio
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede hacerlo
         '404':
           description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
           content:
@@ -784,7 +774,7 @@ paths:
         Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
         Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
         archivarlo para sí mismo con `/archivar`.
-        Solo lo puede hacer el creador del viaje. No se puede deshacer.
+        Lo puede hacer cualquier miembro del viaje. No se puede deshacer.
       security:
         - bearerAuth: []
       parameters:
@@ -815,16 +805,6 @@ paths:
                   mensaje: El identificador del viaje no es válido
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede hacerlo
         '404':
           description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
           content:
@@ -1029,8 +1009,8 @@ paths:
       summary: Abandona el viaje
       description: |
         Deja el viaje **para quien lo pide**: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
-        aparece como «Antiguo miembro»). Solo puede hacerlo un miembro que no es el creador, con el viaje activo y con su
-        saldo a cero (lo que ha pagado menos lo que le toca de cada gasto). El creador tiene «Finalizar viaje».
+        aparece como «Antiguo miembro»). Puede hacerlo cualquier miembro, también quien creó el viaje, con el viaje activo y
+        con su saldo a cero (lo que ha pagado menos lo que le toca de cada gasto).
         Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que las votaciones abiertas se actualicen.
       security:
         - bearerAuth: []
@@ -1058,16 +1038,6 @@ paths:
                   mensaje: El identificador del viaje no es válido
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es el creador del viaje, que no puede abandonarlo (tiene «Finalizar viaje»)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: es_creador
-                  mensaje: 'El creador no puede abandonar el viaje: puede finalizarlo'
         '404':
           description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir los casos)
           content:
@@ -1916,7 +1886,7 @@ paths:
         En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
         pendiente de destino.
         Solo se puede cerrar cuando han votado todos los miembros activos del viaje (RF9): `todos_han_votado` lo indica.
-        Solo lo puede hacer el creador del viaje, con el viaje activo.
+        Lo puede hacer cualquier miembro del viaje, con el viaje activo.
       security:
         - bearerAuth: []
       parameters:
@@ -1933,16 +1903,6 @@ paths:
           $ref: '#/components/responses/IdVotacionInvalido'
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: El usuario es miembro del viaje pero no su creador
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: no_creador
-                  mensaje: Solo el creador del viaje puede cerrar las votaciones
         '404':
           $ref: '#/components/responses/VotacionNoEncontrada'
         '409':
@@ -3303,7 +3263,7 @@ paths:
         Actualiza el gasto con los mismos datos que al crearlo (concepto, importe, categoría, quién pagó, fecha y
         participantes) y vuelve a repartirlo a partes iguales, en céntimos. El balance y la liquidación se recalculan
         solos, porque salen de los repartos.
-        Solo pueden editarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
+        Lo puede editar cualquier miembro del viaje, y solo mientras el viaje está activo.
       security:
         - bearerAuth: []
       parameters:
@@ -3334,16 +3294,6 @@ paths:
                   mensaje: El importe debe ser un número mayor que 0 con dos decimales como máximo
         '401':
           $ref: '#/components/responses/SinSesion'
-        '403':
-          description: Quien edita no registró el gasto ni es el creador del viaje
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  codigo: sin_permiso
-                  mensaje: Solo puede editar el gasto quien lo registró o el creador del viaje
         '404':
           description: El viaje no existe o el usuario no es miembro, o el gasto no existe o es de otro viaje
           content:
@@ -3382,8 +3332,7 @@ paths:
       summary: Borra un gasto y sus repartos
       description: |
         Borra el gasto y, en cascada, sus repartos: el total, el balance y la liquidación dejan de contarlo.
-        Solo pueden borrarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
-        Quien no puede borrarlo recibe el mismo 404 que si el gasto no existiera.
+        Lo puede borrar cualquier miembro del viaje, y solo mientras está activo.
       security:
         - bearerAuth: []
       parameters:
@@ -5872,7 +5821,12 @@ components:
         rol:
           type: string
           enum: [creador, miembro]
+          description: Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo
           example: creador
+        cuenta_eliminada:
+          type: boolean
+          description: true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto
+          example: false
 
     ViajeDelUsuario:
       allOf:
@@ -6094,11 +6048,11 @@ components:
           example: 3
         total_miembros:
           type: integer
-          description: Miembros activos del viaje, es decir, cuántos pueden votar
+          description: Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta)
           example: 4
         todos_han_votado:
           type: boolean
-          description: true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9)
+          description: true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta
           example: false
         mi_voto:
           type: string

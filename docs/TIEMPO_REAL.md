@@ -100,7 +100,7 @@ Al reconectarse, el cliente tiene que volver a emitir `unirse_viaje`, porque las
 | `creada` | Se ha creado una votación (`POST /viajes/{viajeId}/votaciones`) |
 | `opcion` | Se ha propuesto una opción (`POST .../votaciones/{votacionId}/opciones`) |
 | `voto` | Alguien ha votado, cambiado o retirado su voto (`PUT` y `DELETE .../voto`) |
-| `cerrada` | El creador ha cerrado la votación (`POST .../cerrar`). Si es la de destino, incluye además `destino` con el destino fijado en el viaje |
+| `cerrada` | Un miembro ha cerrado la votación (`POST .../cerrar`). Si es la de destino, incluye además `destino` con el destino fijado en el viaje |
 | `miembros` | Alguien nuevo se ha unido al viaje (`POST /invitaciones/{token}/unirse`). No lleva `votacion_id`: cambia quién puede votar en todas las votaciones del viaje, y con ello `total_miembros` y `todos_han_votado` |
 
 El aviso **no lleva los datos de la votación**: el cliente la vuelve a pedir con `GET /viajes/{viajeId}/votaciones/{votacionId}`, o la lista entera si el motivo es `creada`. Con `miembros` vuelve a pedir también el viaje, para mostrar a los miembros nuevos. Así cada usuario recibe su propio `mi_voto` y se siguen aplicando las políticas RLS.
