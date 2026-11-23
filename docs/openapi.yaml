@@ -4975,6 +4975,54 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorInterno'
 
+    delete:
+      tags:
+        - Perfil
+      summary: Elimina la cuenta
+      description: |
+        Elimina la cuenta de quien hace la petición. La ruta no lleva ningún identificador: el servidor usa siempre el
+        usuario del token, así que solo se puede eliminar la cuenta propia. Es la única operación que usa la service key
+        de Supabase (borrar un usuario de Supabase Auth no se puede hacer con su propio token). Pasos, en este orden:
+
+        1. Borra los archivos de Storage de los viajes en los que es el único miembro que queda.
+        2. Borra esos viajes con todo lo suyo, borra sus sellos y sus suscripciones push y anonimiza su perfil: el
+           nombre pasa a «Un antiguo miembro» y se borran el email y la foto. En los demás viajes sigue como miembro
+           anonimizado y conserva sus tareas, gastos, repartos, mensajes y votos (ya no cuenta como miembro que queda
+           para decidir si el viaje se elimina).
+        3. Borra sus fotos del bucket `avatares`.
+        4. Elimina el usuario en Supabase Auth.
+
+        Si un paso falla se para y la petición se puede repetir. Tras un 204 el token deja de ser válido.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Cuenta eliminada
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+        '502':
+          description: Error al comunicarse con Supabase. La cuenta no se ha eliminado del todo y se puede volver a intentar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_cuenta
+                  mensaje: No se ha podido eliminar la cuenta
+        '503':
+          description: El servidor no tiene configurada la service key de Supabase (`SUPABASE_SERVICE_ROLE_KEY`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: eliminacion_no_disponible
+                  mensaje: La eliminación de cuentas no está disponible
+
   /perfil/avatar:
     put:
       tags:
