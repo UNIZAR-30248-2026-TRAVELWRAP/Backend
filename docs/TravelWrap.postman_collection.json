@@ -2404,7 +2404,7 @@
     },
     {
       "name": "Gestión de viajes",
-      "description": "Editar, finalizar, archivar, desarchivar y eliminar un viaje (PB-10, PB-12, PB-13, PB-51 y MEJ-12). Requiere haber ejecutado antes «Login correcto». Crea su propio viaje ({{viajeIdGestion}}) para no finalizar el que usan las otras carpetas. Archivar y eliminar son personales: solo cambian lo que ve quien los hace. Las peticiones dependen unas de otras: ejecútala completa y en orden.",
+      "description": "Editar, finalizar, reabrir, archivar, desarchivar y eliminar un viaje (PB-10, PB-12, PB-13, PB-51, PB-65 y MEJ-12). Requiere haber ejecutado antes «Login correcto». Crea su propio viaje ({{viajeIdGestion}}) para no finalizar el que usan las otras carpetas. Archivar y eliminar son personales: solo cambian lo que ve quien los hace. Las peticiones dependen unas de otras: ejecútala completa y en orden.",
       "item": [
         {
           "name": "Crear viaje para gestionar",
@@ -2985,6 +2985,83 @@
                   "pm.test('Código viaje_no_archivado', () => {",
                   "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_archivado');",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reabrir el viaje finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/reabrir"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Estado activo', () => pm.expect(pm.response.json().estado).to.eql('activo'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reabrir un viaje que no está finalizado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/reabrir"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código viaje_no_finalizado', () => {",
+                  "  pm.expect(pm.response.json().error.codigo).to.eql('viaje_no_finalizado');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar el viaje otra vez",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdGestion}}/finalizar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Estado finalizado', () => pm.expect(pm.response.json().estado).to.eql('finalizado'));"
                 ]
               }
             }

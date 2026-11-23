@@ -772,7 +772,7 @@ paths:
       description: |
         Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `finalizado_en` (MEJ-12).
         Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
-        Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
+        Aparece en «Viajes anteriores» de «Mis viajes». Solo vuelve a estar activo si un miembro lo reabre (`/reabrir`). Después cada miembro puede
         archivarlo para sí mismo con `/archivar`.
         Lo puede hacer cualquier miembro del viaje. No se puede deshacer.
       security:
@@ -934,7 +934,7 @@ paths:
       description: |
         Desarchiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes archivados» y vuelve a sus
         «Viajes anteriores» (`archivado: false` en la respuesta). No cambia el estado del viaje, que sigue
-        `finalizado` y de solo lectura: nunca vuelve a «En curso». Lo puede hacer cualquier miembro.
+        `finalizado` y de solo lectura (para volver a «En curso» hay que reabrirlo con `/reabrir`). Lo puede hacer cualquier miembro.
       security:
         - bearerAuth: []
       parameters:
@@ -1001,6 +1001,82 @@ paths:
                 error:
                   codigo: error_viaje
                   mensaje: No se ha podido desarchivar el viaje
+
+  /viajes/{viajeId}/reabrir:
+    post:
+      tags:
+        - Viajes
+      summary: Reabre un viaje finalizado
+      description: |
+        Reabre un viaje `finalizado` (PB-65): vuelve a estar `activo` («En curso») **para todos los miembros** y se puede
+        editar de nuevo. Lo puede hacer cualquier miembro, no solo quien lo creó. A los miembros que lo tenían archivado
+        se les quita el archivado para que lo vean otra vez en «En curso»; los que lo eliminaron o abandonaron siguen igual.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: viajeId
+          in: path
+          required: true
+          description: Identificador del viaje
+          schema:
+            type: string
+            format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+      responses:
+        '200':
+          description: Viaje reabierto (`estado: activo`), con el mismo formato que el detalle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViajeDelUsuario'
+        '400':
+          description: El identificador del viaje no es un UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: datos_invalidos
+                  mensaje: El identificador del viaje no es válido
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          description: El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir los casos)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_encontrado
+                  mensaje: El viaje no existe o no perteneces a él
+        '409':
+          description: El viaje no está finalizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: viaje_no_finalizado
+                  mensaje: Solo se pueden reabrir viajes finalizados
+        '500':
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: Error al comunicarse con Supabase
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  codigo: error_viaje
+                  mensaje: No se ha podido reabrir el viaje
 
   /viajes/{viajeId}/abandonar:
     post:
@@ -5783,7 +5859,7 @@ components:
           type: string
           enum: [activo, finalizado]
           description: |
-            activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar
+            activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar
             son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario)
           example: activo
         creado_en:
