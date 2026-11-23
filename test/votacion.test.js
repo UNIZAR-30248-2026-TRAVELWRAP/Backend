@@ -124,6 +124,22 @@ describe('votacionService.listar', () => {
     assert.equal(v.mi_voto, null);
   });
 
+  it('no espera el voto de quien eliminó su cuenta: no cuenta como miembro que puede votar', async () => {
+    const conFantasma = ok({
+      ...viaje().data,
+      miembros_viaje: [
+        ...viaje().data.miembros_viaje,
+        { usuario_id: 'ghost', rol: 'miembro', abandonado_en: null, perfiles: { nombre: 'Un antiguo miembro', avatar_url: null, eliminado_en: '2026-11-20T10:00:00Z' } },
+      ],
+    });
+    const cliente = clienteFalso([conFantasma, ok([votacion()]), opciones, votos]);
+
+    const [v] = (await votacionService.listar(cliente, USUARIO, VIAJE_ID)).votaciones;
+
+    assert.equal(v.total_miembros, 2);
+    assert.equal(v.todos_han_votado, true);
+  });
+
   it('sin votaciones no consulta opciones ni votos', async () => {
     const cliente = clienteFalso([viaje(), ok([])]);
     assert.deepEqual(await votacionService.listar(cliente, USUARIO, VIAJE_ID), { estado: 'ok', votaciones: [] });
@@ -222,6 +238,25 @@ describe('votacionService.retirarVoto', () => {
   });
 });
 
+describe('votacionService.cambiarTipo', () => {
+  it('lo cambia también un miembro que no es el creador', async () => {
+    const cambiada = { tipo: 'otro' };
+    const cliente = clienteFalso([
+      viaje({ rol: 'miembro' }),
+      ok(votacion({ tipo: 'fecha' })),
+      ok([{ id: VOTACION_ID }]),
+      viaje({ rol: 'miembro' }),
+      ok(votacion({ tipo: 'fecha', ...cambiada })),
+      opciones,
+      votos,
+    ]);
+
+    const resultado = await votacionService.cambiarTipo(cliente, USUARIO, VIAJE_ID, VOTACION_ID, 'otro');
+
+    assert.equal(resultado.estado, 'ok');
+  });
+});
+
 describe('votacionService.cerrar', () => {
   it('cierra con la función cerrar_votacion y devuelve la votación, si hubo empate y el destino', async () => {
     const cerrada = { estado: 'cerrada', opcion_ganadora_id: PRAGA, cerrada_en: '2026-10-22T10:00:00Z' };
@@ -239,10 +274,17 @@ describe('votacionService.cerrar', () => {
     assert.deepEqual(cliente.llamadasRpc, [{ nombre: 'cerrar_votacion', parametros: { p_viaje_id: VIAJE_ID, p_votacion_id: VOTACION_ID } }]);
   });
 
-  it('solo la cierra el creador del viaje', async () => {
-    const cliente = clienteFalso([viaje({ rol: 'miembro' }), ok(votacion())]);
-    assert.deepEqual(await votacionService.cerrar(cliente, USUARIO, VIAJE_ID, VOTACION_ID), { estado: 'no_creador' });
-    assert.equal(cliente.llamadasRpc.length, 0);
+  it('la cierra también un miembro que no es el creador', async () => {
+    const cerrada = { estado: 'cerrada', opcion_ganadora_id: PRAGA, cerrada_en: '2026-10-22T10:00:00Z' };
+    const cliente = clienteFalso(
+      [viaje({ rol: 'miembro' }), ok(votacion()), ...recuento(cerrada)],
+      [ok({ estado: 'ok', opcion_ganadora_id: PRAGA, hubo_empate: false, destino: null })],
+    );
+
+    const resultado = await votacionService.cerrar(cliente, USUARIO, VIAJE_ID, VOTACION_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(cliente.llamadasRpc.length, 1);
   });
 
   it('pasa los motivos de la función: faltan votos o cerrada justo antes por otro', async () => {
@@ -383,11 +425,6 @@ describe('POST /viajes/:viajeId/votaciones/:votacionId/cerrar', () => {
     assert.equal(res.cuerpo.error.codigo, 'faltan_votos');
   });
 
-  it('quien no es el creador recibe 403', async () => {
-    simular('cerrar', async () => ({ estado: 'no_creador' }));
-    const res = await llamar('cerrar');
-    assert.equal(res.codigo, 403);
-  });
 });
 
 describe('avisos en tiempo real', () => {

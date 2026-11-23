@@ -604,14 +604,6 @@ describe('PATCH /viajes/:viajeId/gastos/:gastoId (editar)', () => {
     esperarError(res, 400, 'datos_invalidos', 'Los datos del gasto no son válidos');
   });
 
-  it('responde 403 si quien edita no registró el gasto ni es el creador del viaje', async () => {
-    simularEditar(async () => ({ estado: 'sin_permiso' }));
-
-    const res = await llamarEditar();
-
-    esperarError(res, 403, 'sin_permiso', 'Solo puede editar el gasto quien lo registró o el creador del viaje');
-  });
-
   it('responde 404 si el gasto no existe o es de otro viaje', async () => {
     simularEditar(async () => ({ estado: 'no_encontrado' }));
 

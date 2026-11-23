@@ -706,7 +706,7 @@ describe('gastoService.editar', () => {
   });
 
   // Rechazos de la función: no se lee nada más
-  for (const estado of ['no_existe', 'no_activo', 'no_encontrado', 'sin_permiso', 'no_miembro']) {
+  for (const estado of ['no_existe', 'no_activo', 'no_encontrado', 'no_miembro']) {
     it(`devuelve ${estado} sin leer el gasto cuando la función lo rechaza`, async () => {
       const cliente = clienteFalso({ respuestaRpc: { data: { estado }, error: null } });
 

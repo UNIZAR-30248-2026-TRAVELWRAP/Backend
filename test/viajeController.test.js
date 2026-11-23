@@ -86,7 +86,6 @@ describe('PATCH /viajes/:viajeId (editar)', () => {
 
   const motivos = [
     ['no_existe', 404, 'viaje_no_encontrado'],
-    ['no_creador', 403, 'no_creador'],
     ['no_activo', 409, 'viaje_no_activo'],
   ];
   for (const [estado, codigoHttp, codigo] of motivos) {
@@ -178,16 +177,13 @@ describe('POST /viajes/:viajeId/finalizar', () => {
     assert.deepEqual(finalizar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('responde 409 si ya estaba finalizado, 403 si no es el creador y 404 si no existe', async () => {
+  it('responde 409 si ya estaba finalizado y 404 si no existe', async () => {
     simular('finalizar', async () => ({ estado: 'ya_finalizado' }));
     const yaFinalizado = await llamar('finalizar');
     assert.equal(yaFinalizado.codigo, 409);
     assert.equal(yaFinalizado.cuerpo.error.codigo, 'viaje_finalizado');
 
     mock.restoreAll();
-    simular('finalizar', async () => ({ estado: 'no_creador' }));
-    assert.equal((await llamar('finalizar')).codigo, 403);
-
     mock.restoreAll();
     simular('finalizar', async () => ({ estado: 'no_existe' }));
     assert.equal((await llamar('finalizar')).codigo, 404);
@@ -395,13 +391,7 @@ describe('POST /viajes/:viajeId/abandonar', () => {
     assert.equal(avisar.mock.calls.length, 0);
   });
 
-  it('responde 403 si es el creador, 409 si el viaje ya no está activo y 404 si no es miembro', async () => {
-    simular('abandonar', async () => ({ estado: 'es_creador' }));
-    const creador = await llamar('abandonar');
-    assert.equal(creador.codigo, 403);
-    assert.equal(creador.cuerpo.error.codigo, 'es_creador');
-
-    mock.restoreAll();
+  it('responde 409 si el viaje ya no está activo y 404 si no es miembro', async () => {
     simular('abandonar', async () => ({ estado: 'no_activo' }));
     const finalizado = await llamar('abandonar');
     assert.equal(finalizado.codigo, 409);

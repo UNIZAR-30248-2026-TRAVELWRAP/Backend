@@ -109,13 +109,24 @@ describe('viajeService.editar', () => {
     assert.deepEqual(operacion(update, 'eq'), ['eq', 'id', VIAJE_ID]);
   });
 
-  it('no deja editar a un miembro que no es el creador', async () => {
-    const cliente = clienteFalso([encontrado({}, 'miembro')]);
+  it('deja editar a un miembro que no es el creador', async () => {
+    const cliente = clienteFalso([
+      encontrado({}, 'miembro'),
+      actualizado,
+      encontrado({ nombre: 'X' }, 'miembro'),
+    ]);
 
     const resultado = await viajeService.editar(cliente, USUARIO, VIAJE_ID, { nombre: 'X' });
 
-    assert.deepEqual(resultado, { estado: 'no_creador' });
-    assert.equal(cliente.consultas.length, 1);
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.rol, 'miembro');
+    assert.equal(resultado.viaje.nombre, 'X');
+  });
+
+  it('no deja editar si el usuario no es miembro del viaje', async () => {
+    const cliente = clienteFalso([{ data: null, error: null }]);
+
+    assert.deepEqual(await viajeService.editar(cliente, USUARIO, VIAJE_ID, { nombre: 'X' }), { estado: 'no_existe' });
   });
 
   it('no deja editar un viaje finalizado', async () => {
@@ -168,10 +179,13 @@ describe('viajeService.finalizar', () => {
     }
   });
 
-  it('solo finaliza el creador', async () => {
-    const cliente = clienteFalso([encontrado({}, 'miembro')]);
+  it('también lo finaliza un miembro que no es el creador', async () => {
+    const cliente = clienteFalso([encontrado({}, 'miembro'), actualizado, encontrado({ estado: 'finalizado' }, 'miembro')]);
 
-    assert.deepEqual(await viajeService.finalizar(cliente, USUARIO, VIAJE_ID), { estado: 'no_creador' });
+    const resultado = await viajeService.finalizar(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.estado, 'finalizado');
   });
 
   it('indica que el viaje no existe', async () => {
@@ -510,8 +524,8 @@ describe('viajeService.abandonar', () => {
     assert.deepEqual(await viajeService.abandonar(cliente, VIAJE_ID), { estado: 'saldo_pendiente', saldo: -12.5 });
   });
 
-  it('pasa tal cual los motivos de la función SQL: no_miembro, es_creador y no_activo', async () => {
-    for (const estado of ['no_miembro', 'es_creador', 'no_activo']) {
+  it('pasa tal cual los motivos de la función SQL: no_miembro y no_activo', async () => {
+    for (const estado of ['no_miembro', 'no_activo']) {
       const cliente = clienteFalso([{ data: { estado }, error: null }]);
       assert.deepEqual(await viajeService.abandonar(cliente, VIAJE_ID), { estado });
     }
