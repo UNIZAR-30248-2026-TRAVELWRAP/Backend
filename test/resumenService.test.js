@@ -37,6 +37,7 @@ const viaje = (datos = {}) =>
       id: VIAJE_ID,
       fecha_inicio: '2027-05-12',
       fecha_fin: '2027-05-15',
+      presupuesto: 500,
       miembros: [
         { usuario_id: 'u1', nombre: 'Daniel' },
         { usuario_id: 'u2', nombre: 'Berta' },
@@ -73,6 +74,7 @@ describe('resumenService.obtener', () => {
         dias: 4,
         actividad_mas_votada: { titulo: 'Coliseo', votos: 2 },
         alma_del_grupo: { usuario_id: 'u2', nombre: 'Berta', pagos: 1, planes_propuestos: 2, fotos_subidas: 1 },
+        presupuesto: { total: 500, gastado: 132.9, restante: 367.1 },
       },
     });
     const votaciones = consultas.find((c) => c.tabla === 'votaciones');
@@ -85,7 +87,12 @@ describe('resumenService.obtener', () => {
 
     const { resumen } = await resumenService.obtener(cliente, USUARIO_ID, VIAJE_ID);
 
-    assert.deepEqual(resumen, { dias: 4, actividad_mas_votada: null, alma_del_grupo: null });
+    assert.deepEqual(resumen, {
+      dias: 4,
+      actividad_mas_votada: null,
+      alma_del_grupo: null,
+      presupuesto: { total: 500, gastado: 0, restante: 500 },
+    });
     assert.ok(!consultas.some((c) => c.tabla === 'opciones_votacion' || c.tabla === 'votos'));
   });
 

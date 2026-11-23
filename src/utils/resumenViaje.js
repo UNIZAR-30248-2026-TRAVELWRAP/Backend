@@ -56,4 +56,12 @@ const almaDelGrupo = (miembros, gastos, actividades, fotos) => {
   };
 };
 
-module.exports = { contarDias, actividadMasVotada, almaDelGrupo };
+// Presupuesto del viaje menos lo gastado en sus gastos. Se calcula en céntimos para no arrastrar errores
+// de coma flotante. El restante puede ser negativo si el viaje ya supera el presupuesto
+const presupuestoRestante = (presupuesto, gastos) => {
+  const total = aCentimos(presupuesto);
+  const gastado = gastos.reduce((suma, gasto) => suma + aCentimos(gasto.importe), 0);
+  return { total: total / 100, gastado: gastado / 100, restante: (total - gastado) / 100 };
+};
+
+module.exports = { contarDias, actividadMasVotada, almaDelGrupo, presupuestoRestante };

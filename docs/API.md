@@ -5037,6 +5037,8 @@ lo que no hay un endpoint para ella.
 - `alma_del_grupo`: el miembro actual que ha pagado más gastos (con el mismo número, el que ha pagado más
   dinero y después el primero de la lista) con sus pagos, planes propuestos (actividades creadas) y fotos
   subidas, o `null` si no hay gastos.
+- `presupuesto`: el presupuesto del viaje (`total`), lo gastado en sus gastos (`gastado`) y lo que queda (`restante`,
+  que es negativo si el viaje ya supera el presupuesto).
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -5064,6 +5066,10 @@ Cuerpo (`application/json`):
 | `alma_del_grupo.pagos` | integer | No | Gastos que ha pagado | `2` |
 | `alma_del_grupo.planes_propuestos` | integer | No | Actividades que ha creado | `4` |
 | `alma_del_grupo.fotos_subidas` | integer | No | Fotos que ha subido a la galería | `3` |
+| `presupuesto` | object | No | Presupuesto del viaje menos lo gastado en sus gastos |  |
+| `presupuesto.total` | number | No | Presupuesto del viaje, en su moneda | `500` |
+| `presupuesto.gastado` | number | No | Suma de los importes de los gastos del viaje | `132.9` |
+| `presupuesto.restante` | number | No | Total menos gastado; negativo si se supera el presupuesto | `367.1` |
 
 **400** — El identificador del viaje no es un UUID
 

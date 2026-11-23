@@ -1,5 +1,5 @@
 const viajeService = require('./viajeService');
-const { contarDias, actividadMasVotada, almaDelGrupo } = require('../utils/resumenViaje');
+const { contarDias, actividadMasVotada, almaDelGrupo, presupuestoRestante } = require('../utils/resumenViaje');
 
 const TIPO_ACTIVIDAD = 'actividad';
 
@@ -51,6 +51,7 @@ const obtener = async (cliente, usuarioId, viajeId) => {
       ),
       actividad_mas_votada: actividadMasVotada(votaciones.opciones, votaciones.votos),
       alma_del_grupo: almaDelGrupo(previo.viaje.miembros, gastos.data ?? [], actividades.data ?? [], fotos.data ?? []),
+      presupuesto: presupuestoRestante(previo.viaje.presupuesto, gastos.data ?? []),
     },
   };
 };

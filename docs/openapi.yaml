@@ -4516,6 +4516,8 @@ paths:
         - `alma_del_grupo`: el miembro actual que ha pagado más gastos (con el mismo número, el que ha pagado más
           dinero y después el primero de la lista) con sus pagos, planes propuestos (actividades creadas) y fotos
           subidas, o `null` si no hay gastos.
+        - `presupuesto`: el presupuesto del viaje (`total`), lo gastado en sus gastos (`gastado`) y lo que queda (`restante`,
+          que es negativo si el viaje ya supera el presupuesto).
       security:
         - bearerAuth: []
       parameters:
@@ -7156,6 +7158,22 @@ components:
               type: integer
               description: Fotos que ha subido a la galería
               example: 3
+        presupuesto:
+          type: object
+          description: Presupuesto del viaje menos lo gastado en sus gastos
+          properties:
+            total:
+              type: number
+              description: Presupuesto del viaje, en su moneda
+              example: 500
+            gastado:
+              type: number
+              description: Suma de los importes de los gastos del viaje
+              example: 132.9
+            restante:
+              type: number
+              description: Total menos gastado; negativo si se supera el presupuesto
+              example: 367.1
 
     PuntoDeRuta:
       type: object

@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { contarDias, actividadMasVotada, almaDelGrupo } = require('../src/utils/resumenViaje');
+const { contarDias, actividadMasVotada, almaDelGrupo, presupuestoRestante } = require('../src/utils/resumenViaje');
 
 describe('contarDias', () => {
   it('cuenta los días del viaje contando el primero y el último', () => {
@@ -41,5 +41,24 @@ describe('actividadMasVotada', () => {
   it('sin votos o sin opciones devuelve null', () => {
     assert.equal(actividadMasVotada(opciones, []), null);
     assert.equal(actividadMasVotada([], [{ opcion_id: 'x' }]), null);
+  });
+});
+
+describe('presupuestoRestante', () => {
+  it('resta lo gastado del presupuesto del viaje', () => {
+    const gastos = [{ importe: '120.50' }, { importe: 12.4 }];
+    assert.deepEqual(presupuestoRestante('500', gastos), { total: 500, gastado: 132.9, restante: 367.1 });
+  });
+
+  it('sin gastos el restante es el presupuesto entero', () => {
+    assert.deepEqual(presupuestoRestante(300, []), { total: 300, gastado: 0, restante: 300 });
+  });
+
+  it('suma en céntimos: 0,1 + 0,2 da 0,3 exacto', () => {
+    assert.deepEqual(presupuestoRestante(0.3, [{ importe: 0.1 }, { importe: 0.2 }]), { total: 0.3, gastado: 0.3, restante: 0 });
+  });
+
+  it('si el viaje supera el presupuesto el restante es negativo', () => {
+    assert.deepEqual(presupuestoRestante(100, [{ importe: 130 }]), { total: 100, gastado: 130, restante: -30 });
   });
 });
