@@ -85,12 +85,11 @@ const validarNuevaVotacion = (cuerpo) => {
 const ERRORES = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_encontrada: [404, 'votacion_no_encontrada', 'La votación no existe en este viaje'],
-  no_creador: [403, 'no_creador', 'Solo el creador del viaje puede cerrar las votaciones'],
+  no_miembro: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   votacion_cerrada: [409, 'votacion_cerrada', 'La votación ya está cerrada'],
   faltan_votos: [409, 'faltan_votos', 'La votación solo se puede cerrar cuando hayan votado todos los miembros'],
   opcion_no_valida: [400, 'opcion_no_valida', 'La opción no es de esta votación'],
-  no_creador_tipo: [403, 'no_creador', 'Solo el creador del viaje puede cambiar el tipo de las votaciones'],
   tipo_no_modificable: [409, 'tipo_no_modificable', 'El tipo de la votación de destino no se puede cambiar'],
 };
 

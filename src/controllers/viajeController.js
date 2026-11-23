@@ -130,7 +130,6 @@ const validarCambiosViaje = (cuerpo) => {
 // Respuesta de error para cada motivo por el que no se puede editar, archivar o eliminar un viaje
 const ERRORES_GESTION = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
-  no_creador: [403, 'no_creador', 'Solo el creador del viaje puede hacerlo'],
   no_finalizado: [409, 'viaje_no_finalizado', 'Solo se pueden archivar viajes finalizados'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   ya_finalizado: [409, 'viaje_finalizado', 'El viaje ya está finalizado'],
@@ -138,7 +137,6 @@ const ERRORES_GESTION = {
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
   no_estaba_archivado: [409, 'viaje_no_archivado', 'El viaje no está archivado'],
   no_miembro: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
-  es_creador: [403, 'es_creador', 'El creador no puede abandonar el viaje: puede finalizarlo'],
 };
 
 const responderMotivo = (res, estado, mensajeFallo) => {

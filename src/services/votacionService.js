@@ -21,6 +21,8 @@ const opcionesYVotos = async (cliente, ids) => {
 const formatear = (votacion, opciones, votos, usuarioId, miembros) => {
   const { viaje_id: _viaje, ...datos } = votacion;
   const propios = votos.filter((v) => v.votacion_id === votacion.id);
+  // Quien eliminó su cuenta sigue en el viaje pero ya no vota: no se espera su voto
+  const votantes = miembros.filter((m) => !m.cuenta_eliminada);
   return {
     ...datos,
     opciones: opciones
@@ -30,8 +32,8 @@ const formatear = (votacion, opciones, votos, usuarioId, miembros) => {
         return { ...opcion, votos: votantes.length, votantes };
       }),
     total_votos: propios.length,
-    total_miembros: miembros.length,
-    todos_han_votado: miembros.every((m) => propios.some((v) => v.usuario_id === m.usuario_id)),
+    total_miembros: votantes.length,
+    todos_han_votado: votantes.every((m) => propios.some((v) => v.usuario_id === m.usuario_id)),
     mi_voto: propios.find((v) => v.usuario_id === usuarioId)?.opcion_id ?? null,
   };
 };
@@ -120,14 +122,13 @@ const crear = async (cliente, usuarioId, viajeId, datos) => {
   return recontar(cliente, usuarioId, viajeId, data.votacion_id);
 };
 
-// Cambia el tipo de la votación (solo el creador del viaje, con el viaje activo y la votación abierta).
+// Cambia el tipo de la votación (cualquier miembro, con el viaje activo y la votación abierta).
 // La de destino no se puede cambiar: el viaje depende de ella
-// Devuelve { error } | { estado: no_existe | no_encontrada | no_creador_tipo | no_activo | votacion_cerrada
+// Devuelve { error } | { estado: no_existe | no_encontrada | no_activo | votacion_cerrada
 //   | tipo_no_modificable | ok (con votacion) }
 const cambiarTipo = async (cliente, usuarioId, viajeId, votacionId, tipo) => {
   const previo = await votacionDelViaje(cliente, usuarioId, viajeId, votacionId);
   if (previo.error || previo.estado !== 'ok') return previo;
-  if (previo.viaje.rol !== 'creador') return { estado: 'no_creador_tipo' };
   if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
   if (previo.votacion.estado !== 'abierta') return { estado: 'votacion_cerrada' };
   if (previo.votacion.tipo === 'destino') return { estado: 'tipo_no_modificable' };
@@ -220,12 +221,11 @@ const retirarVoto = async (cliente, usuarioId, viajeId, votacionId) => {
 
 // Cierra la votación con la función cerrar_votacion: elige la ganadora (al azar si hay empate) y, si es
 // la de destino, lo guarda en el viaje en la misma operación
-// Devuelve { error } | { estado: no_existe | no_encontrada | no_creador | no_activo | votacion_cerrada | faltan_votos
+// Devuelve { error } | { estado: no_existe | no_encontrada | no_activo | votacion_cerrada | faltan_votos | no_miembro
 //   | ok (con votacion, hubo_empate y destino) }
 const cerrar = async (cliente, usuarioId, viajeId, votacionId) => {
   const previo = await votacionDelViaje(cliente, usuarioId, viajeId, votacionId);
   if (previo.error || previo.estado !== 'ok') return previo;
-  if (previo.viaje.rol !== 'creador') return { estado: 'no_creador' };
   if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
   if (previo.votacion.estado !== 'abierta') return { estado: 'votacion_cerrada' };
 

@@ -463,7 +463,7 @@ Cuerpo (`application/json`):
 Crea un viaje activo y añade al usuario como miembro con rol `creador`, en una sola operación.
 El nombre y el presupuesto son obligatorios. Las fechas y el destino son opcionales.
 Si no se indica destino (`null`, ausente o cadena vacía) el viaje queda **pendiente de destino**
-(`pendiente_destino: true`): hasta que el creador fije el destino por votación, solo se podrá votar e invitar.
+(`pendiente_destino: true`): hasta que se fije el destino por votación, solo se podrá votar e invitar.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -562,7 +562,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — El identificador del viaje no es un UUID
 
@@ -596,7 +597,7 @@ Cuerpo (`application/json`):
 **Edita los datos de un viaje**
 
 Cambia el nombre, las fechas, el presupuesto o el destino de un viaje activo (PB-10).
-Solo lo puede hacer el creador del viaje. Se envían únicamente los campos que cambian (al menos uno);
+Lo puede hacer cualquier miembro del viaje. Se envían únicamente los campos que cambian (al menos uno);
 los que no se envían se quedan como estaban y los campos desconocidos se ignoran.
 Un viaje finalizado es de solo lectura y no se puede editar.
 
@@ -644,7 +645,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — El identificador del viaje no es un UUID o los datos no son válidos
 
@@ -661,12 +663,6 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `sin_sesion` | Falta el token de acceso |
 | `sesion_invalida` | La sesión ha caducado o no es válida |
-
-**403** — El usuario es miembro del viaje pero no su creador
-
-| Código de error | Mensaje |
-| --- | --- |
-| `no_creador` | Solo el creador del viaje puede hacerlo |
 
 **404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
 
@@ -753,7 +749,7 @@ Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `fina
 Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
 Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
 archivarlo para sí mismo con `/archivar`.
-Solo lo puede hacer el creador del viaje. No se puede deshacer.
+Lo puede hacer cualquier miembro del viaje. No se puede deshacer.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -789,7 +785,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — El identificador del viaje no es un UUID
 
@@ -803,12 +800,6 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `sin_sesion` | Falta el token de acceso |
 | `sesion_invalida` | La sesión ha caducado o no es válida |
-
-**403** — El usuario es miembro del viaje pero no su creador
-
-| Código de error | Mensaje |
-| --- | --- |
-| `no_creador` | Solo el creador del viaje puede hacerlo |
 
 **404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir ambos casos)
 
@@ -873,7 +864,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — El identificador del viaje no es un UUID
 
@@ -951,7 +943,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — El identificador del viaje no es un UUID
 
@@ -991,8 +984,8 @@ Cuerpo (`application/json`):
 **Abandona el viaje**
 
 Deja el viaje **para quien lo pide**: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
-aparece como «Antiguo miembro»). Solo puede hacerlo un miembro que no es el creador, con el viaje activo y con su
-saldo a cero (lo que ha pagado menos lo que le toca de cada gasto). El creador tiene «Finalizar viaje».
+aparece como «Antiguo miembro»). Puede hacerlo cualquier miembro, también quien creó el viaje, con el viaje activo y
+con su saldo a cero (lo que ha pagado menos lo que le toca de cada gasto).
 Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que las votaciones abiertas se actualicen.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
@@ -1019,12 +1012,6 @@ Tras salir se avisa por el socket de votaciones (`motivo: miembros`) para que la
 | --- | --- |
 | `sin_sesion` | Falta el token de acceso |
 | `sesion_invalida` | La sesión ha caducado o no es válida |
-
-**403** — El usuario es el creador del viaje, que no puede abandonarlo (tiene «Finalizar viaje»)
-
-| Código de error | Mensaje |
-| --- | --- |
-| `es_creador` | El creador no puede abandonar el viaje: puede finalizarlo |
 
 **404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir los casos)
 
@@ -1101,7 +1088,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — Falta el archivo o llega más de uno, el archivo no es un JPEG o PNG, ocupa más de 5 MB o el identificador
 del viaje no es un UUID
@@ -1185,7 +1173,8 @@ Cuerpo (`application/json`):
 | `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
 | `miembros[].nombre` | string \| null | No |  | `Daniel` |
 | `miembros[].avatar_url` | string \| null | No |  | `null` |
-| `miembros[].rol` | enum (creador, miembro) | No |  | `creador` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
 
 **400** — El identificador del viaje no es un UUID
 
@@ -1523,8 +1512,8 @@ Cuerpo (`application/json`):
 | `votaciones[].opciones[].votos` | integer | No |  | `2` |
 | `votaciones[].opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `votaciones[].total_votos` | integer | No |  | `3` |
-| `votaciones[].total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `votaciones[].todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `votaciones[].total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `votaciones[].todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `votaciones[].mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador no es un UUID o un filtro no es válido
@@ -1611,8 +1600,8 @@ Cuerpo (`application/json`):
 | `opciones[].votos` | integer | No |  | `2` |
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
-| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — Faltan datos, no son válidos o hay opciones repetidas
@@ -1692,8 +1681,8 @@ Cuerpo (`application/json`):
 | `opciones[].votos` | integer | No |  | `2` |
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
-| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1777,8 +1766,8 @@ Cuerpo (`application/json`):
 | `opciones[].votos` | integer | No |  | `2` |
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
-| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -1867,8 +1856,8 @@ Cuerpo (`application/json`):
 | `opciones[].votos` | integer | No |  | `2` |
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
-| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — Identificadores mal formados, falta la opción o la opción no es de esta votación
@@ -1951,8 +1940,8 @@ Cuerpo (`application/json`):
 | `opciones[].votos` | integer | No |  | `2` |
 | `opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `total_votos` | integer | No |  | `3` |
-| `total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 
 **400** — El identificador del viaje o de la votación no es un UUID
@@ -2003,7 +1992,7 @@ Cierra la votación y guarda la opción ganadora: la más votada o, si hay empat
 En la votación de destino guarda además el destino ganador en el viaje, en la misma operación: el viaje deja de estar
 pendiente de destino.
 Solo se puede cerrar cuando han votado todos los miembros activos del viaje (RF9): `todos_han_votado` lo indica.
-Solo lo puede hacer el creador del viaje, con el viaje activo.
+Lo puede hacer cualquier miembro del viaje, con el viaje activo.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -2040,8 +2029,8 @@ Cuerpo (`application/json`):
 | `votacion.opciones[].votos` | integer | No |  | `2` |
 | `votacion.opciones[].votantes` | array<string (uuid)> | No | Identificadores de los usuarios que han votado esta opción | `["df77cba6-4be5-4cbc-814b-1e228dd73dcc"]` |
 | `votacion.total_votos` | integer | No |  | `3` |
-| `votacion.total_miembros` | integer | No | Miembros activos del viaje, es decir, cuántos pueden votar | `4` |
-| `votacion.todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces el creador puede cerrarla (RF9) | `false` |
+| `votacion.total_miembros` | integer | No | Miembros activos del viaje que pueden votar (sin contar a quien eliminó su cuenta) | `4` |
+| `votacion.todos_han_votado` | boolean | No | true si ya han votado todos los miembros activos. Solo entonces puede cerrarla cualquier miembro (RF9). No se espera el voto de quien eliminó su cuenta | `false` |
 | `votacion.mi_voto` | string (uuid) \| null | No | Opción que ha votado el usuario que hace la petición, o null si no ha votado | `6f1c2d3e-0000-4000-8000-0000000000a1` |
 | `hubo_empate` | boolean | No | true si varias opciones empataron con más votos y la ganadora se eligió al azar | `false` |
 | `destino` | string \| null | No | Destino guardado en el viaje (solo al cerrar la votación de destino) | `null` |
@@ -2058,12 +2047,6 @@ Cuerpo (`application/json`):
 | --- | --- |
 | `sin_sesion` | Falta el token de acceso |
 | `sesion_invalida` | La sesión ha caducado o no es válida |
-
-**403** — El usuario es miembro del viaje pero no su creador
-
-| Código de error | Mensaje |
-| --- | --- |
-| `no_creador` | Solo el creador del viaje puede cerrar las votaciones |
 
 **404** — El viaje no existe, el usuario no es miembro o la votación no es de ese viaje
 
@@ -3422,7 +3405,7 @@ Cuerpo (`application/json`):
 Actualiza el gasto con los mismos datos que al crearlo (concepto, importe, categoría, quién pagó, fecha y
 participantes) y vuelve a repartirlo a partes iguales, en céntimos. El balance y la liquidación se recalculan
 solos, porque salen de los repartos.
-Solo pueden editarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
+Lo puede editar cualquier miembro del viaje, y solo mientras el viaje está activo.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -3481,12 +3464,6 @@ Cuerpo (`application/json`):
 | `sin_sesion` | Falta el token de acceso |
 | `sesion_invalida` | La sesión ha caducado o no es válida |
 
-**403** — Quien edita no registró el gasto ni es el creador del viaje
-
-| Código de error | Mensaje |
-| --- | --- |
-| `sin_permiso` | Solo puede editar el gasto quien lo registró o el creador del viaje |
-
 **404** — El viaje no existe o el usuario no es miembro, o el gasto no existe o es de otro viaje
 
 | Código de error | Mensaje |
@@ -3516,8 +3493,7 @@ Cuerpo (`application/json`):
 **Borra un gasto y sus repartos**
 
 Borra el gasto y, en cascada, sus repartos: el total, el balance y la liquidación dejan de contarlo.
-Solo pueden borrarlo quien registró el gasto y el creador del viaje, y solo mientras el viaje está activo.
-Quien no puede borrarlo recibe el mismo 404 que si el gasto no existiera.
+Lo puede borrar cualquier miembro del viaje, y solo mientras está activo.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 

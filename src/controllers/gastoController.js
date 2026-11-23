@@ -110,7 +110,6 @@ const ERRORES = {
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
   no_miembro: [400, 'datos_invalidos', 'Quien paga y los participantes tienen que ser miembros del viaje'],
   no_encontrado: [404, 'gasto_no_encontrado', 'El gasto no existe o no pertenece a este viaje'],
-  sin_permiso: [403, 'sin_permiso', 'Solo puede editar el gasto quien lo registró o el creador del viaje'],
   sin_deuda: [404, 'deuda_no_encontrada', 'No hay ninguna deuda saldada que deshacer'],
 };
 

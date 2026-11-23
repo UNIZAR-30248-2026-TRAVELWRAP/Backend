@@ -18,7 +18,7 @@ const SELECCION =
   // Se nombran las claves foráneas: con deudas_saldadas hay más de un camino entre viajes y miembros_viaje, y sin
   // el nombre PostgREST no sabe cuál usar y responde 300 (embebido ambiguo)
   'miembros_viaje!miembros_viaje_viaje_id_fkey(usuario_id, rol, abandonado_en, archivado_en, eliminado_en, ' +
-  'perfiles!miembros_viaje_usuario_id_fkey(nombre, avatar_url))';
+  'perfiles!miembros_viaje_usuario_id_fkey(nombre, avatar_url, eliminado_en))';
 
 // Un viaje está pendiente de destino cuando está activo y todavía no lo tiene
 const conPendiente = (viaje) => ({
@@ -43,6 +43,8 @@ const formatear = (fila, usuarioId) => {
       nombre: m.perfiles?.nombre ?? null,
       avatar_url: m.perfiles?.avatar_url ?? null,
       rol: m.rol,
+      // Eliminó su cuenta: sigue en el viaje pero anonimizado, y no cuenta para cerrar las votaciones
+      cuenta_eliminada: Boolean(m.perfiles?.eliminado_en),
     })),
   };
 };
@@ -100,14 +102,13 @@ const crear = async (cliente, datos) => {
     : { estado: data.estado };
 };
 
-// Antes de modificar un viaje se comprueba que existe y que el usuario es su creador, para poder
-// responder con el motivo exacto: las políticas RLS rechazarían el cambio sin decir por qué.
-// Devuelve { error } | { estado: no_existe | no_creador | ok (con viaje) }
-const viajeDelCreador = async (cliente, usuarioId, viajeId) => {
+// Antes de modificar un viaje se comprueba que existe y que el usuario es miembro (cualquier miembro puede
+// modificarlo), para poder responder con el motivo exacto: las políticas RLS rechazarían el cambio sin decir por qué.
+// Devuelve { error } | { estado: no_existe | ok (con viaje) }
+const viajeDelMiembro = async (cliente, usuarioId, viajeId) => {
   const resultado = await obtener(cliente, usuarioId, viajeId);
   if (resultado.error) return { error: resultado.error };
   if (!resultado.viaje) return { estado: 'no_existe' };
-  if (resultado.viaje.rol !== 'creador') return { estado: 'no_creador' };
   return { estado: 'ok', viaje: resultado.viaje };
 };
 
@@ -122,9 +123,9 @@ const actualizar = async (cliente, usuarioId, viajeId, cambios) => {
   return { estado: 'ok', viaje: resultado.viaje };
 };
 
-// Devuelve { error } | { estado: no_existe | no_creador | no_activo | ok (con viaje) }
+// Devuelve { error } | { estado: no_existe | no_activo | ok (con viaje) }
 const editar = async (cliente, usuarioId, viajeId, cambios) => {
-  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  const previo = await viajeDelMiembro(cliente, usuarioId, viajeId);
   if (previo.error || previo.estado !== 'ok') return previo;
   if (previo.viaje.estado !== 'activo') return { estado: 'no_activo' };
 
@@ -132,9 +133,9 @@ const editar = async (cliente, usuarioId, viajeId, cambios) => {
 };
 
 // Finaliza el viaje para todos: queda de solo lectura en «Viajes anteriores» y ya no vuelve a activo
-// Devuelve { error } | { estado: no_existe | no_creador | ya_finalizado | ok (con viaje) }
+// Devuelve { error } | { estado: no_existe | ya_finalizado | ok (con viaje) }
 const finalizar = async (cliente, usuarioId, viajeId) => {
-  const previo = await viajeDelCreador(cliente, usuarioId, viajeId);
+  const previo = await viajeDelMiembro(cliente, usuarioId, viajeId);
   if (previo.error || previo.estado !== 'ok') return previo;
   if (previo.viaje.estado !== 'activo') return { estado: 'ya_finalizado' };
 
@@ -289,9 +290,9 @@ const eliminar = async (cliente, usuarioId, viajeId) => {
 };
 
 // Abandona el viaje: el usuario deja de ser miembro, pero sus gastos y repartos se conservan. Solo puede hacerlo
-// si no es el creador y tiene el saldo a cero. Se usa la función SQL abandonar_viaje porque nadie puede modificar
+// si tiene el saldo a cero. Se usa la función SQL abandonar_viaje porque nadie puede modificar
 // directamente su fila de miembros_viaje
-// Devuelve { error } | { estado: no_miembro | es_creador | ok } | { estado: saldo_pendiente, saldo }
+// Devuelve { error } | { estado: no_miembro | no_activo | ok } | { estado: saldo_pendiente, saldo }
 const abandonar = async (cliente, viajeId) => {
   const { data, error } = await cliente.rpc('abandonar_viaje', { p_viaje_id: viajeId });
   if (error) return { error };

@@ -10,16 +10,8 @@ AS $$
   );
 $$;
 
-CREATE OR REPLACE FUNCTION public.es_creador(p_viaje_id uuid)
-RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.miembros_viaje
-    WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid() AND rol = 'creador' AND abandonado_en IS NULL
-  );
-$$;
+-- PB-62: el creador no tiene más permisos que los demás miembros (el rol «creador» solo indica quién creó el viaje).
+-- Ya no hay función es_creador (se borra al final de este script, cuando ninguna política la usa)
 
 -- Un viaje solo admite contenido nuevo mientras está activo: al finalizarlo queda de solo lectura.
 -- Las tablas con contenido del viaje (gastos, tareas, actividades...) deben exigirla en sus políticas de escritura
@@ -170,18 +162,18 @@ CREATE POLICY perfiles_update ON public.perfiles FOR UPDATE TO authenticated
 -- 4. POLÍTICAS VIAJES
 DROP POLICY IF EXISTS viajes_select ON public.viajes;
 CREATE POLICY viajes_select ON public.viajes FOR SELECT TO authenticated
-  USING (public.es_miembro(id) OR creador_id = auth.uid());
+  USING (public.es_miembro(id));
 
 DROP POLICY IF EXISTS viajes_insert ON public.viajes;
 CREATE POLICY viajes_insert ON public.viajes FOR INSERT TO authenticated
   WITH CHECK (creador_id = auth.uid());
 
--- Solo el creador modifica el viaje y solo mientras está activo (puede editarlo y finalizarlo). Un viaje terminado
+-- Cualquier miembro modifica el viaje (lo edita y lo finaliza) y solo mientras está activo. Un viaje terminado
 -- no se toca ni vuelve a activo. No hay política de DELETE: un viaje solo se borra con eliminar_viaje y borrar_viaje
 DROP POLICY IF EXISTS viajes_update ON public.viajes;
 CREATE POLICY viajes_update ON public.viajes FOR UPDATE TO authenticated
-  USING (public.es_creador(id) AND estado = 'activo')
-  WITH CHECK (public.es_creador(id) AND estado <> 'archivado');
+  USING (public.es_miembro(id) AND estado = 'activo')
+  WITH CHECK (public.es_miembro(id) AND estado <> 'archivado');
 
 -- 5. POLÍTICAS MIEMBROS_VIAJE
 DROP POLICY IF EXISTS miembros_viaje_select ON public.miembros_viaje;
@@ -216,10 +208,10 @@ CREATE POLICY votaciones_insert ON public.votaciones FOR INSERT TO authenticated
     AND public.es_editable(viaje_id)
   );
 
--- Solo el creador del viaje cierra las votaciones, y solo con el viaje activo
+-- Cualquier miembro gestiona las votaciones (las cierra y cambia su tipo), y solo con el viaje activo
 DROP POLICY IF EXISTS votaciones_update ON public.votaciones;
 CREATE POLICY votaciones_update ON public.votaciones FOR UPDATE TO authenticated
-  USING (public.es_creador(viaje_id) AND public.es_editable(viaje_id)) WITH CHECK (public.es_creador(viaje_id));
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id)) WITH CHECK (public.es_miembro(viaje_id));
 
 -- 7. POLÍTICAS OPCIONES_VOTACION
 DROP POLICY IF EXISTS opciones_votacion_select ON public.opciones_votacion;
@@ -295,19 +287,17 @@ DROP POLICY IF EXISTS gastos_insert ON public.gastos;
 CREATE POLICY gastos_insert ON public.gastos FOR INSERT TO authenticated
   WITH CHECK (creado_por = auth.uid() AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
--- Cualquier miembro corrige gastos mientras el viaje está activo. Solo quien registró el gasto o el creador del
--- viaje pueden editarlo: esa regla la aplica la función editar_gasto. En un viaje finalizado o archivado los gastos
+-- Cualquier miembro corrige gastos mientras el viaje está activo. En un viaje finalizado o archivado los gastos
 -- quedan de solo lectura
 DROP POLICY IF EXISTS gastos_update ON public.gastos;
 CREATE POLICY gastos_update ON public.gastos FOR UPDATE TO authenticated
   USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id))
   WITH CHECK (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
--- Borrar un gasto está reservado a quien lo registró y al creador del viaje, y solo mientras el viaje está activo.
--- Al borrarlo se borran sus repartos en cascada
+-- Cualquier miembro borra los gastos del viaje, y solo mientras está activo. Al borrarlo se borran sus repartos en cascada
 DROP POLICY IF EXISTS gastos_delete ON public.gastos;
 CREATE POLICY gastos_delete ON public.gastos FOR DELETE TO authenticated
-  USING ((creado_por = auth.uid() OR public.es_creador(viaje_id)) AND public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
+  USING (public.es_miembro(viaje_id) AND public.es_editable(viaje_id));
 
 -- POLÍTICAS REPARTOS_GASTO
 -- Las partes de cada gasto siguen las mismas reglas que el gasto: las ven los miembros y
@@ -777,9 +767,9 @@ GRANT EXECUTE ON FUNCTION public.crear_votacion(uuid, text, text, public.tipo_vo
 -- 12. FUNCIÓN CERRAR VOTACIÓN
 -- Cierra una votación y guarda la opción ganadora: la más votada o, si hay empate, una de las empatadas al azar.
 -- En la votación de destino fija además el destino del viaje, todo en una sola operación.
--- Solo la cierra el creador del viaje, con el viaje activo y cuando han votado todos sus miembros (RF9).
+-- La cierra cualquier miembro, con el viaje activo y cuando han votado todos los miembros del viaje (RF9).
 -- Es SECURITY INVOKER (se aplican las políticas RLS).
--- Devuelve { estado }: no_existe | no_creador | no_activo | ya_cerrada | faltan_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
+-- Devuelve { estado }: no_existe | no_miembro | no_activo | ya_cerrada | faltan_votos | ok (con opcion_ganadora_id, hubo_empate y destino)
 CREATE OR REPLACE FUNCTION public.cerrar_votacion(p_viaje_id uuid, p_votacion_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql SECURITY INVOKER
@@ -794,8 +784,8 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.votaciones WHERE id = p_votacion_id AND viaje_id = p_viaje_id) THEN
     RETURN jsonb_build_object('estado', 'no_existe');
   END IF;
-  IF NOT public.es_creador(p_viaje_id) THEN
-    RETURN jsonb_build_object('estado', 'no_creador');
+  IF NOT public.es_miembro(p_viaje_id) THEN
+    RETURN jsonb_build_object('estado', 'no_miembro');
   END IF;
   IF NOT public.es_editable(p_viaje_id) THEN
     RETURN jsonb_build_object('estado', 'no_activo');
@@ -807,11 +797,12 @@ BEGIN
     RETURN jsonb_build_object('estado', 'ya_cerrada');
   END IF;
 
-  -- RF9: solo se cierra cuando han votado todos los miembros activos del viaje
+  -- RF9: solo se cierra cuando han votado todos los miembros activos del viaje (los que eliminaron su cuenta no votan)
   IF EXISTS (
     SELECT 1 FROM public.miembros_viaje m
     WHERE m.viaje_id = p_viaje_id
       AND m.abandonado_en IS NULL
+      AND NOT EXISTS (SELECT 1 FROM public.perfiles p WHERE p.id = m.usuario_id AND p.eliminado_en IS NOT NULL)
       AND NOT EXISTS (SELECT 1 FROM public.votos v WHERE v.votacion_id = p_votacion_id AND v.usuario_id = m.usuario_id)
   ) THEN
     RETURN jsonb_build_object('estado', 'faltan_votos');
@@ -913,9 +904,9 @@ GRANT EXECUTE ON FUNCTION public.crear_gasto(uuid, text, numeric, public.categor
 
 -- 13b. FUNCIÓN EDITAR GASTO
 -- Corrige un gasto y vuelve a repartirlo a partes iguales, igual que crear_gasto, en una sola operación.
--- Solo pueden editarlo quien lo registró y el creador del viaje, y solo mientras el viaje está activo.
+-- Cualquier miembro puede editarlo, y solo mientras el viaje está activo.
 -- Es SECURITY INVOKER: las políticas RLS de gastos y repartos_gasto siguen aplicando.
--- Devuelve { estado }: no_existe | no_activo | no_encontrado | sin_permiso | no_miembro | ok (con gasto_id)
+-- Devuelve { estado }: no_existe | no_activo | no_encontrado | no_miembro | ok (con gasto_id)
 CREATE OR REPLACE FUNCTION public.editar_gasto(
   p_gasto_id uuid,
   p_viaje_id uuid,
@@ -945,11 +936,6 @@ BEGIN
   SELECT * INTO v_gasto FROM public.gastos WHERE id = p_gasto_id AND viaje_id = p_viaje_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('estado', 'no_encontrado');
-  -- Solo quien registró el gasto o el creador del viaje pueden editarlo
-  IF v_gasto.creado_por IS DISTINCT FROM auth.uid() AND NOT public.es_creador(p_viaje_id) THEN
-    RETURN jsonb_build_object('estado', 'sin_permiso');
-  END IF;
-
   END IF;
 
   -- Quien paga y todos los participantes tienen que ser miembros actuales del viaje
@@ -1159,9 +1145,9 @@ END;
 $$;
 
 -- Abandona el viaje para quien llama: deja de ser miembro, pero sus gastos y repartos se conservan (en el balance
--- aparece como «Antiguo miembro»). Solo si no es el creador y su saldo es 0 (lo que ha pagado menos lo que le toca
+-- aparece como «Antiguo miembro»). Solo si su saldo es 0 (lo que ha pagado menos lo que le toca
 -- de cada gasto). Devuelve:
---   { "estado": "no_miembro" }, { "estado": "es_creador" } o { "estado": "no_activo" }  sin cambios
+--   { "estado": "no_miembro" } o { "estado": "no_activo" }  sin cambios
 --   { "estado": "saldo_pendiente", "saldo": n }  sin cambios
 --   { "estado": "ok" }  ya no es miembro del viaje
 CREATE OR REPLACE FUNCTION public.abandonar_viaje(p_viaje_id uuid)
@@ -1184,13 +1170,6 @@ BEGIN
       AND eliminado_en IS NULL
   ) THEN
     RETURN jsonb_build_object('estado', 'no_miembro');
-  IF EXISTS (
-    SELECT 1 FROM public.miembros_viaje
-    WHERE viaje_id = p_viaje_id AND usuario_id = auth.uid() AND rol = 'creador'
-  ) THEN
-    RETURN jsonb_build_object('estado', 'es_creador');
-  END IF;
-
   END IF;
 
   IF EXISTS (SELECT 1 FROM public.viajes WHERE id = p_viaje_id AND estado <> 'activo') THEN
@@ -1304,8 +1283,7 @@ GRANT EXECUTE ON FUNCTION public.eliminar_datos_cuenta(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.es_ultimo_miembro(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.es_ultimo_miembro(uuid) TO authenticated;
 -- Cambia la foto de portada del viaje (o la quita con null). La puede cambiar cualquier miembro mientras el viaje está
--- activo, aunque no sea el creador (que es el único que modifica el resto de datos del viaje, por eso no basta
--- viajes_update). La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada
+-- activo. La ruta tiene que estar en la carpeta del viaje. Devuelve false si no cambia nada
 CREATE OR REPLACE FUNCTION public.cambiar_portada(p_viaje_id uuid, p_ruta text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -1394,3 +1372,6 @@ REVOKE ALL ON FUNCTION public.suscripciones_push_del_viaje(uuid) FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.suscripciones_push_del_viaje(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.borrar_suscripcion_caducada(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.borrar_suscripcion_caducada(text) TO authenticated;
+
+-- PB-62: ninguna política ni función usa ya es_creador
+DROP FUNCTION IF EXISTS public.es_creador(uuid);

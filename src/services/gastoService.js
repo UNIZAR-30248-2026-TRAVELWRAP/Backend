@@ -191,7 +191,7 @@ const detalle = async (cliente, usuarioId, viajeId, gastoId) => {
 };
 
 // Corrige un gasto y reparte de nuevo sus partes (función editar_gasto). Igual que crear, después lee el gasto
-// Devuelve { error } | { estado: no_existe | no_activo | no_encontrado | sin_permiso | no_miembro | ok (con gasto) }
+// Devuelve { error } | { estado: no_existe | no_activo | no_encontrado | no_miembro | ok (con gasto) }
 const editar = async (cliente, viajeId, gastoId, datos) => {
   const { data, error } = await cliente.rpc('editar_gasto', {
     p_gasto_id: gastoId,
