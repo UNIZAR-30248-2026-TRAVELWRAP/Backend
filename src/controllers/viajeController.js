@@ -132,6 +132,7 @@ const ERRORES_GESTION = {
   no_existe: [404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él'],
   no_finalizado: [409, 'viaje_no_finalizado', 'Solo se pueden archivar viajes finalizados'],
   no_activo: [409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar'],
+  no_reabrible: [409, 'viaje_no_finalizado', 'Solo se pueden reabrir viajes finalizados'],
   ya_finalizado: [409, 'viaje_finalizado', 'El viaje ya está finalizado'],
   ya_archivado: [409, 'viaje_archivado', 'El viaje ya está archivado'],
   no_archivado: [409, 'viaje_no_archivado', 'Solo se pueden eliminar viajes archivados'],
@@ -245,6 +246,21 @@ const finalizar = async (req, res) => {
 
     if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido finalizar el viaje');
     if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido finalizar el viaje');
+    return res.status(200).json(resultado.viaje);
+  } catch {
+    return responderError(res, 500, 'error_interno', 'Error interno del servidor');
+  }
+};
+
+const reabrir = async (req, res) => {
+  const { viajeId } = req.params;
+  if (!UUID_REGEX.test(viajeId)) return idInvalido(res);
+
+  try {
+    const resultado = await viajeService.reabrir(req.supabase, req.usuario.id, viajeId);
+
+    if (resultado.error) return responderError(res, 502, 'error_viaje', 'No se ha podido reabrir el viaje');
+    if (resultado.estado !== 'ok') return responderMotivo(res, resultado.estado, 'No se ha podido reabrir el viaje');
     return res.status(200).json(resultado.viaje);
   } catch {
     return responderError(res, 500, 'error_interno', 'Error interno del servidor');
@@ -374,6 +390,7 @@ module.exports = {
   crear,
   editar,
   finalizar,
+  reabrir,
   archivar,
   desarchivar,
   eliminar,

@@ -167,6 +167,18 @@ const desarchivar = async (cliente, usuarioId, viajeId) => {
   return cambiarArchivado(cliente, usuarioId, viajeId, 'desarchivar_viaje_propio');
 };
 
+// Reabre el viaje finalizado para todos los miembros: vuelve a estar activo («En curso») y a los que lo tenían archivado
+// se les quita el archivado. Cualquier miembro puede hacerlo. Se usa la función SQL reabrir_viaje porque la política
+// RLS solo deja modificar viajes activos
+// Devuelve { error } | { estado: no_existe | no_reabrible | ok (con viaje) }
+const reabrir = async (cliente, usuarioId, viajeId) => {
+  const previo = await viajeDelMiembro(cliente, usuarioId, viajeId);
+  if (previo.error || previo.estado !== 'ok') return previo;
+  if (previo.viaje.estado !== 'finalizado') return { estado: 'no_reabrible' };
+
+  return cambiarArchivado(cliente, usuarioId, viajeId, 'reabrir_viaje');
+};
+
 const cambiarArchivado = async (cliente, usuarioId, viajeId, funcion) => {
   const { data, error } = await cliente.rpc(funcion, { p_viaje_id: viajeId });
   if (error) return { error };
@@ -301,4 +313,4 @@ const abandonar = async (cliente, viajeId) => {
   return data.estado === 'saldo_pendiente' ? { estado: data.estado, saldo: data.saldo } : { estado: data.estado };
 };
 
-module.exports = { listar, obtener, crear, editar, finalizar, archivar, desarchivar, eliminar, abandonar, subirPortada, quitarPortada };
+module.exports = { listar, obtener, crear, editar, finalizar, reabrir, archivar, desarchivar, eliminar, abandonar, subirPortada, quitarPortada };

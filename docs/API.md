@@ -29,6 +29,7 @@ API REST para la gestión de viajes grupales, gastos y tareas.
 | POST | [`/viajes/{viajeId}/finalizar`](#post-viajesviajeidfinalizar) | Finaliza un viaje sin archivarlo | Token de sesión |
 | POST | [`/viajes/{viajeId}/archivar`](#post-viajesviajeidarchivar) | Archiva un viaje, solo para ti | Token de sesión |
 | POST | [`/viajes/{viajeId}/desarchivar`](#post-viajesviajeiddesarchivar) | Desarchiva un viaje | Token de sesión |
+| POST | [`/viajes/{viajeId}/reabrir`](#post-viajesviajeidreabrir) | Reabre un viaje finalizado | Token de sesión |
 | POST | [`/viajes/{viajeId}/abandonar`](#post-viajesviajeidabandonar) | Abandona el viaje | Token de sesión |
 | PUT | [`/viajes/{viajeId}/portada`](#put-viajesviajeidportada) | Sube o cambia la foto de portada del viaje | Token de sesión |
 | DELETE | [`/viajes/{viajeId}/portada`](#delete-viajesviajeidportada) | Quita la foto de portada del viaje | Token de sesión |
@@ -493,7 +494,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -552,7 +553,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -635,7 +636,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -747,7 +748,7 @@ ambos casos y no incluye rutas de archivos. Si falla el borrado definitivo, no c
 
 Pasa el viaje de `activo` a `finalizado` y guarda el momento del cierre en `finalizado_en` (MEJ-12).
 Un viaje finalizado es de solo lectura: no se puede editar ni añadir contenido (gastos, tareas...).
-Aparece en «Viajes anteriores» de «Mis viajes» y ya no vuelve a estar activo. Después cada miembro puede
+Aparece en «Viajes anteriores» de «Mis viajes». Solo vuelve a estar activo si un miembro lo reabre (`/reabrir`). Después cada miembro puede
 archivarlo para sí mismo con `/archivar`.
 Lo puede hacer cualquier miembro del viaje. No se puede deshacer.
 
@@ -775,7 +776,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -854,7 +855,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -907,7 +908,7 @@ Cuerpo (`application/json`):
 
 Desarchiva el viaje **solo para quien lo pide** (MEJ-12): sale de sus «Viajes archivados» y vuelve a sus
 «Viajes anteriores» (`archivado: false` en la respuesta). No cambia el estado del viaje, que sigue
-`finalizado` y de solo lectura: nunca vuelve a «En curso». Lo puede hacer cualquier miembro.
+`finalizado` y de solo lectura (para volver a «En curso» hay que reabrirlo con `/reabrir`). Lo puede hacer cualquier miembro.
 
 **Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
 
@@ -933,7 +934,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -978,6 +979,84 @@ Cuerpo (`application/json`):
 | Código de error | Mensaje |
 | --- | --- |
 | `error_viaje` | No se ha podido desarchivar el viaje |
+
+### POST /viajes/{viajeId}/reabrir
+
+**Reabre un viaje finalizado**
+
+Reabre un viaje `finalizado` (PB-65): vuelve a estar `activo` («En curso») **para todos los miembros** y se puede
+editar de nuevo. Lo puede hacer cualquier miembro, no solo quien lo creó. A los miembros que lo tenían archivado
+se les quita el archivado para que lo vean otra vez en «En curso»; los que lo eliminaron o abandonaron siguen igual.
+
+**Acceso:** Requiere sesión: cabecera `Authorization: Bearer <token>`
+
+**Parámetros**
+
+| Nombre | En | Obligatorio | Tipo | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- | --- |
+| `viajeId` | path | Sí | string (uuid) | Identificador del viaje | `123e4567-e89b-12d3-a456-426614174000` |
+
+**Respuestas**
+
+**200** — Viaje reabierto (`estado: activo`), con el mismo formato que el detalle
+
+Cuerpo (`application/json`):
+
+| Campo | Tipo | Obligatorio | Descripción | Ejemplo |
+| --- | --- | --- | --- | --- |
+| `id` | string (uuid) | No |  | `123e4567-e89b-12d3-a456-426614174000` |
+| `nombre` | string | No |  | `Verano 2027` |
+| `destino` | string \| null | No | Null mientras el destino está pendiente de decidir por votación | `Roma` |
+| `descripcion` | string \| null | No |  | `null` |
+| `fecha_inicio` | string (date) \| null | No |  | `2027-07-01` |
+| `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
+| `moneda` | string | No |  | `EUR` |
+| `presupuesto` | number | No |  | `850` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
+| `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
+| `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
+| `rol` | enum (creador, miembro) | No | Rol del usuario que hace la petición en este viaje | `creador` |
+| `archivado` | boolean | No | true si el usuario que hace la petición ha archivado el viaje. Es personal, los demás miembros lo ven por separado | `false` |
+| `miembros` | array<MiembroViaje> | No | Miembros activos del viaje |  |
+| `miembros[].usuario_id` | string (uuid) | No |  | `df77cba6-4be5-4cbc-814b-1e228dd73dcc` |
+| `miembros[].nombre` | string \| null | No |  | `Daniel` |
+| `miembros[].avatar_url` | string \| null | No |  | `null` |
+| `miembros[].rol` | enum (creador, miembro) | No | Quién creó el viaje. No da permisos extra: cualquier miembro puede hacer lo mismo | `creador` |
+| `miembros[].cuenta_eliminada` | boolean | No | true si el usuario eliminó su cuenta (PB-47). Sigue en el viaje como «Un antiguo miembro», sin foto | `false` |
+
+**400** — El identificador del viaje no es un UUID
+
+| Código de error | Mensaje |
+| --- | --- |
+| `datos_invalidos` | El identificador del viaje no es válido |
+
+**401** — Falta la cabecera Authorization Bearer, o el token ha caducado o no es válido
+
+| Código de error | Mensaje |
+| --- | --- |
+| `sin_sesion` | Falta el token de acceso |
+| `sesion_invalida` | La sesión ha caducado o no es válida |
+
+**404** — El viaje no existe o el usuario no es miembro (las políticas RLS no permiten distinguir los casos)
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_encontrado` | El viaje no existe o no perteneces a él |
+
+**409** — El viaje no está finalizado
+
+| Código de error | Mensaje |
+| --- | --- |
+| `viaje_no_finalizado` | Solo se pueden reabrir viajes finalizados |
+
+**500** — Error interno del servidor
+
+**502** — Error al comunicarse con Supabase
+
+| Código de error | Mensaje |
+| --- | --- |
+| `error_viaje` | No se ha podido reabrir el viaje |
 
 ### POST /viajes/{viajeId}/abandonar
 
@@ -1078,7 +1157,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |
@@ -1163,7 +1242,7 @@ Cuerpo (`application/json`):
 | `fecha_fin` | string (date) \| null | No |  | `2027-07-08` |
 | `moneda` | string | No |  | `EUR` |
 | `presupuesto` | number | No |  | `850` |
-| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura y definitivo, no vuelve a activo. Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
+| `estado` | enum (activo, finalizado) | No | activo: se puede editar. finalizado: solo lectura; solo vuelve a activo al reabrirlo (`/reabrir`). Archivar y eliminar<br>son personales y no cambian el estado (ver `archivado` en ViajeDelUsuario) | `activo` |
 | `creado_en` | string (date-time) | No |  | `2026-10-12T10:00:00Z` |
 | `pendiente_destino` | boolean | No | true si el viaje está activo y aún no tiene destino. Se deduce de estado y destino, no se guarda | `false` |
 | `portada_url` | string (uri) \| null | No | URL firmada (dura 1 hora) de la foto de portada del viaje, para los miembros. Null si no tiene portada.<br>La ruta del archivo en Storage no sale del servidor | `null` |

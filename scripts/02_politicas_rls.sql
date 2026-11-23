@@ -169,7 +169,7 @@ CREATE POLICY viajes_insert ON public.viajes FOR INSERT TO authenticated
   WITH CHECK (creador_id = auth.uid());
 
 -- Cualquier miembro modifica el viaje (lo edita y lo finaliza) y solo mientras está activo. Un viaje terminado
--- no se toca ni vuelve a activo. No hay política de DELETE: un viaje solo se borra con eliminar_viaje y borrar_viaje
+-- no se toca: solo vuelve a activo con la función reabrir_viaje. No hay política de DELETE: un viaje solo se borra con eliminar_viaje y borrar_viaje
 DROP POLICY IF EXISTS viajes_update ON public.viajes;
 CREATE POLICY viajes_update ON public.viajes FOR UPDATE TO authenticated
   USING (public.es_miembro(id) AND estado = 'activo')
@@ -1057,6 +1057,45 @@ BEGIN
 END;
 $$;
 
+-- Reabre un viaje finalizado para todos los miembros: vuelve a estar activo («En curso») y se puede editar de nuevo.
+-- Cualquier miembro que siga en el viaje puede hacerlo, pero solo si está finalizado. Quita archivado_en a los miembros
+-- que lo tenían archivado para que lo vean otra vez en «En curso»; los que lo eliminaron o abandonaron siguen igual.
+-- Hace falta una función SECURITY DEFINER porque la política viajes_update solo deja modificar viajes activos y nadie
+-- puede modificar directamente miembros_viaje
+CREATE OR REPLACE FUNCTION public.reabrir_viaje(p_viaje_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.miembros_viaje m
+    WHERE m.viaje_id = p_viaje_id
+      AND m.usuario_id = auth.uid()
+      AND m.abandonado_en IS NULL
+      AND m.eliminado_en IS NULL
+  ) THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.viajes
+  SET estado = 'activo', finalizado_en = NULL
+  WHERE id = p_viaje_id AND estado = 'finalizado';
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  UPDATE public.miembros_viaje
+  SET archivado_en = NULL
+  WHERE viaje_id = p_viaje_id
+    AND abandonado_en IS NULL
+    AND eliminado_en IS NULL
+    AND archivado_en IS NOT NULL;
+  RETURN true;
+END;
+$$;
+
 -- Elimina el viaje para quien llama (solo si lo tiene archivado). Devuelve:
 --   { "estado": "no_permitido" }  sin cambios
 --   { "estado": "ok", "ultimo": false }  lo oculta para él; los demás lo conservan
@@ -1310,6 +1349,8 @@ REVOKE ALL ON FUNCTION public.archivar_viaje(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.archivar_viaje(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.desarchivar_viaje_propio(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.desarchivar_viaje_propio(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.reabrir_viaje(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reabrir_viaje(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.eliminar_viaje(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.eliminar_viaje(uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.borrar_viaje(uuid) FROM PUBLIC, anon;
