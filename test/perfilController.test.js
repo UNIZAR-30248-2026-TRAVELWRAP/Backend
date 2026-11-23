@@ -2,10 +2,11 @@
 // El servicio se sustituye por un mock: aquí se comprueba la validación y la traducción de cada resultado
 // del servicio a su código HTTP. El límite de 2 MB lo aplica el middleware de subida y las rutas sin sesión
 // las rechaza requiereSesion; los dos se prueban con un servidor real.
-const { afterEach, describe, it, mock } = require('node:test');
+const { afterEach, beforeEach, describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const perfilService = require('../src/services/perfilService');
+const cuentaService = require('../src/services/cuentaService');
 const perfilController = require('../src/controllers/perfilController');
 const perfilRoutes = require('../src/routes/perfilRoutes');
 
@@ -35,6 +36,9 @@ const crearRes = () => ({
   },
   json(cuerpo) {
     this.cuerpo = cuerpo;
+    return this;
+  },
+  end() {
     return this;
   },
 });
@@ -283,7 +287,64 @@ describe('middleware de subida del avatar (límite de 2 MB)', () => {
   });
 });
 
+describe('DELETE /perfil (eliminarCuenta)', () => {
+  const CLAVE_ANTERIOR = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const URL_ANTERIOR = process.env.SUPABASE_URL;
+
+  beforeEach(() => {
+    process.env.SUPABASE_URL = 'https://proyecto.supabase.co';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'clave-de-servicio';
+  });
+
+  afterEach(() => {
+    if (CLAVE_ANTERIOR === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = CLAVE_ANTERIOR;
+    if (URL_ANTERIOR === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = URL_ANTERIOR;
+  });
+
+  it('elimina la cuenta del usuario de la sesión y devuelve 204', async () => {
+    const eliminar = mock.method(cuentaService, 'eliminarCuenta', async () => ({ estado: 'ok' }));
+
+    const res = await llamar('eliminarCuenta', { params: { usuarioId: OTRO_ID }, body: { id: OTRO_ID } });
+
+    assert.equal(res.codigo, 204);
+    assert.equal(res.cuerpo, undefined);
+    // Siempre se usa el usuario del token, aunque la petición lleve otro id
+    assert.equal(eliminar.mock.calls[0].arguments[1], USUARIO.id);
+  });
+
+  it('devuelve 502 error_cuenta si falla el borrado', async () => {
+    mock.method(cuentaService, 'eliminarCuenta', async () => ({ error: { message: 'fallo' } }));
+    esperarError(await llamar('eliminarCuenta'), 502, 'error_cuenta');
+  });
+
+  it('devuelve 503 eliminacion_no_disponible si falta la service key', async () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const eliminar = mock.method(cuentaService, 'eliminarCuenta', async () => ({ estado: 'ok' }));
+
+    esperarError(await llamar('eliminarCuenta'), 503, 'eliminacion_no_disponible');
+    assert.equal(eliminar.mock.callCount(), 0);
+  });
+
+  it('devuelve 500 error_interno si el servicio lanza una excepción', async () => {
+    mock.method(cuentaService, 'eliminarCuenta', async () => {
+      throw new Error('inesperado');
+    });
+    esperarError(await llamar('eliminarCuenta'), 500, 'error_interno');
+  });
+});
+
 describe('rutas del perfil sin sesión', () => {
+  it('DELETE /api/perfil devuelve 401 sin token', async () => {
+    const { estado, cuerpo } = await conServidor(
+      (app) => app.use('/api/perfil', perfilRoutes),
+      (url) => fetch(`${url}/api/perfil`, { method: 'DELETE' }),
+    );
+    assert.equal(estado, 401);
+    assert.equal(cuerpo.error.codigo, 'sin_sesion');
+  });
+
   const sinToken = (metodo, ruta, opciones = {}) =>
     conServidor(
       (app) => app.use('/api/perfil', perfilRoutes),
