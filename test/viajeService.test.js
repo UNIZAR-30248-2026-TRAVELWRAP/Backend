@@ -385,6 +385,59 @@ describe('viajeService.desarchivar', () => {
   });
 });
 
+describe('viajeService.reabrir', () => {
+  it('reabre el viaje finalizado con la función SQL y lo devuelve activo', async () => {
+    const cliente = clienteFalso([encontrado(FINALIZADO, 'creador'), { data: true, error: null }, encontrado({ estado: 'activo' })]);
+
+    const resultado = await viajeService.reabrir(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.estado, 'activo');
+    assert.deepEqual(cliente.llamadasRpc, [['reabrir_viaje', { p_viaje_id: VIAJE_ID }]]);
+  });
+
+  it('también lo puede reabrir un miembro que no es el creador, aunque lo tenga archivado', async () => {
+    const cliente = clienteFalso([
+      encontrado(FINALIZADO, 'miembro', ARCHIVADO),
+      { data: true, error: null },
+      encontrado({ estado: 'activo' }, 'miembro'),
+    ]);
+
+    const resultado = await viajeService.reabrir(cliente, USUARIO, VIAJE_ID);
+
+    assert.equal(resultado.estado, 'ok');
+    assert.equal(resultado.viaje.archivado, false);
+  });
+
+  it('no reabre un viaje que no está finalizado', async () => {
+    const cliente = clienteFalso([encontrado({ estado: 'activo' })]);
+
+    assert.deepEqual(await viajeService.reabrir(cliente, USUARIO, VIAJE_ID), { estado: 'no_reabrible' });
+    assert.equal(cliente.llamadasRpc.length, 0);
+  });
+
+  it('responde no_existe si el viaje no existe o no es miembro', async () => {
+    const cliente = clienteFalso([{ data: null, error: null }]);
+
+    assert.deepEqual(await viajeService.reabrir(cliente, USUARIO, VIAJE_ID), { estado: 'no_existe' });
+    assert.equal(cliente.llamadasRpc.length, 0);
+  });
+
+  it('devuelve el error si falla la consulta o la función SQL', async () => {
+    const consulta = clienteFalso([{ data: null, error: { code: 'PGRST000' } }]);
+    assert.deepEqual((await viajeService.reabrir(consulta, USUARIO, VIAJE_ID)).error, { code: 'PGRST000' });
+
+    const funcion = clienteFalso([encontrado(FINALIZADO), { data: null, error: { code: 'PGRST001' } }]);
+    assert.deepEqual((await viajeService.reabrir(funcion, USUARIO, VIAJE_ID)).error, { code: 'PGRST001' });
+  });
+
+  it('trata como error que la función no reabra nada', async () => {
+    const cliente = clienteFalso([encontrado(FINALIZADO), { data: false, error: null }]);
+
+    assert.ok((await viajeService.reabrir(cliente, USUARIO, VIAJE_ID)).error);
+  });
+});
+
 describe('viajeService.eliminar', () => {
   const archivado = () => encontrado(FINALIZADO, 'creador', ARCHIVADO);
   const ultimo = (documentos = [], fotos = []) => ({ data: { estado: 'ok', ultimo: true, documentos, fotos }, error: null });

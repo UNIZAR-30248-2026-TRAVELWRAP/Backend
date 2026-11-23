@@ -251,6 +251,56 @@ describe('POST /viajes/:viajeId/archivar', () => {
   });
 });
 
+describe('POST /viajes/:viajeId/reabrir', () => {
+  it('devuelve el viaje activo, sea o no el creador', async () => {
+    const reabrir = simular('reabrir', async () => ({
+      estado: 'ok',
+      viaje: { id: VIAJE_ID, estado: 'activo', rol: 'miembro', archivado: false },
+    }));
+
+    const res = await llamar('reabrir');
+
+    assert.equal(res.codigo, 200);
+    assert.equal(res.cuerpo.estado, 'activo');
+    assert.deepEqual(reabrir.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
+  });
+
+  it('responde 404 si el viaje no existe o no es miembro', async () => {
+    simular('reabrir', async () => ({ estado: 'no_existe' }));
+
+    const res = await llamar('reabrir');
+
+    assert.equal(res.codigo, 404);
+    assert.equal(res.cuerpo.error.codigo, 'viaje_no_encontrado');
+  });
+
+  it('responde 409 si el viaje no está finalizado', async () => {
+    simular('reabrir', async () => ({ estado: 'no_reabrible' }));
+
+    const res = await llamar('reabrir');
+
+    assert.equal(res.codigo, 409);
+    assert.equal(res.cuerpo.error.codigo, 'viaje_no_finalizado');
+    assert.equal(res.cuerpo.error.mensaje, 'Solo se pueden reabrir viajes finalizados');
+  });
+
+  it('rechaza un identificador inválido, responde 502 si falla Supabase y 500 si hay una excepción', async () => {
+    assert.equal((await llamar('reabrir', { viajeId: 'x' })).codigo, 400);
+
+    simular('reabrir', async () => ({ error: { code: 'PGRST000' } }));
+    const res = await llamar('reabrir');
+    assert.equal(res.codigo, 502);
+    assert.equal(res.cuerpo.error.codigo, 'error_viaje');
+    assert.equal(res.cuerpo.error.mensaje, 'No se ha podido reabrir el viaje');
+
+    mock.restoreAll();
+    simular('reabrir', async () => {
+      throw new Error('fallo');
+    });
+    assert.equal((await llamar('reabrir')).codigo, 500);
+  });
+});
+
 describe('POST /viajes/:viajeId/desarchivar', () => {
   it('devuelve el viaje desarchivado, que sigue finalizado, sea o no el creador', async () => {
     const desarchivar = simular('desarchivar', async () => ({
