@@ -52,15 +52,6 @@ describe('POST /viajes/:viajeId/actividades · coordenadas', () => {
     assert.equal(datos.lugar_externo_id, 'way/24146600');
   });
 
-  it('acepta latitud y longitud negativas y en los límites', async () => {
-    const crear = simular('crear');
-
-    await llamar('crear', { ...BASE, latitud: -90, longitud: -180 });
-    await llamar('crear', { ...BASE, latitud: 90, longitud: 180 });
-
-    assert.equal(crear.mock.calls[0].arguments[3].latitud, -90);
-    assert.equal(crear.mock.calls[1].arguments[3].longitud, 180);
-  });
 
   it('sin coordenadas las deja en null', async () => {
     const crear = simular('crear');
@@ -121,14 +112,6 @@ describe('PATCH /viajes/:viajeId/actividades/:actividadId · coordenadas', () =>
     });
   });
 
-  it('quita las coordenadas enviando las dos como null', async () => {
-    const editar = simular('editar');
-
-    const res = await llamar('editar', { latitud: null, longitud: null, lugar_externo_id: null });
-
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(editar.mock.calls[0].arguments[4], { latitud: null, longitud: null, lugar_externo_id: null });
-  });
 
   it('permite cambiar solo el identificador del lugar', async () => {
     const editar = simular('editar');

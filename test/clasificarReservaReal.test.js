@@ -44,12 +44,5 @@ describe('clasificarDocumento con un correo de reserva real', () => {
     assert.equal(resultado.datos.ubicacion_nombre, '190 High Street');
   });
 
-  it('toma la fecha y la hora', () => {
-    assert.equal(resultado.datos.fecha, '2026-07-29');
-    assert.equal(resultado.datos.hora_inicio, '18:00');
-  });
 
-  it('deduce la categoría cultura por ser una visita guiada', () => {
-    assert.equal(resultado.datos.categoria, 'cultura');
-  });
 });

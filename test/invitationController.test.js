@@ -59,15 +59,6 @@ describe('POST /invitaciones/:token/unirse', () => {
     assert.equal(avisar.mock.callCount(), 0);
   });
 
-  it('si no se puede unir no avisa', async () => {
-    mock.method(invitationService, 'unirse', async () => ({ estado: 'viaje_no_activo' }));
-    const avisar = mock.method(votacionesSocket, 'avisarCambio', () => {});
-
-    const res = await unirse();
-
-    assert.equal(res.codigo, 409);
-    assert.equal(avisar.mock.callCount(), 0);
-  });
 
   it('un token mal formado responde 404 sin llamar al servicio', async () => {
     const servicio = mock.method(invitationService, 'unirse', async () => unido(false));

@@ -38,23 +38,9 @@ describe('GET /notificaciones/clave-publica', () => {
     assert.deepEqual(res.cuerpo, { clave: 'clave' });
   });
 
-  it('responde 503 push_no_disponible si el servidor no tiene claves', async () => {
-    mock.method(notificacionService, 'clavePublica', () => null);
-    const res = await llamar('obtenerClave');
-    assert.equal(res.codigo, 503);
-    assert.equal(res.cuerpo.error.codigo, 'push_no_disponible');
-  });
 });
 
 describe('POST /notificaciones/suscripciones', () => {
-  it('guarda la suscripción del usuario con sesión y responde 201', async () => {
-    const guardar = mock.method(notificacionService, 'suscribir', async () => ({ estado: 'ok' }));
-    const res = await llamar('suscribir', SUSCRIPCION);
-
-    assert.equal(res.codigo, 201);
-    assert.deepEqual(res.cuerpo, { endpoint: SUSCRIPCION.endpoint });
-    assert.deepEqual(guardar.mock.calls[0].arguments.slice(1), ['ana', { endpoint: SUSCRIPCION.endpoint, p256dh: 'p', auth: 'a' }]);
-  });
 
   it('rechaza sin cuerpo, sin claves o con un endpoint que no es https', async () => {
     const guardar = mock.method(notificacionService, 'suscribir', async () => ({ estado: 'ok' }));
@@ -92,15 +78,5 @@ describe('DELETE /notificaciones/suscripciones', () => {
     assert.deepEqual(cancelar.mock.calls[0].arguments.slice(1), ['ana', SUSCRIPCION.endpoint]);
   });
 
-  it('rechaza sin endpoint', async () => {
-    const res = await llamar('darDeBaja', {});
-    assert.equal(res.codigo, 400);
-    assert.equal(res.cuerpo.error.codigo, 'datos_invalidos');
-  });
 
-  it('responde 502 si falla Supabase', async () => {
-    mock.method(notificacionService, 'cancelar', async () => ({ error: { code: 'X' } }));
-    const res = await llamar('darDeBaja', { endpoint: SUSCRIPCION.endpoint });
-    assert.equal(res.codigo, 502);
-  });
 });

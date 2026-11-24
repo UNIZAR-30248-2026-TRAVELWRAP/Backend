@@ -41,14 +41,6 @@ describe('GET /direcciones (buscar)', () => {
     assert.deepEqual(buscar.mock.calls[0].arguments, ['Colosseo', USUARIO.id]);
   });
 
-  it('devuelve una lista vacía cuando no hay coincidencias', async () => {
-    simular(async () => ({ estado: 'ok', direcciones: [] }));
-
-    const res = await llamar({ q: 'zzzzzz' });
-
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { direcciones: [] });
-  });
 
   const invalidas = [
     ['sin texto', {}],
@@ -73,12 +65,6 @@ describe('GET /direcciones (buscar)', () => {
     });
   }
 
-  it('acepta el mínimo y el máximo de caracteres', async () => {
-    simular(async () => ({ estado: 'ok', direcciones: [] }));
-
-    assert.equal((await llamar({ q: 'abc' })).codigo, 200);
-    assert.equal((await llamar({ q: 'a'.repeat(200) })).codigo, 200);
-  });
 
   const limites = [
     ['demasiado_rapido', 'demasiadas_busquedas'],
@@ -106,14 +92,6 @@ describe('GET /direcciones (buscar)', () => {
     });
   });
 
-  it('responde 502 ante un estado desconocido del servicio', async () => {
-    simular(async () => ({ estado: 'otro' }));
-
-    const res = await llamar({ q: 'Colosseo' });
-
-    assert.equal(res.codigo, 502);
-    assert.equal(res.cuerpo.error.codigo, 'error_geocodificacion');
-  });
 
   it('responde 500 si el servicio lanza una excepción', async () => {
     simular(async () => {

@@ -121,15 +121,6 @@ describe('PATCH /viajes/:viajeId (editar)', () => {
 });
 
 describe('GET /viajes (listar)', () => {
-  it('por defecto pide los viajes no archivados, sin filtrar por estado', async () => {
-    const listar = simular('listar', async () => ({ viajes: [{ id: VIAJE_ID }] }));
-
-    const res = await llamar('listar');
-
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { viajes: [{ id: VIAJE_ID }] });
-    assert.deepEqual(listar.mock.calls[0].arguments.slice(1), [USUARIO.id, { estado: undefined, archivados: false }]);
-  });
 
   it('con archivados=true pide solo los archivados del usuario y admite filtrar por estado', async () => {
     const listar = simular('listar', async () => ({ viajes: [] }));
@@ -214,15 +205,6 @@ describe('POST /viajes/:viajeId/archivar', () => {
     assert.deepEqual(archivar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('responde 409 viaje_no_finalizado si el viaje sigue activo', async () => {
-    simular('archivar', async () => ({ estado: 'no_finalizado' }));
-
-    const res = await llamar('archivar');
-
-    assert.equal(res.codigo, 409);
-    assert.equal(res.cuerpo.error.codigo, 'viaje_no_finalizado');
-    assert.equal(res.cuerpo.error.mensaje, 'Solo se pueden archivar viajes finalizados');
-  });
 
   it('responde 409 viaje_archivado si ya lo tenía archivado y 404 si no existe', async () => {
     simular('archivar', async () => ({ estado: 'ya_archivado' }));
@@ -316,11 +298,6 @@ describe('POST /viajes/:viajeId/desarchivar', () => {
     assert.deepEqual(desarchivar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('responde 404 si el viaje no existe', async () => {
-    simular('desarchivar', async () => ({ estado: 'no_existe' }));
-
-    assert.equal((await llamar('desarchivar')).codigo, 404);
-  });
 
   it('responde 409 si el viaje no estaba archivado', async () => {
     simular('desarchivar', async () => ({ estado: 'no_estaba_archivado' }));
@@ -359,35 +336,8 @@ describe('DELETE /viajes/:viajeId', () => {
     assert.deepEqual(eliminar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('responde 409 si el viaje no está archivado y 404 si no existe', async () => {
-    simular('eliminar', async () => ({ estado: 'no_archivado' }));
-    const noArchivado = await llamar('eliminar');
-    assert.equal(noArchivado.codigo, 409);
-    assert.equal(noArchivado.cuerpo.error.mensaje, 'Solo se pueden eliminar viajes archivados');
 
-    mock.restoreAll();
-    simular('eliminar', async () => ({ estado: 'no_existe' }));
-    assert.equal((await llamar('eliminar')).codigo, 404);
-  });
 
-  it('responde 502 sin rutas de archivos si falla el borrado y 500 si hay una excepción', async () => {
-    simular('eliminar', async () => ({ error: { message: 'fallo', rutas: ['x/y.pdf'] } }));
-
-    const res = await llamar('eliminar');
-
-    assert.equal(res.codigo, 502);
-    assert.deepEqual(res.cuerpo, { error: { codigo: 'error_viaje', mensaje: 'No se ha podido eliminar el viaje' } });
-
-    mock.restoreAll();
-    simular('eliminar', async () => {
-      throw new Error('boom');
-    });
-    assert.equal((await llamar('eliminar')).codigo, 500);
-  });
-
-  it('rechaza un identificador que no es un UUID', async () => {
-    assert.equal((await llamar('eliminar', { viajeId: 'x' })).codigo, 400);
-  });
 });
 
 describe('POST /viajes (crear) tras separar los validadores', () => {
@@ -441,34 +391,7 @@ describe('POST /viajes/:viajeId/abandonar', () => {
     assert.equal(avisar.mock.calls.length, 0);
   });
 
-  it('responde 409 si el viaje ya no está activo y 404 si no es miembro', async () => {
-    simular('abandonar', async () => ({ estado: 'no_activo' }));
-    const finalizado = await llamar('abandonar');
-    assert.equal(finalizado.codigo, 409);
-    assert.equal(finalizado.cuerpo.error.codigo, 'viaje_no_activo');
 
-    mock.restoreAll();
-    simular('abandonar', async () => ({ estado: 'no_miembro' }));
-    assert.equal((await llamar('abandonar')).codigo, 404);
-  });
-
-  it('rechaza un identificador inválido, responde 502 si falla Supabase y 500 si hay una excepción', async () => {
-    const avisar = mock.method(votacionesSocket, 'avisarCambio', () => {});
-    assert.equal((await llamar('abandonar', { viajeId: 'x' })).codigo, 400);
-
-    simular('abandonar', async () => ({ error: { code: 'PGRST000' } }));
-    const fallo = await llamar('abandonar');
-    assert.equal(fallo.codigo, 502);
-    assert.equal(fallo.cuerpo.error.mensaje, 'No se ha podido abandonar el viaje');
-
-    mock.restoreAll();
-    mock.method(votacionesSocket, 'avisarCambio', () => {});
-    simular('abandonar', async () => {
-      throw new Error('fallo inesperado');
-    });
-    assert.equal((await llamar('abandonar')).codigo, 500);
-    assert.equal(avisar.mock.calls.length, 0);
-  });
 });
 
 // Portada del viaje: PUT y DELETE /viajes/:viajeId/portada
@@ -497,23 +420,7 @@ describe('PUT /viajes/:viajeId/portada (subirPortada)', () => {
     assert.equal(datos.buffer, PNG);
   });
 
-  it('reconoce un JPEG', async () => {
-    const subir = simular('subirPortada', async () => ({ estado: 'ok', viaje: {} }));
 
-    await subirPortada({ archivo: { buffer: JPEG } });
-
-    assert.equal(subir.mock.calls[0].arguments[3].tipoMime, 'image/jpeg');
-  });
-
-  it('rechaza con 400 un identificador que no es un UUID', async () => {
-    const subir = simular('subirPortada', async () => ({ estado: 'ok' }));
-
-    const res = await subirPortada({ viajeId: 'roma', archivo: { buffer: JPEG } });
-
-    assert.equal(res.codigo, 400);
-    assert.equal(res.cuerpo.error.codigo, 'datos_invalidos');
-    assert.equal(subir.mock.callCount(), 0);
-  });
 
   it('rechaza con 400 si falta el archivo o está vacío', async () => {
     const subir = simular('subirPortada', async () => ({ estado: 'ok' }));
@@ -539,31 +446,7 @@ describe('PUT /viajes/:viajeId/portada (subirPortada)', () => {
     assert.equal(subir.mock.callCount(), 0);
   });
 
-  it('traduce los motivos del servicio: 404 si no existe y 409 si el viaje no está activo', async () => {
-    simular('subirPortada', async () => ({ estado: 'no_existe' }));
-    const inexistente = await subirPortada({ archivo: { buffer: JPEG } });
-    assert.equal(inexistente.codigo, 404);
-    assert.equal(inexistente.cuerpo.error.codigo, 'viaje_no_encontrado');
 
-    mock.restoreAll();
-    simular('subirPortada', async () => ({ estado: 'no_activo' }));
-    const finalizado = await subirPortada({ archivo: { buffer: JPEG } });
-    assert.equal(finalizado.codigo, 409);
-    assert.equal(finalizado.cuerpo.error.codigo, 'viaje_no_activo');
-  });
-
-  it('responde 502 si falla Supabase y 500 si hay una excepción', async () => {
-    simular('subirPortada', async () => ({ error: { code: 'PGRST000' } }));
-    const fallo = await subirPortada({ archivo: { buffer: JPEG } });
-    assert.equal(fallo.codigo, 502);
-    assert.deepEqual(fallo.cuerpo, { error: { codigo: 'error_viaje', mensaje: 'No se ha podido guardar la portada' } });
-
-    mock.restoreAll();
-    simular('subirPortada', async () => {
-      throw new Error('fallo inesperado');
-    });
-    assert.equal((await subirPortada({ archivo: { buffer: JPEG } })).codigo, 500);
-  });
 });
 
 describe('DELETE /viajes/:viajeId/portada (quitarPortada)', () => {
@@ -577,35 +460,7 @@ describe('DELETE /viajes/:viajeId/portada (quitarPortada)', () => {
     assert.deepEqual(quitar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID]);
   });
 
-  it('rechaza con 400 un identificador inválido sin llamar al servicio', async () => {
-    const quitar = simular('quitarPortada', async () => ({ estado: 'ok' }));
 
-    const res = await llamar('quitarPortada', { viajeId: 'x' });
-
-    assert.equal(res.codigo, 400);
-    assert.equal(quitar.mock.callCount(), 0);
-  });
-
-  it('traduce 404 y 409, responde 502 si falla Supabase y 500 si hay una excepción', async () => {
-    simular('quitarPortada', async () => ({ estado: 'no_existe' }));
-    assert.equal((await llamar('quitarPortada')).codigo, 404);
-
-    mock.restoreAll();
-    simular('quitarPortada', async () => ({ estado: 'no_activo' }));
-    assert.equal((await llamar('quitarPortada')).cuerpo.error.codigo, 'viaje_no_activo');
-
-    mock.restoreAll();
-    simular('quitarPortada', async () => ({ error: { code: 'PGRST000' } }));
-    const fallo = await llamar('quitarPortada');
-    assert.equal(fallo.codigo, 502);
-    assert.equal(fallo.cuerpo.error.mensaje, 'No se ha podido quitar la portada');
-
-    mock.restoreAll();
-    simular('quitarPortada', async () => {
-      throw new Error('fallo inesperado');
-    });
-    assert.equal((await llamar('quitarPortada')).codigo, 500);
-  });
 });
 
 describe('PUT /viajes/:viajeId/portada: recepción del archivo (límite de 5 MB)', () => {

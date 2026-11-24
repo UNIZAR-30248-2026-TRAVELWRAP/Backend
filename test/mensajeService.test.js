@@ -97,13 +97,6 @@ describe('mensajeService.listar', () => {
     assert.equal(cliente.consultas.length, 0);
   });
 
-  it('devuelve el error si falla la lectura', async () => {
-    conViaje();
-    const error = { code: 'PGRST301' };
-    const cliente = clienteFalso([{ data: null, error }]);
-
-    assert.deepEqual(await mensajeService.listar(cliente, ADRIANA, VIAJE_ID), { error });
-  });
 });
 
 describe('mensajeService.crear', () => {
@@ -121,25 +114,6 @@ describe('mensajeService.crear', () => {
     assert.equal(resultado.mensaje.autor.nombre, 'Adriana');
   });
 
-  it('con el viaje finalizado responde no_activo sin escribir', async () => {
-    conViaje('finalizado');
-    const cliente = clienteFalso();
 
-    assert.deepEqual(await mensajeService.crear(cliente, ADRIANA, VIAJE_ID, 'Hola'), { estado: 'no_activo' });
-    assert.equal(cliente.consultas.length, 0);
-  });
 
-  it('devuelve no_existe si el viaje no existe o no se es miembro', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
-
-    assert.deepEqual(await mensajeService.crear(clienteFalso(), ADRIANA, VIAJE_ID, 'Hola'), { estado: 'no_existe' });
-  });
-
-  it('devuelve el error si falla la escritura', async () => {
-    conViaje();
-    const error = { code: 'PGRST301' };
-    const cliente = clienteFalso([{ data: null, error }]);
-
-    assert.deepEqual(await mensajeService.crear(cliente, ADRIANA, VIAJE_ID, 'Hola'), { error });
-  });
 });

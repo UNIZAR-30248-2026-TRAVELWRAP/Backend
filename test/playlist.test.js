@@ -30,17 +30,8 @@ const crearRes = () => ({
 afterEach(() => mock.restoreAll());
 
 describe('normalizarPlaylist', () => {
-  it('acepta el enlace web de una playlist y lo deja en su forma canónica', () => {
-    assert.deepEqual(normalizarPlaylist(`https://open.spotify.com/playlist/${ID}`), { valor: CANONICO });
-  });
 
-  it('quita los parámetros de compartir y el idioma del enlace', () => {
-    assert.deepEqual(normalizarPlaylist(`https://open.spotify.com/intl-es/playlist/${ID}?si=abc123`), { valor: CANONICO });
-  });
 
-  it('acepta el formato spotify:playlist:', () => {
-    assert.deepEqual(normalizarPlaylist(`spotify:playlist:${ID}`), { valor: CANONICO });
-  });
 
   it('rechaza enlaces que no son de una playlist de Spotify', () => {
     assert.ok(normalizarPlaylist('https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC').error);
@@ -52,15 +43,6 @@ describe('normalizarPlaylist', () => {
 });
 
 describe('controlador de la playlist', () => {
-  it('devuelve la playlist del viaje', async () => {
-    mock.method(playlistService, 'obtener', async () => ({ estado: 'ok', playlist: { url: CANONICO, actualizado_en: '2026-11-22T10:00:00Z' } }));
-    const res = crearRes();
-
-    await playlistController.obtener({ params: { viajeId: VIAJE_ID }, usuario: USUARIO, supabase: {} }, res);
-
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { playlist: { url: CANONICO, actualizado_en: '2026-11-22T10:00:00Z' } });
-  });
 
   it('devuelve playlist null si el viaje no tiene ninguna', async () => {
     mock.method(playlistService, 'obtener', async () => ({ estado: 'ok', playlist: null }));

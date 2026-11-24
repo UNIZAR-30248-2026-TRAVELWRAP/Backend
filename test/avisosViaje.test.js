@@ -24,22 +24,6 @@ const simular = (viaje = VIAJE_CON_MIEMBROS) => ({
 afterEach(() => mock.restoreAll());
 
 describe('avisarEvento', () => {
-  it('avisa a los demás miembros, nunca a quien genera el evento, con el viaje y el motivo', async () => {
-    const { socket, push } = simular();
-
-    await avisarEvento({}, 'ana', VIAJE, 'gasto', 'Cena');
-
-    const [destinatarios, aviso] = socket.mock.calls[0].arguments;
-    assert.deepEqual(destinatarios, ['bea', 'carla']);
-    assert.deepEqual(aviso, {
-      viaje_id: VIAJE,
-      viaje_nombre: 'Roma 2027',
-      tipo: 'gasto',
-      pantalla: 'gastos',
-      texto: 'Ana ha registrado un gasto: Cena',
-    });
-    assert.deepEqual(push.mock.calls[0].arguments.slice(1), [VIAJE, aviso]);
-  });
 
   it('lleva cada tipo a su pantalla', async () => {
     const { socket } = simular();

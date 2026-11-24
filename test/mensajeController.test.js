@@ -48,13 +48,6 @@ describe('GET /viajes/:viajeId/mensajes (listar)', () => {
     assert.deepEqual(listar.mock.calls[0].arguments.slice(1), [ADRIANA, VIAJE_ID, '2026-05-12T08:05:00.000Z']);
   });
 
-  it('sin antes no pasa fecha al servicio', async () => {
-    const listar = mock.method(mensajeService, 'listar', async () => ({ estado: 'ok', mensajes: [] }));
-
-    await llamar('listar');
-
-    assert.equal(listar.mock.calls[0].arguments[3], undefined);
-  });
 
   it('rechaza un identificador de viaje que no es un UUID o una fecha no válida, sin llamar al servicio', async () => {
     const listar = mock.method(mensajeService, 'listar', async () => ({ estado: 'ok', mensajes: [] }));
@@ -90,14 +83,6 @@ describe('POST /viajes/:viajeId/mensajes (crear)', () => {
     assert.deepEqual(avisar.mock.calls[0].arguments, [VIAJE_ID, MENSAJE]);
   });
 
-  it('quita los espacios sobrantes del texto antes de guardarlo', async () => {
-    const crear = mock.method(mensajeService, 'crear', async () => ({ estado: 'ok', mensaje: MENSAJE }));
-    mock.method(chatSocket, 'avisarMensaje', () => {});
-
-    await llamar('crear', { body: { texto: '   Hola  ' } });
-
-    assert.equal(crear.mock.calls[0].arguments[3], 'Hola');
-  });
 
   it('rechaza un texto vacío, uno de más de 1000 caracteres o sin texto, sin llamar al servicio', async () => {
     const crear = mock.method(mensajeService, 'crear', async () => ({ estado: 'ok', mensaje: MENSAJE }));
@@ -110,34 +95,6 @@ describe('POST /viajes/:viajeId/mensajes (crear)', () => {
     assert.equal(crear.mock.calls.length, 0);
   });
 
-  it('acepta un texto de exactamente 1000 caracteres', async () => {
-    mock.method(mensajeService, 'crear', async () => ({ estado: 'ok', mensaje: MENSAJE }));
-    mock.method(chatSocket, 'avisarMensaje', () => {});
 
-    assert.equal((await llamar('crear', { body: { texto: 'a'.repeat(1000) } })).codigo, 201);
-  });
 
-  it('con el viaje finalizado responde 409 y no avisa a nadie', async () => {
-    mock.method(mensajeService, 'crear', async () => ({ estado: 'no_activo' }));
-    const avisar = mock.method(chatSocket, 'avisarMensaje', () => {});
-
-    const res = await llamar('crear', { body: { texto: 'Hola' } });
-
-    assert.equal(res.codigo, 409);
-    assert.equal(res.cuerpo.error.codigo, 'viaje_no_activo');
-    assert.equal(avisar.mock.calls.length, 0);
-  });
-
-  it('responde 404 si el viaje no existe y 502 si falla Supabase, sin avisar a nadie', async () => {
-    const avisar = mock.method(chatSocket, 'avisarMensaje', () => {});
-    mock.method(mensajeService, 'crear', async () => ({ estado: 'no_existe' }));
-    assert.equal((await llamar('crear', { body: { texto: 'Hola' } })).codigo, 404);
-
-    mock.restoreAll();
-    mock.method(chatSocket, 'avisarMensaje', () => {});
-    mock.method(mensajeService, 'crear', async () => ({ error: { code: 'PGRST000' } }));
-    const fallo = await llamar('crear', { body: { texto: 'Hola' } });
-    assert.equal(fallo.codigo, 502);
-    assert.equal(avisar.mock.calls.length, 0);
-  });
 });

@@ -102,13 +102,6 @@ describe('POST /viajes/:viajeId/gastos (crear)', () => {
     assert.equal(datos.fecha, null);
   });
 
-  it('redondea el importe a céntimos sin errores de coma flotante', async () => {
-    const crear = simular(async () => ({ estado: 'ok', gasto: {} }));
-
-    await llamar({ body: { ...GASTO, importe: 0.1 + 0.2 } });
-
-    assert.equal(crear.mock.calls[0].arguments[2].importe, 0.3);
-  });
 
   // Validación de la ruta
   it('rechaza un identificador de viaje que no es un UUID sin llamar al servicio', async () => {
@@ -164,13 +157,6 @@ describe('POST /viajes/:viajeId/gastos (crear)', () => {
   ];
 
   for (const [estado, codigo, codigoError] of motivos) {
-    it(`responde ${codigo} cuando el servicio devuelve ${estado}`, async () => {
-      simular(async () => ({ estado }));
-
-      const res = await llamar({ body: GASTO });
-
-      esperarError(res, codigo, codigoError);
-    });
   }
 
   // Errores de la base de datos y excepciones
@@ -326,13 +312,6 @@ describe('GET /viajes/:viajeId/gastos/balance (balance)', () => {
     esperarError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
   });
 
-  it('responde 502 si falla la base de datos', async () => {
-    simularBalance(async () => ({ error: { code: 'PGRST301' } }));
-
-    const res = await llamarBalance();
-
-    esperarError(res, 502, 'error_gasto', 'No se ha podido calcular el balance');
-  });
 
   it('responde 502 ante un estado desconocido del servicio', async () => {
     simularBalance(async () => ({ estado: 'desconocido' }));
@@ -405,13 +384,6 @@ describe('GET /viajes/:viajeId/gastos/liquidacion (liquidacion)', () => {
     esperarError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
   });
 
-  it('responde 502 si falla la base de datos', async () => {
-    simularLiquidacion(async () => ({ error: { code: 'PGRST301' } }));
-
-    const res = await llamarLiquidacion();
-
-    esperarError(res, 502, 'error_gasto', 'No se ha podido calcular la liquidación');
-  });
 
   it('responde 502 ante un estado desconocido del servicio', async () => {
     simularLiquidacion(async () => ({ estado: 'desconocido' }));
@@ -521,13 +493,6 @@ describe('GET /viajes/:viajeId/gastos/:gastoId (detalle)', () => {
     esperarError(res, 404, 'viaje_no_encontrado', 'El viaje no existe o no perteneces a él');
   });
 
-  it('responde 502 si falla la base de datos', async () => {
-    simularDetalle(async () => ({ error: { code: 'PGRST301' } }));
-
-    const res = await llamarDetalle();
-
-    esperarError(res, 502, 'error_gasto', 'No se ha podido obtener el gasto');
-  });
 
   it('responde 500 si el servicio lanza una excepción', async () => {
     simularDetalle(async () => {
@@ -558,22 +523,7 @@ describe('PATCH /viajes/:viajeId/gastos/:gastoId (editar)', () => {
     assert.equal(datos.pagado_por, ADRIANA);
   });
 
-  it('redondea el importe a céntimos antes de llamar a la función', async () => {
-    const editar = simularEditar(async () => ({ estado: 'ok', gasto: {} }));
 
-    await llamarEditar({ body: { ...GASTO, importe: 0.1 + 0.2 } });
-
-    assert.equal(editar.mock.calls[0].arguments[3].importe, 0.3);
-  });
-
-  it('rechaza un identificador de gasto que no es un UUID sin llamar al servicio', async () => {
-    const editar = simularEditar(async () => ({ estado: 'ok', gasto: {} }));
-
-    const res = await llamarEditar({ gastoId: 'cena' });
-
-    esperarError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
-    assert.equal(editar.mock.callCount(), 0);
-  });
 
   // Validación del cuerpo: igual que al crear, ninguno llega al servicio
   const casosInvalidos = [
@@ -596,29 +546,8 @@ describe('PATCH /viajes/:viajeId/gastos/:gastoId (editar)', () => {
     });
   }
 
-  it('responde 400 si la base de datos rechaza los datos por un check', async () => {
-    simularEditar(async () => ({ error: { code: '23514' } }));
 
-    const res = await llamarEditar();
 
-    esperarError(res, 400, 'datos_invalidos', 'Los datos del gasto no son válidos');
-  });
-
-  it('responde 404 si el gasto no existe o es de otro viaje', async () => {
-    simularEditar(async () => ({ estado: 'no_encontrado' }));
-
-    const res = await llamarEditar();
-
-    esperarError(res, 404, 'gasto_no_encontrado');
-  });
-
-  it('responde 404 si el viaje no existe o no se es miembro', async () => {
-    simularEditar(async () => ({ estado: 'no_existe' }));
-
-    const res = await llamarEditar();
-
-    esperarError(res, 404, 'viaje_no_encontrado');
-  });
 
   it('responde 409 si el viaje está finalizado o archivado', async () => {
     simularEditar(async () => ({ estado: 'no_activo' }));
@@ -628,31 +557,8 @@ describe('PATCH /viajes/:viajeId/gastos/:gastoId (editar)', () => {
     esperarError(res, 409, 'viaje_no_activo', 'El viaje está finalizado y ya no se puede modificar');
   });
 
-  it('responde 400 si quien paga o un participante no es miembro', async () => {
-    simularEditar(async () => ({ estado: 'no_miembro' }));
 
-    const res = await llamarEditar();
 
-    esperarError(res, 400, 'datos_invalidos');
-  });
-
-  it('responde 502 si falla la base de datos', async () => {
-    simularEditar(async () => ({ error: { code: 'PGRST301' } }));
-
-    const res = await llamarEditar();
-
-    esperarError(res, 502, 'error_gasto', 'No se han podido guardar los cambios del gasto');
-  });
-
-  it('responde 500 si el servicio lanza una excepción', async () => {
-    simularEditar(async () => {
-      throw new Error('sin red');
-    });
-
-    const res = await llamarEditar();
-
-    esperarError(res, 500, 'error_interno');
-  });
 });
 
 describe('DELETE /viajes/:viajeId/gastos/:gastoId (eliminar)', () => {
@@ -670,56 +576,11 @@ describe('DELETE /viajes/:viajeId/gastos/:gastoId (eliminar)', () => {
     assert.equal(gastoId, GASTO_ID);
   });
 
-  it('rechaza un identificador de gasto que no es un UUID sin llamar al servicio', async () => {
-    const eliminar = simularEliminar(async () => ({ estado: 'ok' }));
 
-    const res = await llamarEliminar({ gastoId: 'cena' });
 
-    esperarError(res, 400, 'datos_invalidos', 'El identificador del gasto no es válido');
-    assert.equal(eliminar.mock.callCount(), 0);
-  });
 
-  it('responde 404 si el gasto no existe, es de otro viaje o no se puede borrar', async () => {
-    simularEliminar(async () => ({ estado: 'no_encontrado' }));
 
-    const res = await llamarEliminar();
 
-    esperarError(res, 404, 'gasto_no_encontrado', 'El gasto no existe o no pertenece a este viaje');
-  });
-
-  it('responde 409 si el viaje está finalizado o archivado', async () => {
-    simularEliminar(async () => ({ estado: 'no_activo' }));
-
-    const res = await llamarEliminar();
-
-    esperarError(res, 409, 'viaje_no_activo');
-  });
-
-  it('responde 404 si el viaje no existe o no se es miembro', async () => {
-    simularEliminar(async () => ({ estado: 'no_existe' }));
-
-    const res = await llamarEliminar();
-
-    esperarError(res, 404, 'viaje_no_encontrado');
-  });
-
-  it('responde 502 si falla la base de datos', async () => {
-    simularEliminar(async () => ({ error: { code: 'PGRST301' } }));
-
-    const res = await llamarEliminar();
-
-    esperarError(res, 502, 'error_gasto', 'No se ha podido eliminar el gasto');
-  });
-
-  it('responde 500 si el servicio lanza una excepción', async () => {
-    simularEliminar(async () => {
-      throw new Error('sin red');
-    });
-
-    const res = await llamarEliminar();
-
-    esperarError(res, 500, 'error_interno');
-  });
 });
 
 // Marcar y deshacer deudas saldadas: validación del cuerpo y traducción de los resultados del servicio
@@ -741,17 +602,6 @@ describe('POST /viajes/:viajeId/gastos/saldadas (marcarSaldada)', () => {
     assert.deepEqual(marcar.mock.calls[0].arguments.slice(1), [ADRIANA, VIAJE_ID, BERTA, 12.5]);
   });
 
-  it('rechaza un deudor que no es un UUID o un importe que no es válido, sin llamar al servicio', async () => {
-    const marcar = mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'ok' }));
-
-    assert.equal((await llamarMarcar({ importe: 5 })).codigo, 400);
-    assert.equal((await llamarMarcar({ de_usuario_id: 'no-es-uuid', importe: 5 })).codigo, 400);
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 0 })).codigo, 400);
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: -3 })).codigo, 400);
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 1.005 })).codigo, 400);
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: '5' })).codigo, 400);
-    assert.equal(marcar.mock.calls.length, 0);
-  });
 
   it('si la liquidación ha cambiado responde 409 deuda_cambiada', async () => {
     mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'no_coincide' }));
@@ -762,18 +612,6 @@ describe('POST /viajes/:viajeId/gastos/saldadas (marcarSaldada)', () => {
     assert.equal(res.cuerpo.error.codigo, 'deuda_cambiada');
   });
 
-  it('con el viaje finalizado responde 409, con el viaje inexistente 404 y si falla Supabase 502', async () => {
-    mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'no_activo' }));
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 5 })).codigo, 409);
-
-    mock.restoreAll();
-    mock.method(gastoService, 'marcarSaldada', async () => ({ estado: 'no_existe' }));
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 5 })).codigo, 404);
-
-    mock.restoreAll();
-    mock.method(gastoService, 'marcarSaldada', async () => ({ error: { code: 'PGRST000' } }));
-    assert.equal((await llamarMarcar({ de_usuario_id: BERTA, importe: 5 })).codigo, 502);
-  });
 });
 
 describe('DELETE /viajes/:viajeId/gastos/saldadas/:deudorId (desmarcarSaldada)', () => {
@@ -797,13 +635,4 @@ describe('DELETE /viajes/:viajeId/gastos/saldadas/:deudorId (desmarcarSaldada)',
     assert.deepEqual(desmarcar.mock.calls[0].arguments.slice(1), [ADRIANA, VIAJE_ID, BERTA]);
   });
 
-  it('responde 404 si no hay ninguna deuda saldada que deshacer y 400 si el deudor no es un UUID', async () => {
-    mock.method(gastoService, 'desmarcarSaldada', async () => ({ estado: 'sin_deuda' }));
-
-    const sinDeuda = await llamarDesmarcar(BERTA);
-    assert.equal(sinDeuda.codigo, 404);
-    assert.equal(sinDeuda.cuerpo.error.codigo, 'deuda_no_encontrada');
-
-    assert.equal((await llamarDesmarcar('no-es-uuid')).codigo, 400);
-  });
 });

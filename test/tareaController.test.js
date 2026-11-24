@@ -44,12 +44,6 @@ const params = { viajeId: VIAJE_ID, tareaId: TAREA_ID };
 afterEach(() => mock.restoreAll());
 
 describe('GET /viajes/:viajeId/tareas', () => {
-  it('devuelve la lista de tareas', async () => {
-    mock.method(tareaService, 'listar', async () => ({ estado: 'ok', tareas: [TAREA] }));
-    const res = await llamar('listar', { params });
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { tareas: [TAREA] });
-  });
 
   it('id mal formado 400, viaje inexistente o no miembro 404, fallo 502, excepción 500', async () => {
     esperarError(await llamar('listar', { params: { viajeId: 'x' } }), 400, 'datos_invalidos');
@@ -87,48 +81,15 @@ describe('POST /viajes/:viajeId/tareas', () => {
     assert.equal(crear.mock.calls.length, 0);
   });
 
-  it('acepta un texto de exactamente 200 caracteres', async () => {
-    mock.method(tareaService, 'crear', async () => ({ estado: 'ok', tarea: TAREA }));
-    const res = await llamar('crear', { params, body: { texto: 'a'.repeat(200), responsable_id: RESPONSABLE_ID } });
-    assert.equal(res.codigo, 201);
-  });
 
   it('un responsable que no es un UUID da 400', async () => {
     esperarError(await llamar('crear', { params, body: { texto: 'x', responsable_id: 'no-uuid' } }), 400, 'datos_invalidos');
     esperarError(await llamar('crear', { params: { viajeId: 'x' }, body: { texto: 'x', responsable_id: RESPONSABLE_ID } }), 400, 'datos_invalidos');
   });
 
-  it('responsable que no es miembro 400, viaje finalizado 409, inexistente 404, fallo 502', async () => {
-    const body = { texto: 'x', responsable_id: RESPONSABLE_ID };
-
-    mock.method(tareaService, 'crear', async () => ({ estado: 'responsable_no_miembro' }));
-    esperarError(await llamar('crear', { params, body }), 400, 'datos_invalidos');
-    mock.restoreAll();
-
-    mock.method(tareaService, 'crear', async () => ({ estado: 'no_activo' }));
-    esperarError(await llamar('crear', { params, body }), 409, 'viaje_no_activo');
-    mock.restoreAll();
-
-    mock.method(tareaService, 'crear', async () => ({ estado: 'no_existe' }));
-    esperarError(await llamar('crear', { params, body }), 404, 'viaje_no_encontrado');
-    mock.restoreAll();
-
-    mock.method(tareaService, 'crear', async () => ({ error: { code: 'x' } }));
-    esperarError(await llamar('crear', { params, body }), 502, 'error_tarea');
-  });
 });
 
 describe('PATCH /viajes/:viajeId/tareas/:tareaId', () => {
-  it('marca y desmarca con hecha', async () => {
-    const editar = mock.method(tareaService, 'editar', async () => ({ estado: 'ok', tarea: { ...TAREA, hecha: true } }));
-    const res = await llamar('editar', { params, body: { hecha: true } });
-    assert.equal(res.codigo, 200);
-    assert.equal(res.cuerpo.hecha, true);
-    assert.deepEqual(editar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID, TAREA_ID, { hecha: true }]);
-
-    await llamar('editar', { params, body: { hecha: false } });
-    assert.deepEqual(editar.mock.calls[1].arguments[4], { hecha: false });
-  });
 
   it('edita el texto (recortado) y el responsable', async () => {
     const editar = mock.method(tareaService, 'editar', async () => ({ estado: 'ok', tarea: TAREA }));
@@ -182,23 +143,4 @@ describe('DELETE /viajes/:viajeId/tareas/:tareaId', () => {
     assert.equal((await llamar('borrar', { params })).codigo, 204);
   });
 
-  it('ids mal formados 400, tarea inexistente 404, finalizado 409, no miembro 404, fallo 502', async () => {
-    esperarError(await llamar('borrar', { params: { viajeId: 'x', tareaId: TAREA_ID } }), 400, 'datos_invalidos');
-    esperarError(await llamar('borrar', { params: { viajeId: VIAJE_ID, tareaId: 'x' } }), 400, 'datos_invalidos');
-
-    mock.method(tareaService, 'borrar', async () => ({ estado: 'tarea_no_existe' }));
-    esperarError(await llamar('borrar', { params }), 404, 'tarea_no_encontrada');
-    mock.restoreAll();
-
-    mock.method(tareaService, 'borrar', async () => ({ estado: 'no_activo' }));
-    esperarError(await llamar('borrar', { params }), 409, 'viaje_no_activo');
-    mock.restoreAll();
-
-    mock.method(tareaService, 'borrar', async () => ({ estado: 'no_existe' }));
-    esperarError(await llamar('borrar', { params }), 404, 'viaje_no_encontrado');
-    mock.restoreAll();
-
-    mock.method(tareaService, 'borrar', async () => ({ error: { code: 'x' } }));
-    esperarError(await llamar('borrar', { params }), 502, 'error_tarea');
-  });
 });

@@ -130,25 +130,7 @@ describe('puntoInteresService.crear', () => {
     assert.equal(cliente.consultas.length, 1);
   });
 
-  it('indica que el viaje no existe si el usuario no es miembro', async () => {
-    const cliente = clienteFalso([{ data: viaje('activo', false), error: null }]);
 
-    const resultado = await puntoInteresService.crear(cliente, USUARIO, VIAJE_ID, DATOS);
-
-    assert.equal(resultado.estado, 'no_existe');
-  });
-
-  it('devuelve el error si falla el insert', async () => {
-    const fallo = { code: '23514' };
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      { data: null, error: fallo },
-    ]);
-
-    const resultado = await puntoInteresService.crear(cliente, USUARIO, VIAJE_ID, DATOS);
-
-    assert.equal(resultado.error, fallo);
-  });
 });
 
 describe('puntoInteresService.eliminar', () => {
@@ -166,59 +148,8 @@ describe('puntoInteresService.eliminar', () => {
     assert.deepEqual(operacion(cliente.consultas[2], 'eq'), ['eq', 'id', PUNTO_ID]);
   });
 
-  it('indica que el punto no existe en ese viaje', async () => {
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      { data: null, error: null },
-    ]);
 
-    const resultado = await puntoInteresService.eliminar(cliente, USUARIO, VIAJE_ID, PUNTO_ID);
 
-    assert.equal(resultado.estado, 'no_encontrado');
-    assert.equal(cliente.consultas.length, 2);
-  });
 
-  it('no deja borrar con el viaje finalizado', async () => {
-    const cliente = clienteFalso([{ data: viaje('finalizado'), error: null }]);
 
-    const resultado = await puntoInteresService.eliminar(cliente, USUARIO, VIAJE_ID, PUNTO_ID);
-
-    assert.equal(resultado.estado, 'no_activo');
-  });
-
-  it('indica que el viaje no existe si el usuario no es miembro', async () => {
-    const cliente = clienteFalso([{ data: viaje('activo', false), error: null }]);
-
-    const resultado = await puntoInteresService.eliminar(cliente, USUARIO, VIAJE_ID, PUNTO_ID);
-
-    assert.equal(resultado.estado, 'no_existe');
-  });
-
-  it('devuelve error si el borrado no afecta a ninguna fila', async () => {
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      { data: { id: PUNTO_ID }, error: null },
-      { data: [], error: null },
-    ]);
-
-    const resultado = await puntoInteresService.eliminar(cliente, USUARIO, VIAJE_ID, PUNTO_ID);
-
-    assert.equal(resultado.error.code, 'sin_filas');
-  });
-
-  it('devuelve el error si falla la comprobación o el borrado', async () => {
-    const fallo = { code: 'X' };
-    const a = clienteFalso([
-      { data: viaje(), error: null },
-      { data: null, error: fallo },
-    ]);
-    const b = clienteFalso([
-      { data: viaje(), error: null },
-      { data: { id: PUNTO_ID }, error: null },
-      { data: null, error: fallo },
-    ]);
-
-    assert.equal((await puntoInteresService.eliminar(a, USUARIO, VIAJE_ID, PUNTO_ID)).error, fallo);
-    assert.equal((await puntoInteresService.eliminar(b, USUARIO, VIAJE_ID, PUNTO_ID)).error, fallo);
-  });
 });

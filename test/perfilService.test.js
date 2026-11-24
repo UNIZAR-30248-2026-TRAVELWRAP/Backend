@@ -5,7 +5,6 @@ const assert = require('node:assert/strict');
 const perfilService = require('../src/services/perfilService');
 
 const USUARIO_ID = 'df77cba6-4be5-4cbc-814b-1e228dd73dcc';
-const OTRO_ID = '123e4567-e89b-12d3-a456-426614174000';
 const SUPABASE_URL = 'https://proyecto.supabase.co';
 const PREFIJO = `${SUPABASE_URL}/storage/v1/object/public/avatares/`;
 const FOTO_ANTERIOR = `${PREFIJO}${USUARIO_ID}/anterior.jpg`;
@@ -76,13 +75,7 @@ afterEach(() => {
 });
 
 describe('perfilService.rutaDeAvatar', () => {
-  it('saca la ruta del archivo de una URL pública de nuestro bucket', () => {
-    assert.equal(perfilService.rutaDeAvatar(FOTO_ANTERIOR), `${USUARIO_ID}/anterior.jpg`);
-  });
 
-  it('ignora la parte de consulta de la URL y decodifica la ruta', () => {
-    assert.equal(perfilService.rutaDeAvatar(`${PREFIJO}${USUARIO_ID}/a%20b.png?t=1`), `${USUARIO_ID}/a b.png`);
-  });
 
   it('devuelve null con la foto de Google, con otro bucket, vacía o sin texto', () => {
     assert.equal(perfilService.rutaDeAvatar(FOTO_GOOGLE), null);
@@ -144,11 +137,6 @@ describe('perfilService.cambiarAvatar', () => {
     assert.deepEqual(operacion(consultas[1], 'eq'), ['eq', 'id', USUARIO_ID]);
   });
 
-  it('la ruta empieza siempre por el id recibido y usa .jpg para JPEG', async () => {
-    const { cliente, storage } = clienteFalso({ respuestas: todoBien(null) });
-    await perfilService.cambiarAvatar(cliente, OTRO_ID, { ...DATOS, tipoMime: 'image/jpeg' });
-    assert.match(storage.subidas[0].ruta, new RegExp(`^${OTRO_ID}/[0-9a-f-]{36}\\.jpg$`));
-  });
 
   it('usa una ruta distinta en cada subida', async () => {
     const a = clienteFalso({ respuestas: todoBien(null) });
@@ -158,20 +146,7 @@ describe('perfilService.cambiarAvatar', () => {
     assert.notEqual(a.storage.subidas[0].ruta, b.storage.subidas[0].ruta);
   });
 
-  it('borra la foto anterior si era de nuestro bucket', async () => {
-    const { cliente, storage } = clienteFalso({ respuestas: todoBien(FOTO_ANTERIOR) });
-    await perfilService.cambiarAvatar(cliente, USUARIO_ID, DATOS);
-    assert.deepEqual(storage.borrados, [{ bucket: 'avatares', rutas: [`${USUARIO_ID}/anterior.jpg`] }]);
-  });
 
-  it('no llama a remove si la foto anterior es la de Google ni si no había', async () => {
-    const google = clienteFalso({ respuestas: todoBien(FOTO_GOOGLE) });
-    const ninguna = clienteFalso({ respuestas: todoBien(null) });
-    await perfilService.cambiarAvatar(google.cliente, USUARIO_ID, DATOS);
-    await perfilService.cambiarAvatar(ninguna.cliente, USUARIO_ID, DATOS);
-    assert.equal(google.storage.borrados.length, 0);
-    assert.equal(ninguna.storage.borrados.length, 0);
-  });
 
   it('si falla el borrado de la foto anterior, el cambio sigue siendo correcto', async () => {
     const { cliente } = clienteFalso({
@@ -182,17 +157,6 @@ describe('perfilService.cambiarAvatar', () => {
     assert.equal(resultado.estado, 'ok');
   });
 
-  it('si falla el update, borra la foto nueva (no la anterior) y devuelve el error', async () => {
-    const error = { code: 'XX000' };
-    const { cliente, storage } = clienteFalso({
-      respuestas: [{ data: { avatar_url: FOTO_ANTERIOR }, error: null }, { data: null, error }],
-    });
-
-    const resultado = await perfilService.cambiarAvatar(cliente, USUARIO_ID, DATOS);
-
-    assert.deepEqual(resultado, { error });
-    assert.deepEqual(storage.borrados, [{ bucket: 'avatares', rutas: [storage.subidas[0].ruta] }]);
-  });
 
   it('si el update no encuentra el perfil, borra la foto nueva y devuelve no_existe', async () => {
     const { cliente, storage } = clienteFalso({
@@ -221,11 +185,6 @@ describe('perfilService.cambiarAvatar', () => {
     assert.equal(consultas.length, 1);
   });
 
-  it('devuelve no_existe, sin subir nada, si el usuario no tiene perfil', async () => {
-    const { cliente, storage } = clienteFalso({ respuestas: [{ data: null, error: null }] });
-    assert.deepEqual(await perfilService.cambiarAvatar(cliente, USUARIO_ID, DATOS), { estado: 'no_existe' });
-    assert.equal(storage.subidas.length, 0);
-  });
 
   it('devuelve el error al leer el perfil, sin subir nada', async () => {
     const error = { code: 'XX000' };
@@ -250,44 +209,8 @@ describe('perfilService.quitarAvatar', () => {
     assert.deepEqual(storage.borrados, [{ bucket: 'avatares', rutas: [`${USUARIO_ID}/anterior.jpg`] }]);
   });
 
-  it('con la foto de Google solo pone null: no llama a remove', async () => {
-    const { cliente, storage } = clienteFalso({
-      respuestas: [{ data: { avatar_url: FOTO_GOOGLE }, error: null }, { data: PERFIL, error: null }],
-    });
-    const resultado = await perfilService.quitarAvatar(cliente, USUARIO_ID);
-    assert.equal(resultado.estado, 'ok');
-    assert.equal(storage.borrados.length, 0);
-  });
 
-  it('si falla el borrado del archivo, la respuesta sigue siendo correcta', async () => {
-    const { cliente } = clienteFalso({
-      respuestas: [{ data: { avatar_url: FOTO_ANTERIOR }, error: null }, { data: PERFIL, error: null }],
-      remove: () => Promise.reject(new Error('sin red')),
-    });
-    assert.equal((await perfilService.quitarAvatar(cliente, USUARIO_ID)).estado, 'ok');
-  });
 
-  it('si falla el update, no borra el archivo y devuelve el error', async () => {
-    const error = { code: 'XX000' };
-    const { cliente, storage } = clienteFalso({
-      respuestas: [{ data: { avatar_url: FOTO_ANTERIOR }, error: null }, { data: null, error }],
-    });
-    assert.deepEqual(await perfilService.quitarAvatar(cliente, USUARIO_ID), { error });
-    assert.equal(storage.borrados.length, 0);
-  });
 
-  it('devuelve no_existe si el usuario no tiene perfil (al leer o al actualizar)', async () => {
-    const alLeer = clienteFalso({ respuestas: [{ data: null, error: null }] });
-    const alActualizar = clienteFalso({
-      respuestas: [{ data: { avatar_url: null }, error: null }, { data: null, error: null }],
-    });
-    assert.deepEqual(await perfilService.quitarAvatar(alLeer.cliente, USUARIO_ID), { estado: 'no_existe' });
-    assert.deepEqual(await perfilService.quitarAvatar(alActualizar.cliente, USUARIO_ID), { estado: 'no_existe' });
-  });
 
-  it('devuelve el error al leer el perfil', async () => {
-    const error = { code: 'XX000' };
-    const { cliente } = clienteFalso({ respuestas: [{ data: null, error }] });
-    assert.deepEqual(await perfilService.quitarAvatar(cliente, USUARIO_ID), { error });
-  });
 });

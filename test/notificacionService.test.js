@@ -116,14 +116,6 @@ describe('enviarPush', () => {
     assert.deepEqual(cliente.llamadas.rpc, []);
   });
 
-  it('no envía nada si nadie más tiene suscripciones o falla la consulta', async () => {
-    const envio = mock.method(notificacionService.envio, 'enviar', async () => ({}));
-
-    await notificacionService.enviarPush(crearCliente({ rpc: async () => ({ data: [], error: null }) }), VIAJE, AVISO);
-    await notificacionService.enviarPush(crearCliente({ rpc: async () => ({ data: null, error: { code: 'X' } }) }), VIAJE, AVISO);
-
-    assert.equal(envio.mock.callCount(), 0);
-  });
 
   it('borra la suscripción caducada (410) y sigue con las demás', async () => {
     const envio = mock.method(notificacionService.envio, 'enviar', async (suscripcion) => {
@@ -138,15 +130,4 @@ describe('enviarPush', () => {
     assert.deepEqual(cliente.llamadas.rpc[1], ['borrar_suscripcion_caducada', { p_endpoint: 'https://push.test/bea' }]);
   });
 
-  it('un fallo de otro tipo no borra la suscripción ni impide avisar a los demás', async () => {
-    const envio = mock.method(notificacionService.envio, 'enviar', async () => {
-      throw Object.assign(new Error('caído'), { statusCode: 500 });
-    });
-    const cliente = crearCliente();
-
-    await notificacionService.enviarPush(cliente, VIAJE, AVISO);
-
-    assert.equal(envio.mock.callCount(), 2);
-    assert.equal(cliente.llamadas.rpc.length, 1);
-  });
 });

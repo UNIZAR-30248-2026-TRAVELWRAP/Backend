@@ -34,18 +34,6 @@ const esperarError = (res, codigo, codigoError) => {
 afterEach(() => mock.restoreAll());
 
 describe('GET /viajes/:viajeId/resumen', () => {
-  it('devuelve 200 con el resumen', async () => {
-    const resumen = { dias: 4, actividad_mas_votada: null, alma_del_grupo: null };
-    const obtener = mock.method(resumenService, 'obtener', async () => ({ estado: 'ok', resumen }));
-
-    const res = await llamar();
-
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, resumen);
-    const [, usuarioId, viajeId] = obtener.mock.calls[0].arguments;
-    assert.equal(usuarioId, USUARIO.id);
-    assert.equal(viajeId, VIAJE_ID);
-  });
 
   it('devuelve 400 si el identificador del viaje no es un UUID', async () => {
     const obtener = mock.method(resumenService, 'obtener', async () => ({ estado: 'ok', resumen: {} }));

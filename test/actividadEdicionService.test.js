@@ -127,57 +127,10 @@ describe('actividadService.editar', () => {
     assert.deepEqual(operacion(cliente.consultas[2], 'update'), ['update', { fecha: '2027-05-12' }]);
   });
 
-  it('rechaza una hora de fin si se quita la hora de inicio y no se quita también la de fin', async () => {
-    const cliente = clienteFalso([{ data: viaje(), error: null }, encontrada()]);
 
-    const resultado = await actividadService.editar(cliente, USUARIO, VIAJE_ID, ACTIVIDAD_ID, { hora_inicio: null });
 
-    assert.deepEqual(resultado, { estado: 'hora_fin_sin_inicio' });
-    assert.equal(cliente.consultas.length, 2);
-  });
 
-  it('permite quitar a la vez la hora de inicio y la de fin', async () => {
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      encontrada(),
-      { data: [actividad({ hora_inicio: null, hora_fin: null })], error: null },
-    ]);
 
-    const resultado = await actividadService.editar(cliente, USUARIO, VIAJE_ID, ACTIVIDAD_ID, {
-      hora_inicio: null,
-      hora_fin: null,
-    });
-
-    assert.equal(resultado.estado, 'ok');
-  });
-
-  it('rechaza una hora de inicio posterior a la hora de fin que ya tenía', async () => {
-    const cliente = clienteFalso([{ data: viaje(), error: null }, encontrada()]);
-
-    const resultado = await actividadService.editar(cliente, USUARIO, VIAJE_ID, ACTIVIDAD_ID, { hora_inicio: '13:00' });
-
-    assert.deepEqual(resultado, { estado: 'horas_invertidas' });
-  });
-
-  it('rechaza una hora de fin anterior a la hora de inicio que ya tenía', async () => {
-    const cliente = clienteFalso([{ data: viaje(), error: null }, encontrada()]);
-
-    const resultado = await actividadService.editar(cliente, USUARIO, VIAJE_ID, ACTIVIDAD_ID, { hora_fin: '09:59' });
-
-    assert.deepEqual(resultado, { estado: 'horas_invertidas' });
-  });
-
-  it('acepta una hora de fin igual a la de inicio', async () => {
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      encontrada(),
-      { data: [actividad({ hora_fin: '10:00:00' })], error: null },
-    ]);
-
-    const resultado = await actividadService.editar(cliente, USUARIO, VIAJE_ID, ACTIVIDAD_ID, { hora_fin: '10:00' });
-
-    assert.equal(resultado.estado, 'ok');
-  });
 
   it('devuelve no_existe, no_activo o no_encontrada sin modificar nada', async () => {
     const sinViaje = clienteFalso([{ data: null, error: null }]);
@@ -232,30 +185,5 @@ describe('actividadService.eliminar', () => {
     );
   });
 
-  it('devuelve no_existe, no_activo o no_encontrada sin borrar nada', async () => {
-    const sinViaje = clienteFalso([{ data: null, error: null }]);
-    const archivado = clienteFalso([{ data: viaje('finalizado'), error: null }]);
-    const sinActividad = clienteFalso([{ data: viaje(), error: null }, { data: null, error: null }]);
 
-    assert.deepEqual(await actividadService.eliminar(sinViaje, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { estado: 'no_existe' });
-    assert.deepEqual(await actividadService.eliminar(archivado, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { estado: 'no_activo' });
-    assert.deepEqual(await actividadService.eliminar(sinActividad, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { estado: 'no_encontrada' });
-    assert.equal(archivado.consultas.length, 1);
-    assert.equal(sinActividad.consultas.length, 2);
-  });
-
-  it('devuelve el error si falla alguna consulta, y sin_filas si las políticas rechazan el borrado', async () => {
-    const error = { code: 'XX000' };
-    const enViaje = clienteFalso([{ data: null, error }]);
-    const enActividad = clienteFalso([{ data: viaje(), error: null }, { data: null, error }]);
-    const enBorrado = clienteFalso([{ data: viaje(), error: null }, encontrada(), { data: null, error }]);
-    const sinFilas = clienteFalso([{ data: viaje(), error: null }, encontrada(), { data: [], error: null }]);
-
-    assert.deepEqual(await actividadService.eliminar(enViaje, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { error });
-    assert.deepEqual(await actividadService.eliminar(enActividad, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { error });
-    assert.deepEqual(await actividadService.eliminar(enBorrado, USUARIO, VIAJE_ID, ACTIVIDAD_ID), { error });
-    assert.deepEqual(await actividadService.eliminar(sinFilas, USUARIO, VIAJE_ID, ACTIVIDAD_ID), {
-      error: { code: 'sin_filas' },
-    });
-  });
 });

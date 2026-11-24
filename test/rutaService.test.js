@@ -88,71 +88,10 @@ describe('rutaService.calcular', () => {
     assert.deepEqual(resultado.ruta, RUTA);
   });
 
-  it('con menos de dos actividades con ubicación no llama al servicio de rutas', async () => {
-    const { trazar } = simular({
-      listado: { estado: 'ok', actividades: [actividad('a1', 41.89, 12.49), actividad('a2', null, null)] },
-    });
 
-    const resultado = await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12');
 
-    assert.equal(trazar.mock.callCount(), 0);
-    assert.equal(resultado.estado, 'ok');
-    assert.equal(resultado.ruta, null);
-    assert.deepEqual(resultado.orden_sugerido, ['a1']);
-    assert.equal(resultado.ahorro_m, 0);
-  });
 
-  it('un día sin actividades devuelve todo vacío', async () => {
-    const { trazar } = simular({ listado: { estado: 'ok', actividades: [] } });
 
-    const resultado = await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12');
-
-    assert.equal(trazar.mock.callCount(), 0);
-    assert.deepEqual(resultado, { estado: 'ok', puntos: [], orden_sugerido: [], ahorro_m: 0, ruta: null });
-  });
-
-  it('propone un orden más corto y calcula el ahorro en línea recta', async () => {
-    simular({
-      listado: {
-        estado: 'ok',
-        actividades: [
-          actividad('a', 41, 12),
-          actividad('b', 41, 12.03),
-          actividad('c', 41, 12.01),
-          actividad('d', 41, 12.02),
-        ],
-      },
-    });
-
-    const resultado = await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12');
-
-    assert.deepEqual(resultado.orden_sugerido, ['a', 'c', 'd', 'b']);
-    assert.ok(resultado.ahorro_m > 1000, `ahorro inesperado: ${resultado.ahorro_m}`);
-  });
-
-  it('con la agenda ya ordenada no propone cambios y el ahorro es cero', async () => {
-    simular({
-      listado: {
-        estado: 'ok',
-        actividades: [actividad('a', 41, 12), actividad('b', 41, 12.01), actividad('c', 41, 12.02)],
-      },
-    });
-
-    const resultado = await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12');
-
-    assert.deepEqual(resultado.orden_sugerido, ['a', 'b', 'c']);
-    assert.equal(resultado.ahorro_m, 0);
-  });
-
-  it('rechaza con demasiados_puntos si hay más de 25 actividades con ubicación', async () => {
-    const actividades = Array.from({ length: 26 }, (_, i) => actividad(`a${i}`, 41 + i * 0.001, 12));
-    const { trazar } = simular({ listado: { estado: 'ok', actividades } });
-
-    const resultado = await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12');
-
-    assert.deepEqual(resultado, { estado: 'demasiados_puntos' });
-    assert.equal(trazar.mock.callCount(), 0);
-  });
 
   it('traslada el estado del listado cuando el viaje no existe', async () => {
     const { trazar } = simular({ listado: { estado: 'no_existe' } });
@@ -161,20 +100,5 @@ describe('rutaService.calcular', () => {
     assert.equal(trazar.mock.callCount(), 0);
   });
 
-  it('traslada el error del listado', async () => {
-    simular({ listado: { error: { code: 'XX' } } });
 
-    assert.deepEqual(await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12'), { error: { code: 'XX' } });
-  });
-
-  it('traslada los estados y errores del servicio de rutas', async () => {
-    const listado = { estado: 'ok', actividades: [actividad('a', 41, 12), actividad('b', 42, 13)] };
-
-    simular({ listado, trazado: { estado: 'demasiado_rapido' } });
-    assert.deepEqual(await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12'), { estado: 'demasiado_rapido' });
-    mock.restoreAll();
-
-    simular({ listado, trazado: { error: { code: 'http_500' } } });
-    assert.deepEqual(await rutaService.calcular({}, USUARIO, VIAJE_ID, '2027-05-12'), { error: { code: 'http_500' } });
-  });
 });

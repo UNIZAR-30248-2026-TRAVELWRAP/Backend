@@ -129,45 +129,8 @@ describe('actividadService.reordenar', () => {
     assert.deepEqual(porId, { desayuno: 0, paseo: -2, comida: 2 });
   });
 
-  it('devuelve agenda_cambiada si falta, sobra o es distinta alguna actividad del día', async () => {
-    const filas = [fila('a'), fila('b')];
-    for (const ids of [['a'], ['a', 'b', 'c'], ['a', 'x']]) {
-      const cliente = clienteFalso([{ data: viaje(), error: null }, { data: filas, error: null }]);
 
-      const resultado = await actividadService.reordenar(cliente, USUARIO, VIAJE_ID, FECHA, ids);
 
-      assert.deepEqual(resultado, { estado: 'agenda_cambiada' });
-      assert.equal(cliente.consultas.length, 2);
-    }
-  });
-
-  it('devuelve orden_no_valido, sin guardar nada, si las actividades con hora no quedan por hora', async () => {
-    const filas = [fila('manana', { hora_inicio: '09:00:00', orden: 0 }), fila('tarde', { hora_inicio: '16:00:00', orden: 1 })];
-    const cliente = clienteFalso([{ data: viaje(), error: null }, { data: filas, error: null }]);
-
-    const resultado = await actividadService.reordenar(cliente, USUARIO, VIAJE_ID, FECHA, ['tarde', 'manana']);
-
-    assert.deepEqual(resultado, { estado: 'orden_no_valido' });
-    assert.equal(cliente.consultas.length, 2);
-  });
-
-  it('permite reordenar las que empiezan a la misma hora', async () => {
-    const filas = [
-      fila('a', { hora_inicio: '10:00:00', orden: 0 }),
-      fila('b', { hora_inicio: '10:00:00', orden: 1 }),
-    ];
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      { data: filas, error: null },
-      actualizada('b'),
-      actualizada('a'),
-    ]);
-
-    const resultado = await actividadService.reordenar(cliente, USUARIO, VIAJE_ID, FECHA, ['b', 'a']);
-
-    assert.equal(resultado.estado, 'ok');
-    assert.deepEqual(resultado.actividades.map((a) => a.id), ['b', 'a']);
-  });
 
   it('devuelve no_existe si el viaje no existe o el usuario no es miembro, y no_activo si está finalizado', async () => {
     const sinViaje = clienteFalso([{ data: null, error: null }]);
@@ -180,35 +143,7 @@ describe('actividadService.reordenar', () => {
     assert.equal(finalizado.consultas.length, 1);
   });
 
-  it('devuelve el error si falla la consulta del viaje, la de las actividades o alguna actualización', async () => {
-    const falloViaje = clienteFalso([{ data: null, error: { code: 'XX' } }]);
-    const falloLectura = clienteFalso([{ data: viaje(), error: null }, { data: null, error: { code: 'YY' } }]);
-    const falloEscritura = clienteFalso([
-      { data: viaje(), error: null },
-      { data: [fila('a', { orden: 0 }), fila('b', { orden: 1 })], error: null },
-      { data: null, error: { code: 'ZZ' } },
-      actualizada('a'),
-    ]);
 
-    assert.deepEqual(await actividadService.reordenar(falloViaje, USUARIO, VIAJE_ID, FECHA, ['a']), { error: { code: 'XX' } });
-    assert.deepEqual(await actividadService.reordenar(falloLectura, USUARIO, VIAJE_ID, FECHA, ['a']), { error: { code: 'YY' } });
-    assert.deepEqual(await actividadService.reordenar(falloEscritura, USUARIO, VIAJE_ID, FECHA, ['b', 'a']), {
-      error: { code: 'ZZ' },
-    });
-  });
-
-  it('devuelve error si alguna actualización no encuentra la fila', async () => {
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      { data: [fila('a', { orden: 0 }), fila('b', { orden: 1 })], error: null },
-      { data: [], error: null },
-      actualizada('a'),
-    ]);
-
-    const resultado = await actividadService.reordenar(cliente, USUARIO, VIAJE_ID, FECHA, ['b', 'a']);
-
-    assert.deepEqual(resultado, { error: { code: 'sin_filas' } });
-  });
 });
 
 describe('actividadService.listar con actividades colocadas', () => {

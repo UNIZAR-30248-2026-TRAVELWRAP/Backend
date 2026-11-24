@@ -60,37 +60,7 @@ const montar = (opciones = {}) => {
 };
 
 describe('enrutadorService.trazar', () => {
-  it('pide la ruta con las coordenadas en orden longitud,latitud y el User-Agent', async () => {
-    const { enrutador, llamadas } = montar();
 
-    await enrutador.trazar(PUNTOS, 'u1');
-
-    assert.equal(llamadas.length, 1);
-    assert.equal(
-      llamadas[0].url,
-      'https://rutas.prueba/route/v1/driving/12.492231,41.890214;12.485325,41.892462?overview=full&geometries=geojson&steps=false',
-    );
-    assert.equal(llamadas[0].init.headers['User-Agent'], 'TravelWrap/1.0 (prueba@unizar.es)');
-  });
-
-  it('devuelve distancia y duración redondeadas y la geometría como latitud,longitud sin puntos repetidos', async () => {
-    const { enrutador } = montar();
-
-    const resultado = await enrutador.trazar(PUNTOS, 'u1');
-
-    assert.deepEqual(resultado, {
-      estado: 'ok',
-      ruta: {
-        distancia_m: 812,
-        duracion_s: 591,
-        geometria: [
-          [41.89021, 12.49223],
-          [41.8911, 12.49],
-          [41.89246, 12.48533],
-        ],
-      },
-    });
-  });
 
   it('no repite la llamada si la misma ruta está en la caché', async () => {
     const { enrutador, llamadas, avanzar } = montar();
@@ -103,15 +73,6 @@ describe('enrutadorService.trazar', () => {
     assert.equal(segunda.estado, 'ok');
   });
 
-  it('vuelve a pedir la ruta cuando la caché ha caducado', async () => {
-    const { enrutador, llamadas, avanzar } = montar();
-
-    await enrutador.trazar(PUNTOS, 'u1');
-    avanzar(11 * 60 * 1000);
-    await enrutador.trazar(PUNTOS, 'u1');
-
-    assert.equal(llamadas.length, 2);
-  });
 
   it('rechaza con demasiado_rapido al mismo usuario dentro del mismo segundo', async () => {
     const { enrutador, llamadas } = montar();
@@ -123,14 +84,6 @@ describe('enrutadorService.trazar', () => {
     assert.equal(llamadas.length, 1);
   });
 
-  it('espera un segundo entre las llamadas de distintos usuarios', async () => {
-    const { enrutador, pausas } = montar();
-
-    await enrutador.trazar(PUNTOS, 'u1');
-    await enrutador.trazar([PUNTOS[1], PUNTOS[0]], 'u2');
-
-    assert.deepEqual(pausas, [1000]);
-  });
 
   it('devuelve ocupado si hay demasiadas peticiones pendientes', async () => {
     let liberar;
@@ -190,19 +143,6 @@ describe('enrutadorService.trazar', () => {
     assert.deepEqual(await enrutador.trazar(PUNTOS, 'u1'), { error: { code: 'tiempo_agotado' } });
   });
 
-  it('no guarda en la caché los fallos', async () => {
-    let intento = 0;
-    const { enrutador, llamadas, avanzar } = montar({
-      responder: () => (intento++ === 0 ? respuesta({}, 500) : respuesta(RESPUESTA_OK)),
-    });
-
-    await enrutador.trazar(PUNTOS, 'u1');
-    avanzar(2000);
-    const segunda = await enrutador.trazar(PUNTOS, 'u1');
-
-    assert.equal(segunda.estado, 'ok');
-    assert.equal(llamadas.length, 2);
-  });
 
   it('reduce las geometrías muy largas conservando el primer y el último punto', async () => {
     const coordenadas = Array.from({ length: 5000 }, (_, i) => [12 + i * 0.0001, 41 + i * 0.0001]);

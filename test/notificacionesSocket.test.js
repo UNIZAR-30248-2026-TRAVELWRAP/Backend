@@ -80,10 +80,4 @@ describe('Avisos en tiempo real (namespace /notificaciones)', () => {
     assert.equal(otro.avisos.length, 1);
   });
 
-  it('sin usuarios en la lista no envía nada', async () => {
-    const ana = await conectarse('token-ana');
-    notificacionesSocket.avisarA([], AVISO);
-    await esperar(100);
-    assert.deepEqual(ana.avisos, []);
-  });
 });

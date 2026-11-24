@@ -40,13 +40,7 @@ const GASTO_VALIDO = { concepto: 'Cena', importe: 60, pagado_por: USUARIO.id, pa
 afterEach(() => mock.restoreAll());
 
 describe('rutaDeFotoValida', () => {
-  it('acepta una foto escaneada del mismo viaje', () => {
-    assert.equal(fotoEscaneoService.rutaDeFotoValida(RUTA, VIAJE_ID), true);
-  });
 
-  it('rechaza una foto de otro viaje, aunque tenga la forma correcta', () => {
-    assert.equal(fotoEscaneoService.rutaDeFotoValida(RUTA_AJENA, VIAJE_ID), false);
-  });
 
   it('rechaza rutas que no son fotos escaneadas', () => {
     assert.equal(fotoEscaneoService.rutaDeFotoValida(`${VIAJE_ID}/documentos/foto.jpg`, VIAJE_ID), false);

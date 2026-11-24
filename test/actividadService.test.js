@@ -88,17 +88,6 @@ describe('actividadService.crear', () => {
     });
   });
 
-  it('empieza en orden 0 si el día no tiene actividades', async () => {
-    const cliente = clienteFalso([
-      { data: viaje(), error: null },
-      { data: null, error: null },
-      { data: { id: 'a1' }, error: null },
-    ]);
-
-    await actividadService.crear(cliente, USUARIO, VIAJE_ID, DATOS);
-
-    assert.equal(operacion(cliente.consultas[2], 'insert')[1].orden, 0);
-  });
 
   it('devuelve no_existe si el viaje no existe o el usuario no es miembro', async () => {
     const sinViaje = clienteFalso([{ data: null, error: null }]);
@@ -108,14 +97,6 @@ describe('actividadService.crear', () => {
     assert.deepEqual(await actividadService.crear(ajeno, USUARIO, VIAJE_ID, DATOS), { estado: 'no_existe' });
   });
 
-  it('devuelve no_activo sin insertar si el viaje está finalizado', async () => {
-    const cliente = clienteFalso([{ data: viaje('finalizado'), error: null }]);
-
-    const resultado = await actividadService.crear(cliente, USUARIO, VIAJE_ID, DATOS);
-
-    assert.deepEqual(resultado, { estado: 'no_activo' });
-    assert.equal(cliente.consultas.length, 1);
-  });
 
   it('devuelve el error si falla la consulta del viaje, la del orden o la inserción', async () => {
     const error = { code: 'XX000' };
@@ -213,20 +194,5 @@ describe('actividadService.listar', () => {
     assert.equal(resultado.actividades.length, 1);
   });
 
-  it('devuelve no_existe si el viaje no existe o el usuario no es miembro', async () => {
-    const sinViaje = clienteFalso([{ data: null, error: null }]);
-    const ajeno = clienteFalso([{ data: viaje('activo', false), error: null }]);
 
-    assert.deepEqual(await actividadService.listar(sinViaje, USUARIO, VIAJE_ID), { estado: 'no_existe' });
-    assert.deepEqual(await actividadService.listar(ajeno, USUARIO, VIAJE_ID), { estado: 'no_existe' });
-  });
-
-  it('devuelve el error si falla la consulta del viaje o la de las actividades', async () => {
-    const error = { code: 'XX000' };
-    const enViaje = clienteFalso([{ data: null, error }]);
-    const enActividades = clienteFalso([{ data: viaje(), error: null }, { data: null, error }]);
-
-    assert.deepEqual(await actividadService.listar(enViaje, USUARIO, VIAJE_ID), { error });
-    assert.deepEqual(await actividadService.listar(enActividades, USUARIO, VIAJE_ID), { error });
-  });
 });

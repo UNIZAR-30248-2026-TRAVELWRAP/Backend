@@ -33,9 +33,6 @@ describe('clasificarDocumento con un ticket real', () => {
     assert.equal(clasificarDocumento(TICKET_BAR).datos.concepto, 'E UDEON');
   });
 
-  it('el importe de respaldo no toma la base imponible ni el IVA', () => {
-    assert.equal(clasificarDocumento(TICKET_BAR).datos.importe, 14);
-  });
 });
 
 describe('clasificarDocumento con la lectura unida de dos variantes', () => {

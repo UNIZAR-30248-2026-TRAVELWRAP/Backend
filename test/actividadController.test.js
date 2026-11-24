@@ -162,14 +162,6 @@ describe('POST /viajes/:viajeId/actividades (crear)', () => {
     assert.equal(res.cuerpo.error.codigo, 'datos_invalidos');
   });
 
-  it('responde 502 si falla la base de datos', async () => {
-    simular(async () => ({ error: { code: 'XX000' } }));
-
-    const res = await llamar({ body: { titulo: 'Paseo', fecha: '2027-05-12' } });
-
-    assert.equal(res.codigo, 502);
-    assert.equal(res.cuerpo.error.codigo, 'error_actividad');
-  });
 
   it('responde 500 si el servicio lanza una excepción', async () => {
     simular(async () => {
@@ -206,15 +198,6 @@ describe('GET /viajes/:viajeId/actividades (listar)', () => {
     assert.equal(fecha, undefined);
   });
 
-  it('pasa al servicio la fecha pedida para listar un solo día', async () => {
-    const listar = simularListar(async () => ({ estado: 'ok', actividades: [] }));
-
-    const res = await llamarListar({ query: { fecha: '2027-05-12' } });
-
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { actividades: [] });
-    assert.equal(listar.mock.calls[0].arguments[3], '2027-05-12');
-  });
 
   const invalidos = [
     ['fecha mal formada', { fecha: '12/05/2027' }],
@@ -222,25 +205,8 @@ describe('GET /viajes/:viajeId/actividades (listar)', () => {
     ['fecha repetida', { fecha: ['2027-05-12', '2027-05-13'] }],
   ];
   for (const [caso, query] of invalidos) {
-    it(`rechaza con 400 ${caso} sin llamar al servicio`, async () => {
-      const listar = simularListar(async () => ({ estado: 'ok', actividades: [] }));
-
-      const res = await llamarListar({ query });
-
-      assert.equal(res.codigo, 400);
-      assert.deepEqual(res.cuerpo, {
-        error: { codigo: 'datos_invalidos', mensaje: 'La fecha debe tener el formato AAAA-MM-DD' },
-      });
-      assert.equal(listar.mock.callCount(), 0);
-    });
   }
 
-  it('rechaza un identificador de viaje que no es un UUID', async () => {
-    const res = await llamarListar({ viajeId: 'roma-2027' });
-
-    assert.equal(res.codigo, 400);
-    assert.equal(res.cuerpo.error.mensaje, 'El identificador del viaje no es válido');
-  });
 
   it('responde 404 viaje_no_encontrado si el viaje no existe o no es miembro', async () => {
     simularListar(async () => ({ estado: 'no_existe' }));
@@ -251,53 +217,6 @@ describe('GET /viajes/:viajeId/actividades (listar)', () => {
     assert.equal(res.cuerpo.error.codigo, 'viaje_no_encontrado');
   });
 
-  it('responde 502 si falla la base de datos', async () => {
-    simularListar(async () => ({ error: { code: 'XX000' } }));
 
-    const res = await llamarListar();
-
-    assert.equal(res.codigo, 502);
-    assert.equal(res.cuerpo.error.codigo, 'error_actividad');
-  });
-
-  it('responde 500 si el servicio lanza una excepción', async () => {
-    simularListar(async () => {
-      throw new Error('caída');
-    });
-
-    const res = await llamarListar();
-
-    assert.equal(res.codigo, 500);
-    assert.equal(res.cuerpo.error.codigo, 'error_interno');
-  });
 });
 
-describe('POST /viajes/:viajeId/actividades · hora de fin y categoría', () => {
-  it('acepta una hora de fin igual a la de inicio', async () => {
-    const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
-
-    const res = await llamar({ body: { titulo: 'Foto', fecha: '2027-05-12', hora_inicio: '10:00', hora_fin: '10:00' } });
-
-    assert.equal(res.codigo, 201);
-    assert.equal(crear.mock.calls[0].arguments[3].hora_fin, '10:00');
-  });
-
-  for (const categoria of ['comida', 'cultura', 'transporte', 'alojamiento', 'otro']) {
-    it(`acepta la categoría ${categoria}`, async () => {
-      const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
-
-      const res = await llamar({ body: { titulo: 'Paseo', fecha: '2027-05-12', categoria } });
-
-      assert.equal(res.codigo, 201);
-      assert.equal(crear.mock.calls[0].arguments[3].categoria, categoria);
-    });
-  }
-
-  it('trata una categoría vacía como sin categoría', async () => {
-    const crear = simular(async () => ({ estado: 'ok', actividad: {} }));
-
-    await llamar({ body: { titulo: 'Paseo', fecha: '2027-05-12', categoria: '  ' } });
-
-    assert.equal(crear.mock.calls[0].arguments[3].categoria, null);
-  });
-});

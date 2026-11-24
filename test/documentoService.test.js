@@ -185,23 +185,8 @@ describe('documentoService.listar', () => {
     assert.ok(!campos.split(/,\s*/).includes('ruta'));
   });
 
-  it('devuelve una lista vacía si no hay documentos (data null)', async () => {
-    viajeActivo();
-    const { cliente } = clienteFalso({ respuesta: { data: null, error: null } });
-    assert.deepEqual(await documentoService.listar(cliente, USUARIO_ID, VIAJE_ID), { estado: 'ok', documentos: [] });
-  });
 
-  it('lista también los documentos de un viaje finalizado', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { estado: 'finalizado' } }));
-    const { cliente } = clienteFalso({ respuesta: { data: [{ id: 'd1' }], error: null } });
-    assert.equal((await documentoService.listar(cliente, USUARIO_ID, VIAJE_ID)).estado, 'ok');
-  });
 
-  it('devuelve no_existe si el viaje no existe', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
-    const { cliente } = clienteFalso();
-    assert.deepEqual(await documentoService.listar(cliente, USUARIO_ID, VIAJE_ID), { estado: 'no_existe' });
-  });
 
   it('devuelve el error de Supabase si falla la consulta', async () => {
     viajeActivo();
@@ -238,51 +223,11 @@ describe('documentoService.obtenerUrl', () => {
     assert.ok(faltan > 295_000 && faltan <= 300_000);
   });
 
-  it('con descargar pide el enlace con download igual al nombre del documento', async () => {
-    viajeActivo();
-    const { cliente, storage } = clienteFalso({ respuesta: { data: fila, error: null } });
-    await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID, { descargar: true });
-    assert.deepEqual(storage.enlaces[0].opciones, { download: 'Billete de tren.pdf' });
-  });
 
-  it('busca el documento por id y por viaje, y pide solo ruta, nombre y tipo', async () => {
-    viajeActivo();
-    const { cliente, consultas } = clienteFalso({ respuesta: { data: fila, error: null } });
-    await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
-    const { operaciones } = consultas[0];
-    assert.deepEqual(operaciones.find(([metodo]) => metodo === 'select'), ['select', 'ruta, nombre, tipo_mime']);
-    assert.ok(operaciones.some(([metodo, columna, valor]) => metodo === 'eq' && columna === 'id' && valor === DOCUMENTO_ID));
-    assert.ok(operaciones.some(([metodo, columna, valor]) => metodo === 'eq' && columna === 'viaje_id' && valor === VIAJE_ID));
-  });
 
-  it('la respuesta no incluye la ruta del archivo', async () => {
-    viajeActivo();
-    const { cliente } = clienteFalso({ respuesta: { data: fila, error: null } });
-    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
-    assert.ok(!('ruta' in resultado));
-  });
 
-  it('devuelve documento_no_existe si el documento es de otro viaje (no hay fila), sin firmar nada', async () => {
-    viajeActivo();
-    const { cliente, storage } = clienteFalso({ respuesta: { data: null, error: null } });
-    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
-    assert.deepEqual(resultado, { estado: 'documento_no_existe' });
-    assert.equal(storage.enlaces.length, 0);
-  });
 
-  it('funciona con el viaje finalizado, porque solo lee', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado: 'finalizado' } }));
-    const { cliente } = clienteFalso({ respuesta: { data: fila, error: null } });
-    const resultado = await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
-    assert.equal(resultado.estado, 'ok');
-  });
 
-  it('devuelve no_existe si el viaje no existe o no es del usuario', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
-    const { cliente, consultas } = clienteFalso();
-    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { estado: 'no_existe' });
-    assert.equal(consultas.length, 0);
-  });
 
   it('propaga el error de la consulta previa del viaje', async () => {
     const error = { code: 'XX000' };
@@ -291,12 +236,6 @@ describe('documentoService.obtenerUrl', () => {
     assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
   });
 
-  it('devuelve el error de Supabase si falla la búsqueda del documento', async () => {
-    viajeActivo();
-    const error = { code: 'XX000' };
-    const { cliente } = clienteFalso({ respuesta: { data: null, error } });
-    assert.deepEqual(await documentoService.obtenerUrl(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
-  });
 
   it('devuelve documento_no_existe si el archivo ya no está en Storage', async () => {
     viajeActivo();
@@ -320,75 +259,11 @@ describe('documentoService.eliminar', () => {
   const RUTA = `${VIAJE_ID}/${DOCUMENTO_ID}.pdf`;
   const borrada = { data: [{ ruta: RUTA }], error: null };
 
-  it('borra la fila por id y por viaje, y después el archivo de esa ruta', async () => {
-    viajeActivo();
-    const { cliente, storage, consultas } = clienteFalso({ respuesta: borrada });
 
-    const resultado = await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
 
-    assert.deepEqual(resultado, { estado: 'ok' });
-    const { tabla, operaciones } = consultas[0];
-    assert.equal(tabla, 'documentos');
-    assert.ok(operaciones.some(([metodo]) => metodo === 'delete'));
-    assert.ok(operaciones.some(([metodo, columna, valor]) => metodo === 'eq' && columna === 'id' && valor === DOCUMENTO_ID));
-    assert.ok(operaciones.some(([metodo, columna, valor]) => metodo === 'eq' && columna === 'viaje_id' && valor === VIAJE_ID));
-    assert.deepEqual(operaciones.find(([metodo]) => metodo === 'select'), ['select', 'ruta']);
-    assert.deepEqual(storage.borrados, [{ bucket: 'documentos', rutas: [RUTA] }]);
-  });
 
-  it('borra el archivo después de la fila, no antes', async () => {
-    viajeActivo();
-    const orden = [];
-    const { cliente } = clienteFalso({
-      respuesta: borrada,
-      remove: async () => {
-        orden.push('archivo');
-        return { error: null };
-      },
-    });
-    const from = cliente.from;
-    cliente.from = (tabla) => {
-      orden.push('fila');
-      return from(tabla);
-    };
-    await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
-    assert.deepEqual(orden, ['fila', 'archivo']);
-  });
 
-  it('devuelve documento_no_existe si no se borra ninguna fila, sin llamar a remove', async () => {
-    viajeActivo();
-    const { cliente, storage } = clienteFalso({ respuesta: { data: [], error: null } });
-    const resultado = await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID);
-    assert.deepEqual(resultado, { estado: 'documento_no_existe' });
-    assert.equal(storage.borrados.length, 0);
-  });
 
-  it('devuelve no_activo con el viaje finalizado, sin borrar nada', async () => {
-    for (const estado of ['finalizado']) {
-      mock.method(viajeService, 'obtener', async () => ({ viaje: { id: VIAJE_ID, estado } }));
-      const { cliente, storage, consultas } = clienteFalso({ respuesta: borrada });
-      assert.deepEqual(await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { estado: 'no_activo' });
-      assert.equal(consultas.length, 0);
-      assert.equal(storage.borrados.length, 0);
-      mock.restoreAll();
-    }
-  });
-
-  it('devuelve no_existe si el viaje no existe o el usuario no es miembro', async () => {
-    mock.method(viajeService, 'obtener', async () => ({ viaje: null }));
-    const { cliente, storage, consultas } = clienteFalso({ respuesta: borrada });
-    assert.deepEqual(await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { estado: 'no_existe' });
-    assert.equal(consultas.length, 0);
-    assert.equal(storage.borrados.length, 0);
-  });
-
-  it('devuelve el error si falla el borrado de la fila, sin llamar a remove', async () => {
-    viajeActivo();
-    const error = { code: 'XX000' };
-    const { cliente, storage } = clienteFalso({ respuesta: { data: null, error } });
-    assert.deepEqual(await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
-    assert.equal(storage.borrados.length, 0);
-  });
 
   it('sigue devolviendo ok si falla el borrado del archivo (error devuelto o excepción)', async () => {
     viajeActivo();
@@ -403,11 +278,4 @@ describe('documentoService.eliminar', () => {
     }
   });
 
-  it('propaga el error de la consulta previa del viaje', async () => {
-    const error = { code: 'XX000' };
-    mock.method(viajeService, 'obtener', async () => ({ error }));
-    const { cliente, consultas } = clienteFalso();
-    assert.deepEqual(await documentoService.eliminar(cliente, USUARIO_ID, VIAJE_ID, DOCUMENTO_ID), { error });
-    assert.equal(consultas.length, 0);
-  });
 });

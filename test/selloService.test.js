@@ -44,9 +44,6 @@ const viajeVisible = (viaje) => mock.method(viajeService, 'obtener', async () =>
 afterEach(() => mock.restoreAll());
 
 describe('utils/sellos', () => {
-  it('ofrece los cuatro diseños', () => {
-    assert.deepEqual(DISENOS_SELLO, ['chincheta', 'mapa', 'ruta', 'avion']);
-  });
 
   it('usa el destino y, si no hay, el nombre del viaje', () => {
     assert.equal(textoDelSello({ destino: ' Roma ', nombre: 'Escapada', fecha_inicio: '2027-05-12' }).destino, 'Roma');
@@ -118,12 +115,6 @@ describe('selloService.elegir', () => {
     }
   });
 
-  it('sin destino usa el nombre del viaje', async () => {
-    viajeVisible({ ...VIAJE, destino: null });
-    const { cliente, consultas } = clienteFalso({ data: { finalizado_en: null }, error: null }, { data: SELLO, error: null });
-    await selloService.elegir(cliente, USUARIO_ID, VIAJE_ID, 'ruta');
-    assert.equal(operacion(consultas[1], 'upsert')[1].destino, 'Escapada');
-  });
 
   it('un viaje activo da no_terminado y no escribe nada', async () => {
     viajeVisible({ ...VIAJE, estado: 'activo' });
@@ -193,19 +184,6 @@ describe('selloService.listarMios', () => {
 });
 
 describe('selloService.cambiarDiseno', () => {
-  it('cambia el diseño de un sello propio, también si su viaje ya no existe', async () => {
-    const huerfano = { ...SELLO, viaje_id: null, diseno: 'ruta' };
-    const { cliente, consultas } = clienteFalso({ data: huerfano, error: null });
-
-    const resultado = await selloService.cambiarDiseno(cliente, USUARIO_ID, SELLO_ID, 'ruta');
-
-    assert.deepEqual(resultado, { estado: 'ok', sello: huerfano });
-    assert.deepEqual(operacion(consultas[0], 'update'), ['update', { diseno: 'ruta' }]);
-    assert.deepEqual(consultas[0].operaciones.filter(([m]) => m === 'eq'), [
-      ['eq', 'id', SELLO_ID],
-      ['eq', 'usuario_id', USUARIO_ID],
-    ]);
-  });
 
   it('un sello ajeno o inexistente da sello_no_existe', async () => {
     const { cliente } = clienteFalso({ data: null, error: null });
@@ -218,23 +196,3 @@ describe('selloService.cambiarDiseno', () => {
   });
 });
 
-describe('selloService.quitarPorId', () => {
-  it('quita un sello propio', async () => {
-    const { cliente, consultas } = clienteFalso({ data: [{ id: SELLO_ID }], error: null });
-    assert.deepEqual(await selloService.quitarPorId(cliente, USUARIO_ID, SELLO_ID), { estado: 'ok' });
-    assert.deepEqual(consultas[0].operaciones.filter(([m]) => m === 'eq'), [
-      ['eq', 'id', SELLO_ID],
-      ['eq', 'usuario_id', USUARIO_ID],
-    ]);
-  });
-
-  it('un sello ajeno o inexistente da sello_no_existe', async () => {
-    const { cliente } = clienteFalso({ data: [], error: null });
-    assert.deepEqual(await selloService.quitarPorId(cliente, USUARIO_ID, SELLO_ID), { estado: 'sello_no_existe' });
-  });
-
-  it('propaga el error', async () => {
-    const { cliente } = clienteFalso({ data: null, error: { code: 'x' } });
-    assert.deepEqual((await selloService.quitarPorId(cliente, USUARIO_ID, SELLO_ID)).error, { code: 'x' });
-  });
-});

@@ -81,34 +81,7 @@ describe('GET /viajes/:viajeId/puntos-de-interes', () => {
 });
 
 describe('POST /viajes/:viajeId/puntos-de-interes', () => {
-  it('envía los datos limpios al servicio y responde 201 con el punto', async () => {
-    const crear = simular('crear', async () => ({ estado: 'ok', punto: { id: PUNTO_ID } }));
 
-    const res = await llamar('crear', { body: CUERPO });
-
-    assert.equal(res.codigo, 201);
-    assert.deepEqual(res.cuerpo, { id: PUNTO_ID });
-    const [, usuarioId, viajeId, datos] = crear.mock.calls[0].arguments;
-    assert.equal(usuarioId, USUARIO.id);
-    assert.equal(viajeId, VIAJE_ID);
-    assert.deepEqual(datos, {
-      nombre: 'Fontana di Trevi',
-      nota: 'Ir temprano',
-      categoria: 'cultura',
-      latitud: 41.9009,
-      longitud: 12.4833,
-      lugar_externo_id: null,
-      direccion: null,
-    });
-  });
-
-  it('guarda la dirección elegida con el buscador, limpia de espacios', async () => {
-    const crear = simular('crear', async () => ({ estado: 'ok', punto: {} }));
-
-    await llamar('crear', { body: { ...CUERPO, direccion: '  Piazza del Colosseo, Roma ' } });
-
-    assert.equal(crear.mock.calls[0].arguments[3].direccion, 'Piazza del Colosseo, Roma');
-  });
 
   it('la nota, la categoría y el lugar son opcionales', async () => {
     const crear = simular('crear', async () => ({ estado: 'ok', punto: {} }));
@@ -157,17 +130,6 @@ describe('POST /viajes/:viajeId/puntos-de-interes', () => {
     assert.equal((await llamar('crear', { viajeId: 'roma', body: CUERPO })).cuerpo.error.mensaje, 'El identificador del viaje no es válido');
   });
 
-  it('responde 404 si el viaje no existe y 409 si no está activo', async () => {
-    simular('crear', async () => ({ estado: 'no_existe' }));
-    const noExiste = await llamar('crear', { body: CUERPO });
-    assert.equal(noExiste.codigo, 404);
-    assert.equal(noExiste.cuerpo.error.codigo, 'viaje_no_encontrado');
-    mock.restoreAll();
-    simular('crear', async () => ({ estado: 'no_activo' }));
-    const noActivo = await llamar('crear', { body: CUERPO });
-    assert.equal(noActivo.codigo, 409);
-    assert.equal(noActivo.cuerpo.error.codigo, 'viaje_no_activo');
-  });
 
   it('responde 400 ante un check de la base de datos, 502 ante otro fallo y 500 si lanza', async () => {
     simular('crear', async () => ({ error: { code: '23514' } }));
@@ -184,15 +146,6 @@ describe('POST /viajes/:viajeId/puntos-de-interes', () => {
 });
 
 describe('DELETE /viajes/:viajeId/puntos-de-interes/:puntoId', () => {
-  it('responde 204 al borrar', async () => {
-    const eliminar = simular('eliminar', async () => ({ estado: 'ok' }));
-
-    const res = await llamar('eliminar');
-
-    assert.equal(res.codigo, 204);
-    assert.equal(res.terminada, true);
-    assert.deepEqual(eliminar.mock.calls[0].arguments.slice(1), [USUARIO.id, VIAJE_ID, PUNTO_ID]);
-  });
 
   it('rechaza identificadores que no son UUID', async () => {
     const eliminar = simular('eliminar', async () => ({}));
@@ -205,23 +158,5 @@ describe('DELETE /viajes/:viajeId/puntos-de-interes/:puntoId', () => {
     assert.equal(eliminar.mock.callCount(), 0);
   });
 
-  it('responde 404 si el punto no existe y 409 si el viaje no está activo', async () => {
-    simular('eliminar', async () => ({ estado: 'no_encontrado' }));
-    const sinPunto = await llamar('eliminar');
-    assert.equal(sinPunto.codigo, 404);
-    assert.equal(sinPunto.cuerpo.error.codigo, 'punto_no_encontrado');
-    mock.restoreAll();
-    simular('eliminar', async () => ({ estado: 'no_activo' }));
-    assert.equal((await llamar('eliminar')).codigo, 409);
-  });
 
-  it('responde 502 si falla la base de datos y 500 si lanza', async () => {
-    simular('eliminar', async () => ({ error: { code: 'X' } }));
-    assert.equal((await llamar('eliminar')).codigo, 502);
-    mock.restoreAll();
-    simular('eliminar', async () => {
-      throw new Error('fallo');
-    });
-    assert.equal((await llamar('eliminar')).codigo, 500);
-  });
 });

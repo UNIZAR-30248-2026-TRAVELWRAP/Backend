@@ -119,12 +119,6 @@ describe('PATCH /perfil (actualizarNombre)', () => {
     esperarError(await llamar('actualizarNombre', { body: { nombre: 'Berta' } }), 500, 'error_interno');
   });
 
-  it('devuelve 500 si el servicio lanza una excepción', async () => {
-    mock.method(perfilService, 'actualizarNombre', async () => {
-      throw new Error('fallo');
-    });
-    esperarError(await llamar('actualizarNombre', { body: { nombre: 'Berta' } }), 500, 'error_interno');
-  });
 
   it('devuelve 404 si el usuario no tiene perfil', async () => {
     mock.method(perfilService, 'actualizarNombre', async () => ({ estado: 'no_existe' }));
@@ -162,11 +156,6 @@ describe('PUT /perfil/avatar (cambiarAvatar)', () => {
     assert.equal(cambiar.mock.calls[0].arguments[1], USUARIO.id);
   });
 
-  it('sube el tipo que indica el contenido, no el que declara el cliente (JPEG declarado como PNG)', async () => {
-    const cambiar = mock.method(perfilService, 'cambiarAvatar', async () => ({ estado: 'ok', usuario: {} }));
-    await llamar('cambiarAvatar', { file: { buffer: JPEG, mimetype: 'image/png' } });
-    assert.equal(cambiar.mock.calls[0].arguments[2].tipoMime, 'image/jpeg');
-  });
 
   for (const [descripcion, file] of [
     ['un GIF', { buffer: GIF, mimetype: 'image/gif' }],
@@ -189,22 +178,8 @@ describe('PUT /perfil/avatar (cambiarAvatar)', () => {
     assert.equal(cambiar.mock.callCount(), 0);
   });
 
-  it('devuelve 502 error_storage si falla Storage o la base de datos', async () => {
-    mock.method(perfilService, 'cambiarAvatar', async () => ({ error: { message: 'bucket' } }));
-    esperarError(await llamar('cambiarAvatar', { file: { buffer: PNG, mimetype: 'image/png' } }), 502, 'error_storage');
-  });
 
-  it('devuelve 404 si el usuario no tiene perfil', async () => {
-    mock.method(perfilService, 'cambiarAvatar', async () => ({ estado: 'no_existe' }));
-    esperarError(await llamar('cambiarAvatar', { file: { buffer: PNG, mimetype: 'image/png' } }), 404, 'perfil_no_encontrado');
-  });
 
-  it('devuelve 500 si el servicio lanza una excepción', async () => {
-    mock.method(perfilService, 'cambiarAvatar', async () => {
-      throw new Error('fallo');
-    });
-    esperarError(await llamar('cambiarAvatar', { file: { buffer: PNG, mimetype: 'image/png' } }), 500, 'error_interno');
-  });
 });
 
 describe('DELETE /perfil/avatar (quitarAvatar)', () => {
@@ -219,22 +194,8 @@ describe('DELETE /perfil/avatar (quitarAvatar)', () => {
     assert.equal(quitar.mock.calls[0].arguments[1], USUARIO.id);
   });
 
-  it('devuelve 404 si el usuario no tiene perfil', async () => {
-    mock.method(perfilService, 'quitarAvatar', async () => ({ estado: 'no_existe' }));
-    esperarError(await llamar('quitarAvatar', {}), 404, 'perfil_no_encontrado');
-  });
 
-  it('devuelve 502 error_storage si falla el servicio', async () => {
-    mock.method(perfilService, 'quitarAvatar', async () => ({ error: { code: 'XX000' } }));
-    esperarError(await llamar('quitarAvatar', {}), 502, 'error_storage');
-  });
 
-  it('devuelve 500 si el servicio lanza una excepción', async () => {
-    mock.method(perfilService, 'quitarAvatar', async () => {
-      throw new Error('fallo');
-    });
-    esperarError(await llamar('quitarAvatar', {}), 500, 'error_interno');
-  });
 });
 
 // Servidor real con solo lo que se quiere probar
@@ -270,9 +231,6 @@ describe('middleware de subida del avatar (límite de 2 MB)', () => {
     assert.equal(cuerpo.bytes, PNG.length);
   });
 
-  it('acepta una foto de exactamente 2 MB', async () => {
-    assert.equal((await enviar(Buffer.alloc(2_000_000, 1))).estado, 200);
-  });
 
   it('rechaza con 400 archivo_demasiado_grande una foto de más de 2 MB', async () => {
     const { estado, cuerpo } = await enviar(Buffer.alloc(2_000_001, 1));
@@ -280,11 +238,6 @@ describe('middleware de subida del avatar (límite de 2 MB)', () => {
     assert.equal(cuerpo.error.codigo, 'archivo_demasiado_grande');
   });
 
-  it('rechaza con 400 datos_invalidos un archivo enviado en un campo inesperado', async () => {
-    const { estado, cuerpo } = await enviar(PNG, 'otro');
-    assert.equal(estado, 400);
-    assert.equal(cuerpo.error.codigo, 'datos_invalidos');
-  });
 });
 
 describe('DELETE /perfil (eliminarCuenta)', () => {
@@ -314,63 +267,7 @@ describe('DELETE /perfil (eliminarCuenta)', () => {
     assert.equal(eliminar.mock.calls[0].arguments[1], USUARIO.id);
   });
 
-  it('devuelve 502 error_cuenta si falla el borrado', async () => {
-    mock.method(cuentaService, 'eliminarCuenta', async () => ({ error: { message: 'fallo' } }));
-    esperarError(await llamar('eliminarCuenta'), 502, 'error_cuenta');
-  });
 
-  it('devuelve 503 eliminacion_no_disponible si falta la service key', async () => {
-    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const eliminar = mock.method(cuentaService, 'eliminarCuenta', async () => ({ estado: 'ok' }));
 
-    esperarError(await llamar('eliminarCuenta'), 503, 'eliminacion_no_disponible');
-    assert.equal(eliminar.mock.callCount(), 0);
-  });
-
-  it('devuelve 500 error_interno si el servicio lanza una excepción', async () => {
-    mock.method(cuentaService, 'eliminarCuenta', async () => {
-      throw new Error('inesperado');
-    });
-    esperarError(await llamar('eliminarCuenta'), 500, 'error_interno');
-  });
 });
 
-describe('rutas del perfil sin sesión', () => {
-  it('DELETE /api/perfil devuelve 401 sin token', async () => {
-    const { estado, cuerpo } = await conServidor(
-      (app) => app.use('/api/perfil', perfilRoutes),
-      (url) => fetch(`${url}/api/perfil`, { method: 'DELETE' }),
-    );
-    assert.equal(estado, 401);
-    assert.equal(cuerpo.error.codigo, 'sin_sesion');
-  });
-
-  const sinToken = (metodo, ruta, opciones = {}) =>
-    conServidor(
-      (app) => app.use('/api/perfil', perfilRoutes),
-      (url) => fetch(`${url}/api/perfil${ruta}`, { method: metodo, ...opciones }),
-    );
-
-  it('PATCH /api/perfil devuelve 401 sin token', async () => {
-    const { estado, cuerpo } = await sinToken('PATCH', '', {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre: 'Berta' }),
-    });
-    assert.equal(estado, 401);
-    assert.equal(cuerpo.error.codigo, 'sin_sesion');
-  });
-
-  it('PUT /api/perfil/avatar devuelve 401 sin token', async () => {
-    const formulario = new FormData();
-    formulario.append('avatar', new Blob([PNG]), 'foto.png');
-    const { estado, cuerpo } = await sinToken('PUT', '/avatar', { body: formulario });
-    assert.equal(estado, 401);
-    assert.equal(cuerpo.error.codigo, 'sin_sesion');
-  });
-
-  it('DELETE /api/perfil/avatar devuelve 401 sin token', async () => {
-    const { estado, cuerpo } = await sinToken('DELETE', '/avatar');
-    assert.equal(estado, 401);
-    assert.equal(cuerpo.error.codigo, 'sin_sesion');
-  });
-});

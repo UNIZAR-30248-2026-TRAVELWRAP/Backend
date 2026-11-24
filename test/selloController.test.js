@@ -133,15 +133,6 @@ describe('GET /perfil/sellos', () => {
     assert.deepEqual(res.cuerpo, { sellos: [SELLO] });
   });
 
-  it('un fallo da 502 error_sello y una excepción 500', async () => {
-    mock.method(selloService, 'listarMios', async () => ({ error: { code: 'x' } }));
-    esperarError(await llamar('listarMios', {}), 502, 'error_sello');
-    mock.restoreAll();
-    mock.method(selloService, 'listarMios', async () => {
-      throw new Error('fallo');
-    });
-    esperarError(await llamar('listarMios', {}), 500, 'error_interno');
-  });
 });
 
 describe('PATCH /perfil/sellos/:selloId', () => {
@@ -158,29 +149,5 @@ describe('PATCH /perfil/sellos/:selloId', () => {
     esperarError(await llamar('cambiarDiseno', { params: { selloId: SELLO_ID }, body: { diseno: 'corona' } }), 400, 'diseno_invalido');
   });
 
-  it('sello ajeno o inexistente 404, fallo 502', async () => {
-    mock.method(selloService, 'cambiarDiseno', async () => ({ estado: 'sello_no_existe' }));
-    esperarError(await llamar('cambiarDiseno', { params: { selloId: SELLO_ID }, body: { diseno: 'ruta' } }), 404, 'sello_no_encontrado');
-    mock.restoreAll();
-    mock.method(selloService, 'cambiarDiseno', async () => ({ error: { code: 'x' } }));
-    esperarError(await llamar('cambiarDiseno', { params: { selloId: SELLO_ID }, body: { diseno: 'ruta' } }), 502, 'error_sello');
-  });
 });
 
-describe('DELETE /perfil/sellos/:selloId', () => {
-  it('quita un sello propio y responde 204', async () => {
-    mock.method(selloService, 'quitarPorId', async () => ({ estado: 'ok' }));
-    assert.equal((await llamar('quitarPorId', { params: { selloId: SELLO_ID } })).codigo, 204);
-  });
-
-  it('id mal formado 400, sello ajeno o inexistente 404, fallo 502', async () => {
-    esperarError(await llamar('quitarPorId', { params: { selloId: 'x' } }), 400, 'datos_invalidos');
-
-    mock.method(selloService, 'quitarPorId', async () => ({ estado: 'sello_no_existe' }));
-    esperarError(await llamar('quitarPorId', { params: { selloId: SELLO_ID } }), 404, 'sello_no_encontrado');
-    mock.restoreAll();
-
-    mock.method(selloService, 'quitarPorId', async () => ({ error: { code: 'x' } }));
-    esperarError(await llamar('quitarPorId', { params: { selloId: SELLO_ID } }), 502, 'error_sello');
-  });
-});

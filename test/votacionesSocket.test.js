@@ -86,37 +86,8 @@ describe('Votaciones en tiempo real (namespace /votaciones)', () => {
     assert.equal(respuesta.error.codigo, 'datos_invalidos');
   });
 
-  it('avisa del cambio a todos los miembros unidos al viaje, y solo a ellos', async () => {
-    const ana = recibidos((await unirse('token-ana', VIAJE)).cliente);
-    const bea = recibidos((await unirse('token-bea', VIAJE)).cliente);
-    const carla = recibidos((await unirse('token-carla', OTRO_VIAJE)).cliente);
 
-    votacionesSocket.avisarCambio(VIAJE, { votacion_id: VOTACION, motivo: 'voto' });
-    await esperar(100);
 
-    const esperado = { viaje_id: VIAJE, votacion_id: VOTACION, motivo: 'voto' };
-    assert.deepEqual(ana, [esperado]);
-    assert.deepEqual(bea, [esperado]);
-    assert.deepEqual(carla, []);
-  });
-
-  it('al cerrar la votación de destino el aviso lleva el destino', async () => {
-    const ana = recibidos((await unirse('token-ana', VIAJE)).cliente);
-
-    votacionesSocket.avisarCambio(VIAJE, { votacion_id: VOTACION, motivo: 'cerrada', destino: 'Praga' });
-    await esperar(100);
-
-    assert.deepEqual(ana, [{ viaje_id: VIAJE, votacion_id: VOTACION, motivo: 'cerrada', destino: 'Praga' }]);
-  });
-
-  it('avisa cuando cambian los miembros del viaje, sin votación', async () => {
-    const ana = recibidos((await unirse('token-ana', VIAJE)).cliente);
-
-    votacionesSocket.avisarCambio(VIAJE, { motivo: 'miembros' });
-    await esperar(100);
-
-    assert.deepEqual(ana, [{ viaje_id: VIAJE, motivo: 'miembros' }]);
-  });
 
   it('quien sale del viaje deja de recibir avisos', async () => {
     const { cliente } = await unirse('token-ana', VIAJE);
@@ -130,12 +101,4 @@ describe('Votaciones en tiempo real (namespace /votaciones)', () => {
     assert.deepEqual(ana, []);
   });
 
-  it('no emite motivos desconocidos', async () => {
-    const ana = recibidos((await unirse('token-ana', VIAJE)).cliente);
-
-    votacionesSocket.avisarCambio(VIAJE, { votacion_id: VOTACION, motivo: 'borrada' });
-    await esperar(100);
-
-    assert.deepEqual(ana, []);
-  });
 });

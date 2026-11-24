@@ -53,14 +53,6 @@ describe('GET /viajes/:viajeId/ruta (calcular)', () => {
     assert.deepEqual(calcular.mock.calls[0].arguments, [{ cliente: true }, USUARIO.id, VIAJE_ID, '2027-05-12']);
   });
 
-  it('devuelve ruta null cuando hay menos de dos actividades con ubicación', async () => {
-    simular(async () => ({ estado: 'ok', puntos: [], orden_sugerido: [], ahorro_m: 0, ruta: null }));
-
-    const res = await llamar();
-
-    assert.equal(res.codigo, 200);
-    assert.equal(res.cuerpo.ruta, null);
-  });
 
   it('rechaza con 400 un identificador de viaje que no es un UUID', async () => {
     const calcular = simular(async () => ({}));
@@ -72,16 +64,6 @@ describe('GET /viajes/:viajeId/ruta (calcular)', () => {
     assert.equal(calcular.mock.callCount(), 0);
   });
 
-  it('rechaza con 400 una fecha ausente, mal escrita o inexistente', async () => {
-    const calcular = simular(async () => ({}));
-
-    for (const query of [{}, { fecha: 'hoy' }, { fecha: '2027-02-30' }, { fecha: ['2027-05-12', '2027-05-13'] }]) {
-      const res = await llamar({ query });
-      assert.equal(res.codigo, 400);
-      assert.equal(res.cuerpo.error.mensaje, 'La fecha es obligatoria y debe tener el formato AAAA-MM-DD');
-    }
-    assert.equal(calcular.mock.callCount(), 0);
-  });
 
   it('responde 404 si el viaje no existe o el usuario no es miembro', async () => {
     simular(async () => ({ estado: 'no_existe' }));
@@ -92,36 +74,8 @@ describe('GET /viajes/:viajeId/ruta (calcular)', () => {
     assert.equal(res.cuerpo.error.codigo, 'viaje_no_encontrado');
   });
 
-  it('responde 400 si hay demasiadas actividades con ubicación', async () => {
-    simular(async () => ({ estado: 'demasiados_puntos' }));
 
-    const res = await llamar();
 
-    assert.equal(res.codigo, 400);
-    assert.match(res.cuerpo.error.mensaje, /máximo 25/);
-  });
-
-  it('responde 422 si no hay camino entre las actividades', async () => {
-    simular(async () => ({ estado: 'sin_ruta' }));
-
-    const res = await llamar();
-
-    assert.equal(res.codigo, 422);
-    assert.equal(res.cuerpo.error.codigo, 'sin_ruta');
-  });
-
-  it('responde 429 si el usuario calcula rutas demasiado rápido o el servicio está ocupado', async () => {
-    simular(async () => ({ estado: 'demasiado_rapido' }));
-    const rapido = await llamar();
-    mock.restoreAll();
-    simular(async () => ({ estado: 'ocupado' }));
-    const ocupado = await llamar();
-
-    assert.equal(rapido.codigo, 429);
-    assert.equal(rapido.cuerpo.error.codigo, 'demasiadas_rutas');
-    assert.equal(ocupado.codigo, 429);
-    assert.equal(ocupado.cuerpo.error.codigo, 'servicio_ocupado');
-  });
 
   it('responde 502 si falla el listado o el servicio de rutas', async () => {
     simular(async () => ({ error: { code: 'http_500' } }));

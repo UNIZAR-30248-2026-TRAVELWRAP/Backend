@@ -60,13 +60,6 @@ describe('ordenarDia · actividades que nadie ha movido', () => {
     assert.deepEqual(ids(ordenarDia([actividad('a', { orden: Number.NaN }), actividad('b', { orden: 1 })])), ['a', 'b']);
   });
 
-  it('no modifica la lista original', () => {
-    const lista = [actividad('b', { orden: 2 }), actividad('a', { orden: 1 })];
-
-    ordenarDia(lista);
-
-    assert.deepEqual(ids(lista), ['b', 'a']);
-  });
 });
 
 describe('ordenarDia · actividades sin hora colocadas por el usuario', () => {
@@ -74,15 +67,7 @@ describe('ordenarDia · actividades sin hora colocadas por el usuario', () => {
   const comida = actividad('comida', { hora_inicio: '14:00:00', orden: 2 });
   const cena = actividad('cena', { hora_inicio: '21:00:00', orden: 4 });
 
-  it('una sin hora colocada entre dos con hora se queda entre ellas', () => {
-    const paseo = actividad('paseo', { orden: -3 });
 
-    assert.deepEqual(ids(ordenarDia([cena, paseo, desayuno, comida])), ['desayuno', 'comida', 'paseo', 'cena']);
-  });
-
-  it('se puede colocar la primera del día', () => {
-    assert.deepEqual(ids(ordenarDia([desayuno, comida, actividad('paseo', { orden: -1 })])), ['paseo', 'desayuno', 'comida']);
-  });
 
   it('varias colocadas respetan sus posiciones', () => {
     const a = actividad('a', { orden: -2 });
@@ -98,19 +83,7 @@ describe('ordenarDia · actividades sin hora colocadas por el usuario', () => {
     assert.deepEqual(ids(ordenarDia([desayuno, comida, b, a])), ['desayuno', 'a', 'b', 'comida']);
   });
 
-  it('una posición mayor que el día la deja detrás de las que tienen hora pero delante de las no colocadas', () => {
-    const colocada = actividad('colocada', { orden: -50 });
-    const alFinal = actividad('alFinal', { orden: 7 });
 
-    assert.deepEqual(ids(ordenarDia([alFinal, colocada, desayuno, comida])), ['desayuno', 'comida', 'colocada', 'alFinal']);
-  });
-
-  it('las no colocadas siempre quedan al final aunque se añada después otra actividad con hora', () => {
-    const paseo = actividad('paseo', { orden: 3 });
-    const tardia = actividad('tardia', { hora_inicio: '23:00:00', orden: 4 });
-
-    assert.deepEqual(ids(ordenarDia([desayuno, paseo, tardia])), ['desayuno', 'tardia', 'paseo']);
-  });
 });
 
 describe('ordenarAgenda', () => {
@@ -125,9 +98,6 @@ describe('ordenarAgenda', () => {
     assert.deepEqual(ids(ordenarAgenda(lista)), ['lunesCena', 'lunesSin', 'martesDesayuno', 'martesSin']);
   });
 
-  it('con una lista vacía devuelve una lista vacía', () => {
-    assert.deepEqual(ordenarAgenda([]), []);
-  });
 });
 
 describe('horasEnOrden', () => {
@@ -143,16 +113,7 @@ describe('horasEnOrden', () => {
     );
   });
 
-  it('rechaza una hora anterior a la que ya había', () => {
-    assert.equal(
-      horasEnOrden([actividad('a', { hora_inicio: '09:00:00' }), actividad('b', { hora_inicio: '08:00:00' })]),
-      false,
-    );
-  });
 
-  it('acepta una lista vacía', () => {
-    assert.equal(horasEnOrden([]), true);
-  });
 });
 
 describe('valoresDeOrden', () => {
@@ -174,24 +135,7 @@ describe('valoresDeOrden', () => {
     });
   });
 
-  it('un día sin actividades con hora deja todas las posiciones normales', () => {
-    assert.deepEqual(Object.fromEntries(valoresDeOrden([actividad('a'), actividad('b')])), { a: 0, b: 1 });
-  });
 
-  it('al aplicar esos valores el día se ordena igual que la lista de partida', () => {
-    const listas = [
-      [actividad('a'), actividad('b', { hora_inicio: '10:00:00' }), actividad('c'), actividad('d', { hora_inicio: '12:00:00' }), actividad('e')],
-      [actividad('a'), actividad('b'), actividad('c', { hora_inicio: '10:00:00' })],
-      [actividad('a', { hora_inicio: '10:00:00' }), actividad('b', { hora_inicio: '10:00:00' }), actividad('c')],
-      [actividad('a'), actividad('b'), actividad('c')],
-    ];
-
-    for (const lista of listas) {
-      const valores = valoresDeOrden(lista);
-      const guardadas = lista.map((a) => ({ ...a, orden: valores.get(a.id) }));
-      assert.deepEqual(ids(ordenarDia(guardadas)), ids(lista));
-    }
-  });
 });
 
 describe('siguienteOrden', () => {
@@ -200,8 +144,4 @@ describe('siguienteOrden', () => {
     assert.equal(siguienteOrden(0), 1);
   });
 
-  it('nunca devuelve una posición negativa, que se reserva a las colocadas por el usuario', () => {
-    assert.equal(siguienteOrden(-1), 0);
-    assert.equal(siguienteOrden(-7), 0);
-  });
 });

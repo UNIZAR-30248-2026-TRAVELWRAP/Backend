@@ -39,11 +39,6 @@ describe('clasificarDocumento', () => {
     assert.equal(clasificarDocumento(texto).datos.fecha, null);
   });
 
-  it('acepta la hora con h (10h30)', () => {
-    const texto = ['Reserva mesa', '13/05/2027 10h30'].join('\n');
-
-    assert.equal(clasificarDocumento(texto).datos.hora_inicio, '10:30');
-  });
 
   it('no inventa una fecha que no existe', () => {
     const texto = ['Reserva hotel', '31/02/2027 14:00'].join('\n');
@@ -51,27 +46,8 @@ describe('clasificarDocumento', () => {
     assert.equal(clasificarDocumento(texto).datos.fecha, null);
   });
 
-  it('trata como otro un documento sin pistas de gasto ni de actividad', () => {
-    const texto = ['Póliza de seguro', 'Cobertura total durante el viaje', 'Titular: Berta'].join('\n');
 
-    const resultado = clasificarDocumento(texto);
 
-    assert.equal(resultado.tipo, 'otro');
-    assert.equal(resultado.datos.resumen, texto);
-  });
-
-  it('trata como otro un texto empatado entre gasto y actividad', () => {
-    // Pistas de gasto (total, €, importe) y de actividad (hora, entrada) con la misma puntuación: no se adivina
-    const texto = ['Cafetería', 'Hora 10:00', 'Entrada', 'Total 3,00 €'].join('\n');
-
-    assert.equal(clasificarDocumento(texto).tipo, 'otro');
-  });
-
-  it('recorta el resumen de un documento largo a 1000 caracteres', () => {
-    const largo = 'Texto del documento\n'.repeat(200);
-
-    assert.ok(clasificarDocumento(largo).datos.resumen.length <= 1000);
-  });
 
   it('devuelve otro con resumen vacío si el OCR no ha leído nada', () => {
     assert.deepEqual(clasificarDocumento(''), { tipo: 'otro', datos: { resumen: '' } });

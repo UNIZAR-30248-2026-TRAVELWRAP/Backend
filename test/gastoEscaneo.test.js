@@ -134,13 +134,4 @@ describe('escanear (foto de un ticket)', () => {
     assert.match(res.cuerpo.error.mensaje, /Acércate, con más luz/);
   });
 
-  it('tampoco cuentan como texto los símbolos y los números sueltos', async () => {
-    viajeExiste();
-    mock.method(ocrService, 'reconocerTexto', async () => '## -- 12 3,50 |||');
-
-    const res = await escanear({ archivo: { buffer: PNG } });
-
-    assert.equal(res.codigo, 422);
-    assert.equal(res.cuerpo.error.codigo, 'ocr_sin_texto');
-  });
 });

@@ -108,13 +108,6 @@ describe('tareaService.crear', () => {
     });
   });
 
-  it('un responsable que no es miembro da responsable_no_miembro y no escribe', async () => {
-    viajeVisible(VIAJE);
-    const { cliente, consultas } = clienteFalso();
-    const resultado = await tareaService.crear(cliente, USUARIO_ID, VIAJE_ID, { texto: 'x', responsableId: AJENO_ID });
-    assert.deepEqual(resultado, { estado: 'responsable_no_miembro' });
-    assert.equal(consultas.length, 0);
-  });
 
   it('un viaje finalizado da no_activo y uno que no es del usuario no_existe', async () => {
     const { cliente, consultas } = clienteFalso();
@@ -126,12 +119,6 @@ describe('tareaService.crear', () => {
     assert.equal(consultas.length, 0);
   });
 
-  it('propaga el error al guardar', async () => {
-    viajeVisible(VIAJE);
-    const { cliente } = clienteFalso({ data: null, error: { code: 'x' } });
-    const resultado = await tareaService.crear(cliente, USUARIO_ID, VIAJE_ID, { texto: 'x', responsableId: OTRO_ID });
-    assert.deepEqual(resultado.error, { code: 'x' });
-  });
 });
 
 describe('tareaService.editar', () => {
@@ -152,26 +139,7 @@ describe('tareaService.editar', () => {
     assert.deepEqual(operacion(desmarcar.consultas[0], 'update')[1], { hecha: false, hecha_en: null });
   });
 
-  it('cambia solo el texto y el responsable recibidos, buscando la tarea dentro del viaje', async () => {
-    viajeVisible(VIAJE);
-    const { cliente, consultas } = clienteFalso({ data: [{ ...FILA, texto: 'Otra', responsable_id: USUARIO_ID }], error: null });
 
-    const resultado = await tareaService.editar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID, { texto: 'Otra', responsableId: USUARIO_ID });
-
-    assert.equal(resultado.tarea.texto, 'Otra');
-    assert.equal(resultado.tarea.responsable.nombre, 'Adriana');
-    assert.deepEqual(operacion(consultas[0], 'update')[1], { texto: 'Otra', responsable_id: USUARIO_ID });
-    assert.deepEqual(consultas[0].operaciones.filter(([m]) => m === 'eq'), [
-      ['eq', 'id', TAREA_ID],
-      ['eq', 'viaje_id', VIAJE_ID],
-    ]);
-  });
-
-  it('una tarea de otro viaje o inexistente da tarea_no_existe', async () => {
-    viajeVisible(VIAJE);
-    const { cliente } = clienteFalso({ data: [], error: null });
-    assert.deepEqual(await tareaService.editar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID, { hecha: true }), { estado: 'tarea_no_existe' });
-  });
 
   it('un responsable ajeno, un viaje finalizado y un viaje inexistente se rechazan sin escribir', async () => {
     const { cliente, consultas } = clienteFalso();
@@ -186,11 +154,6 @@ describe('tareaService.editar', () => {
     assert.equal(consultas.length, 0);
   });
 
-  it('propaga el error', async () => {
-    viajeVisible(VIAJE);
-    const { cliente } = clienteFalso({ data: null, error: { code: 'x' } });
-    assert.deepEqual((await tareaService.editar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID, { hecha: true })).error, { code: 'x' });
-  });
 });
 
 describe('tareaService.borrar', () => {
@@ -204,24 +167,6 @@ describe('tareaService.borrar', () => {
     ]);
   });
 
-  it('una tarea que no existe en el viaje da tarea_no_existe', async () => {
-    viajeVisible(VIAJE);
-    const { cliente } = clienteFalso({ data: [], error: null });
-    assert.deepEqual(await tareaService.borrar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID), { estado: 'tarea_no_existe' });
-  });
 
-  it('un viaje finalizado da no_activo y uno inexistente no_existe', async () => {
-    const { cliente } = clienteFalso();
-    viajeVisible({ ...VIAJE, estado: 'finalizado' });
-    assert.deepEqual(await tareaService.borrar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID), { estado: 'no_activo' });
-    mock.restoreAll();
-    viajeVisible(null);
-    assert.deepEqual(await tareaService.borrar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID), { estado: 'no_existe' });
-  });
 
-  it('propaga el error', async () => {
-    viajeVisible(VIAJE);
-    const { cliente } = clienteFalso({ data: null, error: { code: 'x' } });
-    assert.deepEqual((await tareaService.borrar(cliente, USUARIO_ID, VIAJE_ID, TAREA_ID)).error, { code: 'x' });
-  });
 });

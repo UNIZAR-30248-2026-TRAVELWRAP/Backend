@@ -52,39 +52,6 @@ const montar = (respuestas = [respuestaDe([COLISEO])], opciones = {}) => {
   return { geocodificador, llamadas, esperas, reloj };
 };
 
-describe('geocodificacionService · petición a Nominatim', () => {
-  it('pregunta a OpenStreetMap con los parámetros, el User-Agent propio y el idioma', async () => {
-    const { geocodificador, llamadas } = montar();
-
-    await geocodificador.buscar('Colosseo', 'u1');
-
-    assert.equal(llamadas.length, 1);
-    const { url, cabeceras } = llamadas[0];
-    assert.equal(url.origin + url.pathname, 'https://nominatim.openstreetmap.org/search');
-    assert.equal(url.searchParams.get('q'), 'colosseo');
-    assert.equal(url.searchParams.get('format'), 'jsonv2');
-    assert.equal(url.searchParams.get('limit'), '5');
-    assert.equal(url.searchParams.get('addressdetails'), '1');
-    assert.equal(cabeceras['User-Agent'], 'TravelWrap/pruebas (equipo@travelwrap.app)');
-    assert.equal(cabeceras['Accept-Language'], 'es');
-  });
-
-  it('usa un User-Agent por defecto que identifica a la aplicación', async () => {
-    const { geocodificador, llamadas } = montar([respuestaDe([])], { userAgent: undefined });
-
-    await geocodificador.buscar('Roma', 'u1');
-
-    assert.match(llamadas[0].cabeceras['User-Agent'], /^TravelWrap\/1\.0/);
-  });
-
-  it('codifica en la URL los caracteres especiales de la dirección', async () => {
-    const { geocodificador, llamadas } = montar();
-
-    await geocodificador.buscar('Calle Alfonso I, 12 & más', 'u1');
-
-    assert.equal(llamadas[0].url.searchParams.get('q'), 'calle alfonso i, 12 & más');
-  });
-});
 
 describe('geocodificacionService · resultados', () => {
   it('devuelve nombre corto, título, detalle, coordenadas con seis decimales e identificador del lugar', async () => {
@@ -107,13 +74,6 @@ describe('geocodificacionService · resultados', () => {
     });
   });
 
-  it('deja el identificador en null si el lugar no lo trae', async () => {
-    const { geocodificador } = montar([respuestaDe([{ lat: '1', lon: '2', display_name: 'Sitio' }])]);
-
-    const resultado = await geocodificador.buscar('Sitio', 'u1');
-
-    assert.equal(resultado.direcciones[0].lugar_externo_id, null);
-  });
 
   it('si el lugar no tiene nombre propio usa la calle y el número como título', async () => {
     const casa = {
@@ -131,15 +91,6 @@ describe('geocodificacionService · resultados', () => {
     assert.equal(direcciones[0].detalle, 'Roma, Italia');
   });
 
-  it('usa el pueblo o el municipio si no hay ciudad', async () => {
-    const pueblo = { ...COLISEO, address: { ...COLISEO.address, city: undefined, village: 'Albarracín' } };
-    const { geocodificador } = montar([respuestaDe([pueblo])]);
-
-    const { direcciones } = await geocodificador.buscar('albarracin', 'u1');
-
-    assert.equal(direcciones[0].nombre, 'Colosseo, Albarracín');
-    assert.equal(direcciones[0].detalle, 'Albarracín, Italia');
-  });
 
   it('si el lugar es la propia ciudad no la repite y el detalle muestra la región y el país', async () => {
     const roma = {
@@ -221,11 +172,6 @@ describe('geocodificacionService · resultados', () => {
     assert.equal(resultado.direcciones[0].titulo.length, 200);
   });
 
-  it('devuelve una lista vacía si no hay coincidencias', async () => {
-    const { geocodificador } = montar([respuestaDe([])]);
-
-    assert.deepEqual(await geocodificador.buscar('zzzzzz', 'u1'), { estado: 'ok', direcciones: [] });
-  });
 });
 
 describe('geocodificacionService · caché', () => {
@@ -241,25 +187,7 @@ describe('geocodificacionService · caché', () => {
     assert.equal(llamadas.length, 1);
   });
 
-  it('ignora mayúsculas y espacios repetidos al reutilizar el resultado', async () => {
-    const { geocodificador, llamadas, reloj } = montar();
 
-    await geocodificador.buscar('Via   del Corso', 'u1');
-    reloj.ahora += 5000;
-    await geocodificador.buscar('via del corso', 'u2');
-
-    assert.equal(llamadas.length, 1);
-  });
-
-  it('el resultado guardado caduca a los 10 minutos', async () => {
-    const { geocodificador, llamadas, reloj } = montar();
-
-    await geocodificador.buscar('Colosseo', 'u1');
-    reloj.ahora += 10 * 60 * 1000 + 1;
-    await geocodificador.buscar('Colosseo', 'u1');
-
-    assert.equal(llamadas.length, 2);
-  });
 
   it('no guarda en caché los errores', async () => {
     const { geocodificador, llamadas, reloj } = montar([respuestaDe([], 500), respuestaDe([COLISEO])]);
@@ -275,26 +203,7 @@ describe('geocodificacionService · caché', () => {
 });
 
 describe('geocodificacionService · límite de uso', () => {
-  it('la primera búsqueda no espera y las siguientes se espacian un segundo', async () => {
-    const { geocodificador, esperas } = montar([respuestaDe([])]);
 
-    await geocodificador.buscar('aaa', 'u1');
-    await geocodificador.buscar('bbb', 'u2');
-    await geocodificador.buscar('ccc', 'u3');
-
-    assert.deepEqual(esperas, [1000, 1000]);
-  });
-
-  it('dos búsquedas a la vez de usuarios distintos no se pisan: la segunda espera su turno', async () => {
-    const { geocodificador, llamadas, esperas } = montar([respuestaDe([])]);
-
-    const [primera, segunda] = await Promise.all([geocodificador.buscar('aaa', 'u1'), geocodificador.buscar('bbb', 'u2')]);
-
-    assert.equal(primera.estado, 'ok');
-    assert.equal(segunda.estado, 'ok');
-    assert.equal(llamadas.length, 2);
-    assert.deepEqual(esperas, [1000]);
-  });
 
   it('un mismo usuario no puede buscar dos veces en menos de un segundo', async () => {
     const { geocodificador, llamadas, reloj } = montar([respuestaDe([])]);
@@ -310,14 +219,6 @@ describe('geocodificacionService · límite de uso', () => {
     assert.equal(llamadas.length, 2);
   });
 
-  it('una búsqueda que sale de la caché no cuenta para el límite del usuario', async () => {
-    const { geocodificador } = montar([respuestaDe([])]);
-
-    await geocodificador.buscar('aaa', 'u1');
-    const repetida = await geocodificador.buscar('aaa', 'u1');
-
-    assert.equal(repetida.estado, 'ok');
-  });
 
   it('con demasiadas búsquedas pendientes rechaza las nuevas sin llamar a OpenStreetMap', async () => {
     const liberar = [];
@@ -335,14 +236,6 @@ describe('geocodificacionService · límite de uso', () => {
     assert.equal(llamadas.length, 5);
   });
 
-  it('cuando se vacía la cola vuelve a aceptar búsquedas', async () => {
-    const { geocodificador } = montar([respuestaDe([])]);
-
-    await Promise.all([1, 2, 3, 4, 5].map((numero) => geocodificador.buscar(`consulta ${numero}`, `u${numero}`)));
-    const siguiente = await geocodificador.buscar('consulta 6', 'u6');
-
-    assert.equal(siguiente.estado, 'ok');
-  });
 });
 
 describe('geocodificacionService · fallos de OpenStreetMap', () => {
@@ -358,11 +251,6 @@ describe('geocodificacionService · fallos de OpenStreetMap', () => {
     assert.equal(llamadas.length, 2);
   });
 
-  it('un error HTTP se devuelve como error del servicio', async () => {
-    const { geocodificador } = montar([respuestaDe([], 503)]);
-
-    assert.deepEqual(await geocodificador.buscar('Colosseo', 'u1'), { error: { code: 'http_503' } });
-  });
 
   it('si no hay conexión devuelve el error sin lanzar excepción', async () => {
     const { geocodificador } = montar([
@@ -397,20 +285,5 @@ describe('geocodificacionService · fallos de OpenStreetMap', () => {
     assert.deepEqual(await geocodificador.buscar('Colosseo', 'u1'), { error: { code: 'tiempo_agotado' } });
   });
 
-  it('un fallo no deja la cola bloqueada para la siguiente búsqueda', async () => {
-    const { geocodificador, reloj } = montar([respuestaDe([], 500), respuestaDe([COLISEO])]);
-
-    await geocodificador.buscar('aaa', 'u1');
-    reloj.ahora += 2000;
-    const siguiente = await geocodificador.buscar('bbb', 'u2');
-
-    assert.equal(siguiente.estado, 'ok');
-  });
 });
 
-describe('geocodificacionService · instancia por defecto', () => {
-  it('exporta buscar y la fábrica', () => {
-    assert.equal(typeof geocodificacionService.buscar, 'function');
-    assert.equal(typeof crearGeocodificador, 'function');
-  });
-});

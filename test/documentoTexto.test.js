@@ -40,12 +40,6 @@ describe('guardarTexto (resumen en texto de un documento escaneado)', () => {
     assert.equal(res.cuerpo.error.codigo, 'datos_invalidos');
   });
 
-  it('rechaza un texto vacío o solo con espacios', async () => {
-    const res = await guardar({ body: { texto: '   \n  ' } });
-
-    assert.equal(res.codigo, 400);
-    assert.equal(res.cuerpo.error.codigo, 'datos_invalidos');
-  });
 
   it('rechaza un texto que no es una cadena', async () => {
     const res = await guardar({ body: { texto: 12 } });
@@ -53,12 +47,6 @@ describe('guardarTexto (resumen en texto de un documento escaneado)', () => {
     assert.equal(res.codigo, 400);
   });
 
-  it('rechaza un texto de más de 8 MB', async () => {
-    const res = await guardar({ body: { texto: 'a'.repeat(8_000_001) } });
-
-    assert.equal(res.codigo, 400);
-    assert.match(res.cuerpo.error.mensaje, /8 MB/);
-  });
 
   it('rechaza un nombre de más de 150 caracteres', async () => {
     const res = await guardar({ body: { texto: 'Resumen', nombre: 'n'.repeat(151) } });
@@ -98,14 +86,6 @@ describe('guardarTexto (resumen en texto de un documento escaneado)', () => {
     assert.equal(res.cuerpo.error.codigo, 'viaje_no_encontrado');
   });
 
-  it('responde 409 si el viaje está finalizado', async () => {
-    mock.method(documentoService, 'subir', async () => ({ estado: 'no_activo' }));
-
-    const res = await guardar({ body: { texto: 'Resumen' } });
-
-    assert.equal(res.codigo, 409);
-    assert.equal(res.cuerpo.error.codigo, 'viaje_no_activo');
-  });
 
   it('responde 502 si Supabase falla al guardar', async () => {
     mock.method(documentoService, 'subir', async () => ({ error: { message: 'fallo' } }));

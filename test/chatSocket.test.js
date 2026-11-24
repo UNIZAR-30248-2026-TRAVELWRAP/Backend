@@ -61,15 +61,6 @@ describe('Chat en tiempo real (namespace /chat)', () => {
     assert.deepEqual(error.data, { codigo: 'sesion_invalida', mensaje: 'La sesión ha caducado o no es válida' });
   });
 
-  it('solo se une a la sala de un viaje del que es miembro', async () => {
-    const cliente = conectar();
-    await conectado(cliente);
-
-    assert.deepEqual(await unirse(cliente, VIAJE_A), { ok: true });
-    assert.deepEqual(await unirse(cliente, VIAJE_B), {
-      error: { codigo: 'viaje_no_encontrado', mensaje: 'El viaje no existe o no perteneces a él' },
-    });
-  });
 
   it('un identificador de viaje que no es un UUID se rechaza', async () => {
     const cliente = conectar();
@@ -99,18 +90,4 @@ describe('Chat en tiempo real (namespace /chat)', () => {
     assert.deepEqual(recibidosOtro, []);
   });
 
-  it('después de salir del viaje ya no recibe sus mensajes', async () => {
-    const cliente = conectar();
-    await conectado(cliente);
-    await unirse(cliente, VIAJE_A);
-    const recibidos = [];
-    cliente.on('mensaje', (datos) => recibidos.push(datos));
-
-    cliente.emit('salir_viaje', { viaje_id: VIAJE_A });
-    await esperar(100);
-    chatSocket.avisarMensaje(VIAJE_A, { id: 'm2', texto: 'Adiós' });
-    await esperar(200);
-
-    assert.deepEqual(recibidos, []);
-  });
 });

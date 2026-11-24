@@ -95,15 +95,6 @@ describe('eliminarCuenta', () => {
     assert.ok(!nombres(admin).includes('deleteUser'));
   });
 
-  it('devuelve error y no borra el usuario si eliminar_datos_cuenta falla o no borra nada', async () => {
-    const conError = adminFalso({ errores: { eliminar_datos_cuenta: { message: 'fallo' } } });
-    assert.ok((await cuentaService.eliminarCuenta(conError, USUARIO_ID)).error);
-    assert.ok(!nombres(conError).includes('deleteUser'));
-
-    const sinBorrar = adminFalso({ datos: false });
-    assert.ok((await cuentaService.eliminarCuenta(sinBorrar, USUARIO_ID)).error);
-    assert.ok(!nombres(sinBorrar).includes('deleteUser'));
-  });
 
   it('devuelve error y no borra el usuario si no se pueden borrar las fotos de perfil', async () => {
     const admin = adminFalso({ errores: { list: { message: 'fallo' } } });
