@@ -331,6 +331,10 @@ const escanear = async (req, res) => {
     } catch {
       return responderError(res, 502, 'error_ocr', 'No se ha podido leer el ticket');
     }
+    // Una foto sin palabras legibles no sirve para nada: se pide otra con instrucciones, en vez de guardar un documento vacío
+    if (!/\p{L}{3,}/u.test(texto)) {
+      return responderError(res, 422, 'ocr_sin_texto', 'No se lee ningún texto en la foto. Acércate, con más luz y sin reflejos, y vuelve a intentarlo');
+    }
     const resultado = clasificarDocumento(texto);
     const fotoRuta = await guardarFotoSiHaceFalta(req.supabase, viajeId, archivo.buffer, tipoMime, resultado.tipo);
     return res.status(200).json({ ...resultado, foto_ruta: fotoRuta });

@@ -123,13 +123,24 @@ describe('escanear (foto de un ticket)', () => {
     assert.match(res.cuerpo.datos.resumen, /Póliza de seguro/);
   });
 
-  it('no falla si el OCR no reconoce nada: el documento es otro, con resumen vacío', async () => {
+  it('pide otra foto con instrucciones si el OCR no reconoce palabras, sin guardar nada', async () => {
     viajeExiste();
     mock.method(ocrService, 'reconocerTexto', async () => '');
 
     const res = await escanear({ archivo: { buffer: PNG } });
 
-    assert.equal(res.codigo, 200);
-    assert.deepEqual(res.cuerpo, { tipo: 'otro', datos: { resumen: '' }, foto_ruta: null });
+    assert.equal(res.codigo, 422);
+    assert.equal(res.cuerpo.error.codigo, 'ocr_sin_texto');
+    assert.match(res.cuerpo.error.mensaje, /Acércate, con más luz/);
+  });
+
+  it('tampoco cuentan como texto los símbolos y los números sueltos', async () => {
+    viajeExiste();
+    mock.method(ocrService, 'reconocerTexto', async () => '## -- 12 3,50 |||');
+
+    const res = await escanear({ archivo: { buffer: PNG } });
+
+    assert.equal(res.codigo, 422);
+    assert.equal(res.cuerpo.error.codigo, 'ocr_sin_texto');
   });
 });
