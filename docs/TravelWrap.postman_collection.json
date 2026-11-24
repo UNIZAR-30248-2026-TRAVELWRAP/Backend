@@ -188,6 +188,10 @@
     {
       "key": "puntoIdMirador",
       "value": ""
+    },
+    {
+      "key": "viajeIdPlaylist",
+      "value": ""
     }
   ],
   "item": [
@@ -8471,6 +8475,203 @@
       ]
     },
     {
+      "name": "Playlist",
+      "item": [
+        {
+          "name": "Crear viaje para la playlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Playlist de Roma\",\n  \"presupuesto\": 300,\n  \"destino\": \"Roma\",\n  \"fecha_inicio\": \"2027-05-12\",\n  \"fecha_fin\": \"2027-05-15\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('viajeIdPlaylist', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Playlist sin enlazar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPlaylist}}/playlist"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sin playlist, la respuesta es null', () => pm.expect(pm.response.json().playlist).to.eql(null));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enlazar una playlist de Spotify",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPlaylist}}/playlist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://open.spotify.com/intl-es/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Guarda el enlace canónico de la playlist', () => pm.expect(pm.response.json().playlist.url).to.eql('https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener la playlist enlazada",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPlaylist}}/playlist"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve la playlist guardada', () => pm.expect(pm.response.json().playlist.url).to.eql('https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Enlace que no es de Spotify",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPlaylist}}/playlist",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código datos_invalidos', () => pm.expect(pm.response.json().error.codigo).to.eql('datos_invalidos'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quitar la playlist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPlaylist}}/playlist"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Playlist sin sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/viajes/{{viajeIdPlaylist}}/playlist"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Devuelve 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "Documentos",
       "item": [
         {
@@ -12895,7 +13096,8 @@
                   "  pm.expect(body.dias).to.eql(4);",
                   "  pm.expect(body.actividad_mas_votada).to.eql(null);",
                   "  pm.expect(body.alma_del_grupo).to.eql(null);",
-                  "});"
+                  "});",
+                  "pm.test('El presupuesto restante es el total porque aún no hay gastos', () => pm.expect(pm.response.json().presupuesto).to.eql({ total: 600, gastado: 0, restante: 600 }));"
                 ]
               }
             }
@@ -13108,14 +13310,15 @@
                 "exec": [
                   "pm.test('Devuelve 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('No devuelve los gastos, que el Wrap ya no muestra', () => pm.expect(Object.keys(body).sort()).to.eql(['actividad_mas_votada', 'alma_del_grupo', 'dias']));",
+                  "pm.test('No devuelve los gastos, que el Wrap ya no muestra', () => pm.expect(Object.keys(body).sort()).to.eql(['actividad_mas_votada', 'alma_del_grupo', 'dias', 'presupuesto']));",
                   "pm.test('La actividad más votada es el Coliseo', () => pm.expect(body.actividad_mas_votada).to.eql({ titulo: 'Coliseo', votos: 1 }));",
                   "pm.test('El alma del grupo es quien pagó los tres gastos', () => {",
                   "  pm.expect(body.alma_del_grupo.usuario_id).to.eql(pm.collectionVariables.get('usuarioIdResumen'));",
                   "  pm.expect(body.alma_del_grupo.pagos).to.eql(3);",
                   "  pm.expect(body.alma_del_grupo.planes_propuestos).to.eql(0);",
                   "  pm.expect(body.alma_del_grupo.fotos_subidas).to.eql(0);",
-                  "});"
+                  "});",
+                  "pm.test('El presupuesto descuenta los tres gastos (120,50 + 45,10 + 12,40)', () => pm.expect(pm.response.json().presupuesto).to.eql({ total: 600, gastado: 178, restante: 422 }));"
                 ]
               }
             }
@@ -13237,7 +13440,8 @@
                   "pm.test('Mantiene los datos', () => {",
                   "  pm.expect(pm.response.json().alma_del_grupo.pagos).to.eql(3);",
                   "  pm.expect(pm.response.json().dias).to.eql(4);",
-                  "});"
+                  "});",
+                  "pm.test('Mantiene el presupuesto restante', () => pm.expect(pm.response.json().presupuesto.restante).to.eql(422));"
                 ]
               }
             }
