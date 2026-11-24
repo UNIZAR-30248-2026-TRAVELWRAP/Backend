@@ -2,6 +2,9 @@ const viajeService = require('../services/viajeService');
 const votacionesSocket = require('../sockets/votacionesSocket');
 const { UUID_REGEX, CHECK_VIOLATION, responderError, fechaValida, textoOpcional } = require('../utils/validacion');
 
+// Importe en formato español con dos decimales y coma, como en la app: 211,67 €
+const importeEspanol = (cantidad) => `${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cantidad)} €`;
+
 const ESTADOS = ['activo', 'finalizado'];
 
 // Tipos de portada admitidos, reconocidos por los primeros bytes del archivo (su «firma»): el tipo y la extensión
@@ -315,7 +318,7 @@ const abandonar = async (req, res) => {
           res,
           409,
           'saldo_pendiente',
-          `Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de ${resultado.saldo.toFixed(2)} €`,
+          `Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de ${importeEspanol(resultado.saldo)}`,
         );
       default:
         return responderMotivo(res, resultado.estado, 'No se ha podido abandonar el viaje');

@@ -437,7 +437,7 @@ describe('POST /viajes/:viajeId/abandonar', () => {
 
     assert.equal(res.codigo, 409);
     assert.equal(res.cuerpo.error.codigo, 'saldo_pendiente');
-    assert.equal(res.cuerpo.error.mensaje, 'Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de 12.50 €');
+    assert.equal(res.cuerpo.error.mensaje, 'Solo puedes abandonar el viaje con el saldo a cero. Tu saldo es de 12,50 €');
     assert.equal(avisar.mock.calls.length, 0);
   });
 
