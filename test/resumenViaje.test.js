@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { contarDias, actividadMasVotada, almaDelGrupo, presupuestoRestante } = require('../src/utils/resumenViaje');
+const { contarDias, actividadMasVotada, presupuestoRestante } = require('../src/utils/resumenViaje');
 
 describe('contarDias', () => {
   it('cuenta los días del viaje contando el primero y el último', () => {

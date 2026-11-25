@@ -148,16 +148,6 @@ describe('POST /viajes/:viajeId/gastos (crear)', () => {
     });
   }
 
-  // Estados que devuelve el servicio (función crear_gasto) y respuesta HTTP de cada uno
-  const motivos = [
-    ['no_existe', 404, 'viaje_no_encontrado'],
-    ['no_activo', 409, 'viaje_no_activo'],
-    ['no_miembro', 400, 'datos_invalidos'],
-    ['desconocido', 502, 'error_gasto'],
-  ];
-
-  for (const [estado, codigo, codigoError] of motivos) {
-  }
 
   // Errores de la base de datos y excepciones
   it('responde 400 si la base de datos rechaza los datos por un check', async () => {

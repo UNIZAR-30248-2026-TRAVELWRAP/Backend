@@ -199,14 +199,6 @@ describe('GET /viajes/:viajeId/actividades (listar)', () => {
   });
 
 
-  const invalidos = [
-    ['fecha mal formada', { fecha: '12/05/2027' }],
-    ['fecha inexistente', { fecha: '2027-02-30' }],
-    ['fecha repetida', { fecha: ['2027-05-12', '2027-05-13'] }],
-  ];
-  for (const [caso, query] of invalidos) {
-  }
-
 
   it('responde 404 viaje_no_encontrado si el viaje no existe o no es miembro', async () => {
     simularListar(async () => ({ estado: 'no_existe' }));

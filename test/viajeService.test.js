@@ -298,7 +298,6 @@ describe('viajeService.reabrir', () => {
 describe('viajeService.eliminar', () => {
   const archivado = () => encontrado(FINALIZADO, 'creador', ARCHIVADO);
   const ultimo = (documentos = [], fotos = []) => ({ data: { estado: 'ok', ultimo: true, documentos, fotos }, error: null });
-  const noUltimo = { data: { estado: 'ok', ultimo: false }, error: null };
   const rutas = (n, prefijo) => Array.from({ length: n }, (_, i) => `${VIAJE_ID}/${prefijo}${i}`);
 
 

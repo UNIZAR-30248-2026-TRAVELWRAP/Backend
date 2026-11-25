@@ -4,7 +4,7 @@ const { afterEach, describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const selloService = require('../src/services/selloService');
 const viajeService = require('../src/services/viajeService');
-const { DISENOS_SELLO, textoDelSello } = require('../src/utils/sellos');
+const { textoDelSello } = require('../src/utils/sellos');
 
 const USUARIO_ID = 'df77cba6-4be5-4cbc-814b-1e228dd73dcc';
 const VIAJE_ID = '123e4567-e89b-12d3-a456-426614174000';

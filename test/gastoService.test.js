@@ -325,7 +325,6 @@ describe('gastoService.planDeTransferencias', () => {
   const ELENA = 'e1a2b3c4-d5e6-4f70-8192-a3b4c5d6e7f8';
   const DANIEL = '8c4d2e1f-3a5b-4c6d-9e7f-1a2b3c4d5e6f';
   // Miembro que ya ha abandonado el viaje: aparece sin nombre
-  const ANTIGUO_ID = 'a7b8c9d0-e1f2-4a3b-8c4d-5e6f7a8b9c0d';
   const saldo = (usuarioId, nombre, importe) => ({ usuario_id: usuarioId, nombre, saldo: importe });
 
   // Aplica las transferencias sobre los saldos (en céntimos) y devuelve lo que queda en cada cuenta
